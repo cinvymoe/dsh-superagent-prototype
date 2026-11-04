@@ -1023,8 +1023,8 @@ it('reports GitHub as failing only after the configured number of consecutive fa
   expect(pollFailure(1, 3, eof)).toBeUndefined()
   expect(pollFailure(2, 3, eof)).toBeUndefined()
   expect(pollFailure(3, 3, eof)).toEqual({ state: 'error', detail: '3 consecutive failed polls; last: Error: Get "https://api.github.com/x": EOF', code: 'pollFailures', values: { count: '3', error: 'Error: Get "https://api.github.com/x": EOF' } })
-  expect(githubKind.schema.parse({})).toEqual({ repository: '', cli: '', pollSeconds: 60, failuresBeforeError: 3, observeIssues: false,
-    observePulls: false, observeComments: false, observeCi: false })
+  expect(githubKind.schema.parse({})).toEqual({ repository: '', intakeRepository: '', codeRepository: '', cli: '',
+    pollSeconds: 60, failuresBeforeError: 3, observeIssues: false, observePulls: false, observeComments: false, observeCi: false })
 })
 describe('feishu event consumer', () => {
   let dir: string
@@ -1242,6 +1242,41 @@ describe('observing the GitHub repository', () => {
     observe(h, {})
     await pollRound(h)
     expect(h.store.get('github-stream:issues')).toBeUndefined()
+    h.store.close()
+  })
+  it('reads Issues from the intake repository and PRs from the code repository without mixing their numbers', async () => {
+    const h = host({ deployment: testDeployment({ intakeRepository: 'acme/intake' }) })
+    observe(h, { observeIssues: true })
+    h.store.set('github-since', at(-24))
+    h.store.set('github-stream:issues', { since: at(0), started: { issues: at(0) } })
+    h.store.tickets.save({ ...openTicket('t9'), follows: [{ thread: 'github:acme/widgets/9', own: true }] })
+    h.store.threads.save({ key: 'github:acme/widgets/9', ref: { source: 'github', id: 'acme/widgets/9' }, createdAt: '',
+      subscriptions: ['t9'], correlated: [], pending: [], meta: { number: 9, isPr: true } })
+    const reads: string[][] = []
+    vi.spyOn(h.commands, 'run').mockImplementation(async (_program, args) => {
+      reads.push(args)
+      const path = args[1]!.split('?')[0]!
+      const value: unknown = path === 'repos/acme/intake/issues'
+        ? [{ ...issue(9), html_url: 'https://github.com/acme/intake/issues/9' }]
+        : path === 'repos/acme/widgets/pulls/9'
+          ? { ...openPull(9), user: { login: 'agent-bot' }, head: { sha: 'abc', ref: 'agent/t9', repo: { full_name: 'acme/widgets' } } }
+          : path === 'repos/acme/widgets/issues/9' ? { ...issue(9), title: 'Fix the margin', pull_request: { url: 'x' } }
+          : path === 'repos/acme/widgets/commits/abc/check-runs' ? { check_runs: [] } : []
+      if (args.includes('--include'))
+        return `HTTP/2.0 200 OK\r\n${path === 'notifications' ? 'X-Poll-Interval: 60\r\n' : 'ETag: "same"\r\n'}\r\n${JSON.stringify(value)}`
+      return JSON.stringify(args.includes('--slurp') ? [value] : value)
+    })
+    await pollRound(h)
+    // The intake Issue and the code PR share the number 9, yet land on separate repository-qualified threads.
+    const trigger = h.receive.mock.calls.map(([received]) => received).find(({ meta }) => meta.kind === 'issue')!
+    expect(trigger.threads).toEqual([{ source: 'github', id: 'acme/intake/9' }])
+    expect(trigger.channel).toMatchObject({ thread: 'github:acme/intake/9', address: { number: '9', url: 'https://github.com/acme/intake/issues/9' } })
+    expect(h.store.get('github-stream:issues')).toEqual({ since: at(0), started: { issues: at(0) }, etag: '"same"' })
+    expect(h.store.threads.get('github:acme/widgets/9')?.subscriptions).toEqual(['t9'])
+    expect(h.store.threads.get('github:9')).toBeUndefined()
+    const paths = reads.map(args => args[1]!.split('?')[0]!)
+    expect(paths.filter(path => path.includes('acme/intake'))).toEqual(['repos/acme/intake/notifications', 'repos/acme/intake/issues'])
+    expect(paths.some(path => path === 'repos/acme/widgets/pulls/9')).toBe(true)
     h.store.close()
   })
   it('takes in the repository\'s conversation and review comments, on the Issue or PR each is on', async () => {

@@ -2,6 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import { Runtime } from './app/runtime.ts'
+import { workerEnvironment, withoutDirectory, workerBin } from './infra/environment.ts'
 import { Config, machineOf, type DeploymentConfig } from './deployment.ts'
 
 export const name = 'dsh-superagent'
@@ -9,6 +10,10 @@ export const inject = ['agents', 'sessionController', 'sessionPersistence', 'wor
 export { Config }
 export async function apply(ctx: Context, config: DeploymentConfig): Promise<void> {
   const machine = machineOf(config)
+  const path = withoutDirectory(process.env.PATH ?? '', workerBin(machine.stateDir))
+  // Worker Sessions run in the same process when dsh-superagent is hosted by the main Web UI, so their account-bound git and
+  // gh environment is provided to the worker shell instead of being applied to the host's process environment.
+  ctx.provide('dshSuperagentWorkerEnv', { environment: () => workerEnvironment(machine.stateDir, path) })
   // The management panel provides its own settings UI, so disable DSH's auto-generated settings page.
   ctx.inject(['settings'], child => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
   // Volatile limits update in place without a restart; account changes restart dsh-superagent. DSH's settings service stops

@@ -83,6 +83,22 @@ describe('setup', () => {
     await needs('github', 'agentCliNoAccount', {}, { repository, cli: program(join(dir, 'bin', 'gh-anonymous'), `echo '{}'`) })
     expect(() => executable('nothing-here', join(dir, 'bin'))).toThrow('nothing-here is not an executable file on PATH')
   })
+  it('resolves separate intake and code repositories, falling back to the legacy repository when a field is blank', async () => {
+    // The intake repository needs read access only, so its access report may name a repository the account cannot push to.
+    program(join(dir, 'bin', 'gh-split'), `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  "api repos/acme/widgets"*) echo '{"name":"acme/widgets","push":true}' ;;\n  "api repos/acme/intake"*) echo '{"name":"acme/intake","push":false}' ;;\n  *) exit 1 ;;\nesac`)
+    const split = { codeRepository: 'acme/widgets', intakeRepository: 'acme/intake', cli: 'gh-split' }
+    expect(await resolveDeployment(machine(), split, probe, path)).toMatchObject({ repository: 'acme/widgets', intakeRepository: 'acme/intake' })
+    // A blank code repository falls back to the legacy repository; a blank intake repository falls back to the code repository.
+    expect(await resolveDeployment(machine(), { repository: 'acme/widgets', intakeRepository: 'acme/intake', cli: 'gh-split' }, probe, path))
+      .toMatchObject({ repository: 'acme/widgets', intakeRepository: 'acme/intake' })
+    expect(await resolveDeployment(machine(), { repository: 'acme/widgets', cli: 'gh-split' }, probe, path))
+      .toMatchObject({ repository: 'acme/widgets', intakeRepository: 'acme/widgets' })
+    // The intake lookup is skipped when it names the code repository, and an unreadable separate intake repository fails setup.
+    program(join(dir, 'bin', 'gh-code'), `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  "api repos/acme/widgets"*) echo '{"name":"acme/widgets","push":true}' ;;\n  *) exit 1 ;;\nesac`)
+    expect(await resolveDeployment(machine(), { repository: 'acme/widgets', cli: 'gh-code' }, probe, path)).toMatchObject({ intakeRepository: 'acme/widgets' })
+    await expect(resolveDeployment(machine(), { repository: 'acme/widgets', intakeRepository: 'acme/intake', cli: 'gh-code' }, probe, path))
+      .rejects.toEqual(setupError('github', 'repositoryUnreadable', { repository: 'acme/intake' }))
+  })
   it('reads the Feishu bot from a bot-only lark-cli, or finds none when the Feishu Source names no CLI', async () => {
     expect(await resolveFeishuBot(machine(), {}, probe, path)).toBeUndefined()
     expect(await resolveFeishuBot(machine(), { cli: 'lark-cli' }, probe, path)).toEqual({ cli: join(dir, 'bin', 'lark-cli'), appId: 'cli_bot', brand: 'lark', botId: 'ou_bot', name: 'Widgets Bot' })

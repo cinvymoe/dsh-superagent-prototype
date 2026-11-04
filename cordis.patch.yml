@@ -43,7 +43,7 @@
               shell: true
             config:
               - id: bash-sandbox
-                name: '@deepseek-ai/dsh-bash-sandbox'
+                name: dsh-superagent/worker-shell
                 disabled: !!js process.platform === 'win32'
                 config:
                   timeoutMs: 5000

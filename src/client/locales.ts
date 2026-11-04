@@ -545,6 +545,8 @@ const TEXT = {
   deploymentDerived: ['仓库与账号', 'Repository and accounts'],
   deploymentDerivedHint: ['由来源设置里的仓库和 CLI 得出。', 'Derived from the repository and the CLIs in the Source settings.'],
   deploymentRepository: ['仓库', 'Repository'],
+  deploymentCodeRepository: ['代码仓库', 'Code repository'],
+  deploymentIntakeRepository: ['Issue 仓库', 'Intake repository'],
   deploymentAgent: ['智能体账号', 'Agent account'],
   deploymentFeishu: ['飞书机器人', 'Feishu bot'],
   deploymentFeishuNone: ['未设置', 'Not set'],
