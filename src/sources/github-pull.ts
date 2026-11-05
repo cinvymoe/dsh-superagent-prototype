@@ -1,6 +1,6 @@
-/** Pull request binding, lifecycle observation, and terminal IM notification helpers. */
+/** Pull request binding, lifecycle observation, and terminal notification helpers. */
 import { z } from 'zod'
-import { key, liveTicket, type Follow, type OutboundMessage, type ThreadFact, type Ticket } from '../core/index.ts'
+import { key, liveTicket, type ChannelRef, type Follow, type OutboundMessage, type ThreadFact, type Ticket } from '../core/index.ts'
 import type { Deployment } from '../deployment.ts'
 import { sameName } from '../infra/text.ts'
 import type { SourceContext } from './host.ts'
@@ -92,11 +92,13 @@ function closePull(ctx: SourceContext, pr: Pull): void {
   ctx.tickets.threadClosed({ source: SOURCE, id: pullThread(ctx, pr.number) }, pr.merged ? 'merged' : 'closed', at)
 }
 /**
- * Builds idempotent outbound notices for IM conversations when a ticket ends with its PR (selecting the last-closed PR it
- * opened, else the last one it followed). The notice language follows the ticket's source request: Chinese when it contains
- * Han characters and no kana, otherwise English.
+ * Builds idempotent outbound notices for every conversation that should hear the PR outcome when a ticket ends with its PR
+ * (selecting the last-closed PR it opened, else the last one it followed): the PR itself in the code repository, the
+ * conversation the ticket started from when that is another GitHub Thread, and its IM channels. Every notice carries the
+ * same text, so a deployment that separates the intake and code repositories reports once in each. The notice language
+ * follows the ticket's source request: Chinese when it contains Han characters and no kana, otherwise English.
  */
-export function pullEndNotices(ticket: Ticket, request: string, repository: string): OutboundMessage[] {
+export function pullEndNotices(ticket: Ticket, request: string, repository: string, source?: ChannelRef): OutboundMessage[] {
   const outcome = ticket.ended?.outcome
   const follows = (ticket.follows ?? []).filter(item => item.closed && pullNumber(item.thread) !== undefined)
   const latest = (items: Follow[]) => items.sort((a, b) => b.closed!.at.localeCompare(a.closed!.at))[0]
@@ -108,7 +110,10 @@ export function pullEndNotices(ticket: Ticket, request: string, repository: stri
   const text = chinese
     ? outcome === 'merged' ? `[PR #${number}](${url}) 已合并。` : `[PR #${number}](${url}) 已关闭，未合并。`
     : outcome === 'merged' ? `[PR #${number}](${url}) has merged.` : `[PR #${number}](${url}) was closed without merging.`
-  // GitHub timelines and linked issues already show the merge or closure, so GitHub channels are skipped.
-  return ticket.channels.filter(channel => channel.source !== SOURCE).map(channel => ({
+  // A ticket that started from a GitHub conversation reports the PR's outcome there and on the PR itself, in the code
+  // repository: the same text once in each repository when the deployment separates them. IM channels hear it too.
+  const pull: ChannelRef = { source: SOURCE, thread: follow.thread, address: { number: String(number), url } }
+  const github = source?.source === SOURCE ? [pull, ...(source.thread === pull.thread ? [] : [source])] : []
+  return [...github, ...ticket.channels.filter(channel => channel.source !== SOURCE)].map(channel => ({
     id: key('pr-terminal', String(number), channel.source, JSON.stringify(channel.address), outcome), channel, text, kind: 'notice', ticketId: ticket.id }))
 }

@@ -102,7 +102,7 @@ The Ticket is done when none of the pull requests it opened remain open. If it o
 
 A close does not end the Ticket while resumed, retried or recovered work is unfinished. It also waits if the Executor acknowledged or answered a follow-up it owns but has not since made a non-progress Report or ended a turn after reading that message. A later `ready` Report ends the Ticket once the same pull-request completion rule is satisfied.
 
-Chat Channels receive one final notice about the pull-request outcome. GitHub already displays the outcome on the pull request itself. Removing a Ticket's Subscription to a pull request also stops it following that pull request.
+Chat Channels receive one final notice about the pull-request outcome. The pull request itself and the GitHub conversation the Ticket started from receive the same text once they are different Threads, so a deployment that separates the intake and code repositories reports once in each. Removing a Ticket's Subscription to a pull request also stops it following that pull request.
 
 "Awaiting review" therefore means a `ready` Report with a pull request.
 

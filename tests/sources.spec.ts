@@ -477,6 +477,23 @@ describe('github source', () => {
       .toEqual([expect.objectContaining({ text: '[PR #12](https://github.com/acme/widgets/pull/12) was closed without merging.' })])
     h.store.close()
   })
+  it('reports the terminal notice to the PR in the code repository and to the conversation the ticket started from', () => {
+    const h = host()
+    const source = githubChannel('cinvymoe/rust_crane_issues/3', 'https://github.com/cinvymoe/rust_crane_issues/issues/3')
+    const ticket: Ticket = { ...openTicket('t6'), channels: [source],
+      follows: [{ thread: 'github:cinvymoe/rust_crane/8', own: true, closed: { at: '2026-11-04T00:00:00.000Z', outcome: 'merged' } }],
+      ended: { at: '2026-11-04T00:00:00.000Z', by: 'executor', outcome: 'merged' } }
+    const notices = pullEndNotices(ticket, '修一下标题', 'cinvymoe/rust_crane', source)
+    expect(notices.map(notice => notice.channel)).toEqual([
+      { source: 'github', thread: 'github:cinvymoe/rust_crane/8', address: { number: '8', url: 'https://github.com/cinvymoe/rust_crane/pull/8' } },
+      source])
+    expect(new Set(notices.map(notice => notice.id)).size).toBe(2)
+    expect(notices.map(notice => notice.text)).toEqual(Array(2).fill('[PR #8](https://github.com/cinvymoe/rust_crane/pull/8) 已合并。'))
+    // A ticket that started on the very PR it ended with hears about it once.
+    expect(pullEndNotices({ ...ticket, channels: [notices[0]!.channel] }, '修一下标题', 'cinvymoe/rust_crane', notices[0]!.channel))
+      .toHaveLength(1)
+    h.store.close()
+  })
   it('polls subscribed PR threads since their checkpoint and skips the bot\'s own comments', async () => {
     const h = host()
     const thread: Thread = { key: 'github:7', ref: { source: 'github', id: '7' }, createdAt: '2026-09-01T00:00:00Z',
