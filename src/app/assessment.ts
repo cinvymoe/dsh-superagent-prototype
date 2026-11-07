@@ -51,6 +51,8 @@ export interface AssessorHost {
   readonly engine: Pick<EngineForMainSession, 'candidate' | 'candidateDelivered' | 'decide'>
   readonly commands: Commands
   readonly deployment: Deployment
+  /** The deployment of one configured chain, or the default deployment when the chain is absent. */
+  deploymentFor?(chain?: string): Deployment
   /** Durable effect queue through which candidate assessments are delivered. */
   readonly effects: Pick<Effects, 'enqueue' | 'handle'>
   settings(): Settings
@@ -149,10 +151,11 @@ export class MasterAssessor implements Assessor {
       // Defer start until `reads.loading` is assigned below so `current()` holds from the first step.
       loading = Promise.resolve().then(async () => {
         try {
-          const timeout = AbortSignal.timeout(this.host.deployment.admissionContextTimeoutMs.get())
+          const deployment = this.host.deploymentFor?.(typeof trigger.meta.chain === 'string' ? trigger.meta.chain : undefined) ?? this.host.deployment
+          const timeout = AbortSignal.timeout(deployment.admissionContextTimeoutMs.get())
           const signal = AbortSignal.any([this.controller.signal, ...(caller ? [caller] : []), timeout])
-          const commands = this.host.commands.withSignal(signal)
-          const context = await admissionContext(thread, commands, this.host.deployment.admissionContextMaxPages.get())
+          const commands = (this.host.commands.withDeployment?.(deployment) ?? this.host.commands).withSignal(signal)
+          const context = await admissionContext(thread, commands, deployment.admissionContextMaxPages.get())
           if (!current()) return
           reads.context = context
           // Allow pagination to continue from the end of the initial window.
@@ -227,7 +230,8 @@ export class MasterAssessor implements Assessor {
       await this.seed(candidate.evalId, trigger, signal)
       const { cache } = this.reads(candidate.evalId, trigger)
       const { snapshots, images, messages, cursors } = cache
-      const commands = this.host.commands.withSignal(AbortSignal.any([this.controller.signal, signal]))
+      const deployment = this.host.deploymentFor?.(typeof trigger.meta.chain === 'string' ? trigger.meta.chain : undefined) ?? this.host.deployment
+      const commands = (this.host.commands.withDeployment?.(deployment) ?? this.host.commands).withSignal(AbortSignal.any([this.controller.signal, signal]))
       if (read.resource === 'image') {
         if (read.offset !== 0) throw new Error('Images are not paginated; use offset 0')
         const image = images.get(read.image_id!)
@@ -235,7 +239,7 @@ export class MasterAssessor implements Assessor {
         const source = this.host.threadContext(trigger)
         if (!source) throw new Error(NO_CONTEXT)
         const key = read.image_id!.slice(read.image_id!.indexOf('/') + 1)
-        return source.image(agent, commands, image, key, this.host.deployment.stateDir, signal)
+        return source.image(agent, commands, image, key, deployment.stateDir, signal)
       }
       const cacheKey = JSON.stringify([read.resource, read.path, read.cursor, read.message_id])
       if (read.offset > 0) {

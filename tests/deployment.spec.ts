@@ -99,6 +99,21 @@ describe('setup', () => {
     await expect(resolveDeployment(machine(), { repository: 'acme/widgets', intakeRepository: 'acme/intake', cli: 'gh-code' }, probe, path))
       .rejects.toEqual(setupError('github', 'repositoryUnreadable', { repository: 'acme/intake' }))
   })
+  it('resolves every configured repository chain and keeps the legacy single chain as the default', async () => {
+    program(join(dir, 'bin', 'gh-chains'), `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  "api repos/acme/code-a"*) echo '{"name":"acme/code-a","push":true}' ;;\n  "api repos/acme/intake-a"*) echo '{"name":"acme/intake-a","push":false}' ;;\n  "api repos/acme/code-b"*) echo '{"name":"acme/code-b","push":true}' ;;\n  "api repos/acme/intake-b"*) echo '{"name":"acme/intake-b","push":false}' ;;\n  *) exit 1 ;;\nesac`)
+    const deployment = await resolveDeployment(machine(), { cli: 'gh-chains', chains: [
+      { id: 'alpha', intakeRepository: 'acme/intake-a', codeRepository: 'acme/code-a' },
+      { id: 'beta', intakeRepository: 'acme/intake-b', codeRepository: 'acme/code-b' },
+    ] }, probe, path)
+    expect(deployment).toMatchObject({ repository: 'acme/code-a', intakeRepository: 'acme/intake-a', github: { login: 'Agent-Bot' } })
+    expect(deployment.chains).toMatchObject({
+      alpha: { chain: 'alpha', repository: 'acme/code-a', intakeRepository: 'acme/intake-a' },
+      beta: { chain: 'beta', repository: 'acme/code-b', intakeRepository: 'acme/intake-b' },
+    })
+    expect(await resolveDeployment(machine(), { repository: 'acme/widgets', cli: 'gh' }, probe, path)).toMatchObject({
+      chains: { default: { chain: 'default', repository: 'acme/widgets', intakeRepository: 'acme/widgets' } },
+    })
+  })
   it('reads the Feishu bot from a bot-only lark-cli, or finds none when the Feishu Source names no CLI', async () => {
     expect(await resolveFeishuBot(machine(), {}, probe, path)).toBeUndefined()
     expect(await resolveFeishuBot(machine(), { cli: 'lark-cli' }, probe, path)).toEqual({ cli: join(dir, 'bin', 'lark-cli'), appId: 'cli_bot', brand: 'lark', botId: 'ou_bot', name: 'Widgets Bot' })

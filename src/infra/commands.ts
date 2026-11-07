@@ -64,14 +64,20 @@ export class Commands {
   constructor(private readonly resolved: () => Deployment, private readonly environment: Record<string, string | undefined>,
     private readonly signal: AbortSignal, private readonly target?: string) {}
   get deployment(): Deployment { return this.resolved() }
+  /** Resolves one configured chain, or the default deployment when the chain is absent. */
+  deploymentFor(chain?: string): Deployment { return chain ? this.deployment.chains?.[chain] ?? this.deployment : this.deployment.chains?.default ?? this.deployment }
   /** Repository targeted by `api` and `pages`; defaults to the code repository. */
   get repository(): string { return this.target ?? this.deployment.repository }
+  /** Returns a view of these commands bound to another chain's deployment. */
+  withDeployment(deployment: Deployment): Commands { return this.scopeWith(() => deployment, this.signal, this.target) }
   /** Returns a view of these commands whose GitHub API calls target `repository`. */
   withRepository(repository: string): Commands { return this.scope(this.signal, repository) }
   withSignal(signal?: AbortSignal): Commands { return signal ? this.scope(AbortSignal.any([this.signal, signal]), this.target) : this }
-  /** A view sharing this instance's mocks and state; only the signal and repository target differ. */
-  private scope(signal: AbortSignal, target: string | undefined): Commands {
+  /** A view sharing this instance's mocks and state; only the deployment, signal and repository target differ. */
+  private scope(signal: AbortSignal, target: string | undefined): Commands { return this.scopeWith(this.resolved, signal, target) }
+  private scopeWith(resolved: () => Deployment, signal: AbortSignal, target: string | undefined): Commands {
     const scoped = Object.create(this) as Commands
+    Object.defineProperty(scoped, 'resolved', { value: resolved })
     Object.defineProperty(scoped, 'signal', { value: signal })
     Object.defineProperty(scoped, 'target', { value: target })
     return scoped

@@ -11,8 +11,9 @@ function trigger(id: string, overrides: Partial<Trigger> = {}): Trigger {
 interface Hooks {
   emit?: (event: { type: string; data: Record<string, unknown> }) => void
   prepareTicket?: EngineOptions['prepareTicket']
+  replyCopies?: EngineOptions['replyCopies']
 }
-function harness(policyOverrides: Partial<Policy> = {}, { emit, prepareTicket }: Hooks = {}) {
+function harness(policyOverrides: Partial<Policy> = {}, { emit, prepareTicket, replyCopies }: Hooks = {}) {
   const repo = new MemoryRepositories()
   const outbox: OutboundMessage[] = []
   const withdrawn: string[] = []
@@ -41,7 +42,7 @@ function harness(policyOverrides: Partial<Policy> = {}, { emit, prepareTicket }:
     withdraw: id => { withdrawn.push(id) },
   }
   const engine = new Engine({ repo, scope, policy: () => policy, assessor, executor, outbox: queued,
-    ...emit ? { emit } : {}, ...prepareTicket ? { prepareTicket } : {}, now: () => new Date(Date.UTC(2026, 8, 23, 0, 0, clock)).toISOString() })
+    ...replyCopies ? { replyCopies } : {}, ...emit ? { emit } : {}, ...prepareTicket ? { prepareTicket } : {}, now: () => new Date(Date.UTC(2026, 8, 23, 0, 0, clock)).toISOString() })
   /** Simulate the executor starting queued assignments (unless `launch` is false) and delivering pending ticket inputs. */
   function settle({ launch = true } = {}) {
     for (;;) {
@@ -1047,6 +1048,20 @@ describe('replies', () => {
     h.engine.report(ticketId, { state: 'ready', summary: 'Done' })
     expect(h.engine.reply({ purpose: 'result', ticketId, text: 'Done' })).toMatchObject({ status: 'pending' })
     expect(h.outbox.at(-1)!.channel).toEqual(trigger('1').channel)
+  })
+  it('copies a result to the PR channels when the result goes to a GitHub conversation', () => {
+    const copy = { source: 'github', thread: 'gh:pr-9', address: { number: '9', url: 'https://github.com/acme/widgets/pull/9' } }
+    const h = harness({}, { replyCopies: () => [copy] })
+    const github = trigger('1', { threads: [{ source: 'gh', id: '7' }], channel: { source: 'github', thread: 'gh:7', address: { number: '7' } } })
+    h.engine.receive(github); h.pump()
+    const ticketId = h.decide(h.requests.at(-1)!, { kind: 'accept', title: 'Fix', scope: 'small', reason: 'requested', acknowledgement: 'ok' }).ticketId!
+    h.settle()
+    h.engine.report(ticketId, { state: 'ready', summary: 'Done' })
+    expect(h.engine.reply({ purpose: 'result', ticketId, text: '已就绪。' })).toMatchObject({ status: 'pending' })
+    const replies = h.outbox.filter(message => message.kind === 'reply')
+    expect(replies.map(message => message.channel)).toEqual([github.channel, copy])
+    expect(replies.map(message => message.text)).toEqual(['已就绪。', '已就绪。'])
+    expect(new Set(replies.map(message => message.id)).size).toBe(2)
   })
 })
 describe('ticket commands', () => {

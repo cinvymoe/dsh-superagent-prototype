@@ -14,7 +14,11 @@ export interface SetupHost {
 }
 
 const setupFields = (settings: Settings) =>
-  JSON.stringify(Object.entries(SETUP_FIELDS).map(([id, keys]) => keys.map(key => settings.sources[id]?.config[key] ?? '')))
+  JSON.stringify(Object.entries(SETUP_FIELDS).map(([id, keys]) => keys.map(key => {
+    const value = settings.sources[id]?.config[key]
+    // An empty chain list and an absent legacy chain list mean the same single-chain deployment.
+    return key === 'chains' ? value ?? [] : value ?? ''
+  })))
 export const setupChanged = (before: Settings, after: Settings): boolean => setupFields(before) !== setupFields(after)
 
 /**
@@ -41,6 +45,8 @@ export class Setup {
     if (!this.resolved) throw new Error(`dsh-superagent is waiting for setup: ${this.problem?.detail ?? 'setup has not run'}`)
     return this.resolved
   }
+  /** One configured chain, or the default deployment when the chain is absent. */
+  deploymentFor(chain?: string): Deployment { return chain ? this.resolved?.chains?.[chain] ?? this.deployment : this.resolved?.chains?.default ?? this.deployment }
   configured(): boolean { return this.resolved !== undefined }
   /** Resolve deployment accounts and apply the worker environment, recording `SetupError` failures in `problem`/`feishuProblem` and rethrowing unexpected errors. */
   async run(settings: Settings): Promise<boolean> {

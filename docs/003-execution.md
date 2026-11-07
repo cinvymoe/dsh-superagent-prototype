@@ -52,6 +52,8 @@ Before the first Assignment, if the Ticket directory does not exist, the prepare
 
 A failed command fails the Ticket and records its output. A retry or a person's message on one of the Ticket's Threads tries preparation again. A typical command uses `git worktree` to create a checkout. A pull request belongs to the Ticket when its branch's last path segment matches the Ticket's short name.
 
+With multiple repository chains, the same prepare command runs for every chain. Select the local clone from `DSH_SUPERAGENT_GITHUB_REPOSITORY` (for example with a `case` on `owner/name`) and use `DSH_SUPERAGENT_DIR` as the worktree path; a command that hard-codes one clone only serves that chain.
+
 ### Concurrency
 
 A Ticket holds a worker slot from the start of a launch, including preparation, or from the delivery that wakes its idle Executor. It also holds the slot throughout an active turn.
@@ -74,7 +76,7 @@ The prepare command and Executor instructions receive the same execution variabl
 | `DSH_SUPERAGENT_GITHUB_NUMBER`, `DSH_SUPERAGENT_GITHUB_PR_HEAD` | GitHub | The Issue or pull request that started the Ticket, and its head ref when it is a pull request |
 | `DSH_SUPERAGENT_FEISHU_BOT`, `DSH_SUPERAGENT_FEISHU_CHAT` | Feishu | The bot, and the chat that started the Ticket |
 
-Ticket-specific values come from its directory and originating Trigger. Other values come from the current deployment settings. Only the panel can change execution environment settings; text sent to the main Session cannot change the configured shell command.
+For a multi-chain GitHub Source, `DSH_SUPERAGENT_GITHUB_REPOSITORY` and `DSH_SUPERAGENT_GITHUB_INTAKE_REPOSITORY` name the chain the Ticket originates from; the panel's legacy single-chain fields form the `default` chain. Ticket-specific values come from its directory and originating Trigger. Other values come from the current deployment settings. Only the panel can change execution environment settings; text sent to the main Session cannot change the configured shell command.
 
 Workers reach GitHub through the agent account's `gh` and Feishu through the bot's `lark-cli`. Blocked commands fail when invoked by name.
 
@@ -102,7 +104,7 @@ The Ticket is done when none of the pull requests it opened remain open. If it o
 
 A close does not end the Ticket while resumed, retried or recovered work is unfinished. It also waits if the Executor acknowledged or answered a follow-up it owns but has not since made a non-progress Report or ended a turn after reading that message. A later `ready` Report ends the Ticket once the same pull-request completion rule is satisfied.
 
-Chat Channels receive one final notice about the pull-request outcome. The pull request itself and the GitHub conversation the Ticket started from receive the same text once they are different Threads, so a deployment that separates the intake and code repositories reports once in each. Removing a Ticket's Subscription to a pull request also stops it following that pull request.
+Chat Channels receive one final notice about the pull-request outcome. The pull request itself and the GitHub conversation the Ticket started from receive the same text once they are different Threads, so a deployment that separates the intake and code repositories reports once in each. A result reply to a GitHub conversation is also copied to each pull request the Ticket follows, or names in its latest Report, so the intake Issue and the code pull request show the same text. When a pull request is bound, its description's problem, change, and verification sections are copied to the GitHub conversation the Ticket started from, so the issue repository explains the work the same way as the PR. Removing a Ticket's Subscription to a pull request also stops it following that pull request.
 
 "Awaiting review" therefore means a `ready` Report with a pull request.
 

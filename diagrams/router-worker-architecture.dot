@@ -1,0 +1,36 @@
+digraph architecture {
+  graph [rankdir=TB, fontname="Noto Sans CJK SC", fontsize=12, bgcolor="white", pad=0.4, nodesep=0.5, ranksep=0.42];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=11.5, color="#94a3b8", fillcolor="#ffffff", penwidth=1.3, margin="0.18,0.11"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9.5, color="#64748b", fontcolor="#475569", arrowsize=0.65];
+
+  S [label="Source 事件流\nGitHub Issue / PR / 评论 · 飞书消息", fillcolor="#e0f2fe", color="#38bdf8"];
+  Intake [label="Intake　Trigger 去重 / 记录 / 扇出", fillcolor="#f3e8ff", color="#a78bfa"];
+  Thread [label="Thread 线程　消息时序 + Subscription 订阅", fillcolor="#f3e8ff", color="#a78bfa"];
+  Eval [label="Eval 评估\n① Gate 准入（确定性：谁可以派活、强度）\n② Assessment 研判（模型：Router 读上下文并决定）", fillcolor="#f3e8ff", color="#a78bfa"];
+  Router [label=<<b>Router —— 主 Session（角色 orchestrator）</b><br/>preset: dsh-superagent-router　model: settings.eval.model<br/>14 个 orchestrator_* 工具：route / eval / ticket / reply / settings<br/>只读 + 路由 + 管理，不写代码　·　shell 与 job 等待上限 5 秒>, fillcolor="#fef3c7", color="#f59e0b"];
+  Tickets [label="Tickets / Assignments\nTicket + Mandate 授权 + Assignment 派工　·　阶段判定与报告落账", fillcolor="#f3e8ff", color="#a78bfa"];
+  Worker [label=<<b>Worker —— Executor Session（每个 Ticket 一个，角色 worker）</b><br/>session id: worker-&lt;ticketId&gt;　model: settings.executor.model<br/>目录: &lt;stateDir&gt;/work/&lt;ticket 短名&gt;（首次 Assignment 前 prepare 一次）<br/>6 个 orchestrator_* 工具 + 完整工作工具（读/写/编辑/shell/subagent…）<br/>命令 5 秒后转后台，以便下一步接收新消息>, fillcolor="#d1fae5", color="#10b981"];
+  Out [label="Channel 回复 / PR / Issue 评论 / 飞书消息 → Source", fillcolor="#e0f2fe", color="#38bdf8"];
+  Legend [shape=note, label="实线 = 主动调用 / 状态推进　　虚线 = 异步回传 / 旁路投递\nWorkerSlots：executor.maxWorkers（默认 3，范围 1–16）+ 1 个人工插队槽", fillcolor="#f8fafc", color="#cbd5e1", fontsize=9.5];
+
+  S -> Intake [label="Trigger"];
+  Intake -> Thread [label="入线程"];
+  Thread -> Eval [label="批处理"];
+  Eval -> Router [label="candidate 卡片（assessment effect · 4 并发）", color="#f59e0b", fontcolor="#b45309"];
+  Router -> Tickets [label="orchestrator_route：accept / stop / ignore\n（attach = 指向已有 Ticket）", color="#f59e0b", fontcolor="#b45309"];
+  Tickets -> Worker [label="Assignment → launch effect（WorkerSlots 限流）", color="#10b981", fontcolor="#047857"];
+  Worker -> Tickets [label="orchestrator_report\nprogress / ready / blocked / failed / dropped\n（turn 正常结束 → 自动 waiting）", style=dashed, color="#10b981", fontcolor="#047857", constraint=false];
+  Tickets -> Router [label="reportRelay / notice：提问立即转达，普通报告按策略转达", style=dashed, color="#b45309", fontcolor="#b45309", constraint=false];
+  Thread -> Tickets [label="订阅扇出：人的新消息直达 Worker，不经 Router", style=dashed, constraint=false];
+  Tickets -> Out [label="收尾与对外写入"];
+  Worker -> Out [style=invis];
+
+  { rank=same; S; }
+  { rank=same; Intake; }
+  { rank=same; Thread; }
+  { rank=same; Eval; }
+  { rank=same; Router; }
+  { rank=same; Tickets; }
+  { rank=same; Worker; Out; }
+  { rank=same; Legend; }
+}

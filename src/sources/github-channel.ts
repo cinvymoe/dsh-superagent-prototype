@@ -5,7 +5,7 @@ import { CliError } from '../infra/commands.ts'
 import { sameName } from '../infra/text.ts'
 import type { SourceContext } from './host.ts'
 import type { ChannelLink, ChannelLinks } from './kind.ts'
-import { githubAddress, githubPage, githubRepository } from './github-trigger.ts'
+import { githubAddress, githubPage, githubRepository, threadChain } from './github-trigger.ts'
 
 const CommentSchema = z.looseObject({
   id: z.number(), body: z.string().nullish(), in_reply_to_id: z.number().nullish(), user: z.looseObject({ login: z.string() }).nullish(),
@@ -17,10 +17,12 @@ const missing = (error: unknown): boolean => error instanceof CliError && (error
 /** Posts a comment or review-thread reply with an embedded HTML marker so retries do not create duplicate comments. */
 export async function sendGithub(host: Pick<SourceContext, 'commands'>, message: OutboundMessage): Promise<'sent' | 'gone'> {
   const { commands } = host
-  const { github } = commands.deployment
+  const chain = message.channel.address.chain ?? threadChain(message.channel.thread.replace(/^github:/, ''))
+  const deployment = commands.deploymentFor(chain)
+  const { github } = deployment
   const repository = (typeof message.channel.address.url === 'string' ? githubRepository(message.channel.address.url) : undefined)
-    ?? commands.deployment.repository
-  const scoped = commands.withRepository(repository)
+    ?? deployment.repository
+  const scoped = commands.withDeployment(deployment).withRepository(repository)
   const number = Number(message.channel.address.number)
   if (!number) throw new Error('Missing GitHub reply target')
   try {
@@ -48,8 +50,9 @@ export async function sendGithub(host: Pick<SourceContext, 'commands'>, message:
 }
 export function githubLink(address: Record<string, string>, links: ChannelLinks): ChannelLink {
   const number = address.number ?? ''
+  const chain = address.chain ? links.chains?.[address.chain] : undefined
   const repository = (typeof address.url === 'string' ? githubRepository(address.url) : undefined)
-    ?? links.repository ?? links.intakeRepository
+    ?? chain?.repository ?? links.repository ?? links.intakeRepository
   const review = !!repository && !!githubAddress(address.url ?? '', repository)?.discussion
   return { url: address.url ?? (repository ? githubPage(repository, Number(number)) : ''),
     label: review ? { zh: `GitHub #${number} 的 review 讨论`, en: `Review discussion on GitHub #${number}` }

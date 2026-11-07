@@ -45,6 +45,8 @@ export interface HttpHost {
   readonly ready: Promise<void>
   /** Resolved deployment; throws if read while waiting for setup (`!configured()`). */
   readonly deployment: Deployment
+  /** One configured chain, or the default deployment when the chain is absent. */
+  deploymentFor?(chain?: string): Deployment
   readonly setupProblem?: SetupProblem | undefined
   readonly feishuProblem?: SetupProblem | undefined
   configured(): boolean

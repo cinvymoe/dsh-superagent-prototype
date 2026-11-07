@@ -43,6 +43,7 @@ export function machineOf(config: DeploymentConfig): Machine {
 }
 
 const REPOSITORY = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?$/
+const CHAIN = /^[a-z][a-z0-9-]*$/
 export const GithubAccountsSchema = z.object({
   /** Legacy single-repository field: both repositories fall back to it. */
   repository: z.string().trim().regex(REPOSITORY, 'owner/name').default(''),
@@ -53,6 +54,22 @@ export const GithubAccountsSchema = z.object({
   cli: z.string().trim().default(''),
 })
 export type GithubAccounts = z.infer<typeof GithubAccountsSchema>
+/** One independent intake repository -> code repository chain. The Source-level `cli` is shared by every chain. */
+export const GithubChainSchema = GithubAccountsSchema.omit({ cli: true }).extend({
+  id: z.string().trim().regex(CHAIN, 'lowercase kebab-case').default('default'),
+}).strict()
+export type GithubChain = z.infer<typeof GithubChainSchema>
+export const GithubConfigSchema = GithubAccountsSchema.extend({
+  /** Independent repository pairs handled by this Source. Empty means the legacy single pair in the fields above. */
+  chains: z.array(GithubChainSchema).optional(),
+  pollSeconds: z.number().int().min(60).max(3600).default(60),
+  failuresBeforeError: z.number().int().min(1).max(20).default(3),
+  observeIssues: z.boolean().default(false),
+  observePulls: z.boolean().default(false),
+  observeComments: z.boolean().default(false),
+  observeCi: z.boolean().default(false),
+}).strict()
+export type GithubConfig = z.infer<typeof GithubConfigSchema>
 /**
  * Resolve the two GitHub repositories, treating the legacy `repository` field as the code repository and
  * defaulting an unset intake repository to the code repository.
@@ -62,16 +79,27 @@ export function githubRepositories(accounts: Pick<GithubAccounts, 'repository' |
   const code = accounts.codeRepository || accounts.repository
   return { code, intake: accounts.intakeRepository || code }
 }
+/** The configured chains, or the one legacy pair when no `chains` array was supplied. */
+export function githubChains(config: Pick<GithubAccounts, 'repository' | 'intakeRepository' | 'codeRepository'> & { chains?: readonly GithubChain[] }): GithubChain[] {
+  if (config.chains?.length) return [...config.chains]
+  return [{ id: 'default', repository: config.repository, intakeRepository: config.intakeRepository, codeRepository: config.codeRepository }]
+}
 export const FeishuBotSchema = z.object({ cli: z.string().trim().default('') })
 /** Source configuration keys that affect deployment setup and trigger a restart when changed. */
-export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { github: Object.keys(GithubAccountsSchema.shape), feishu: Object.keys(FeishuBotSchema.shape) }
+export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { github: ['chains', ...Object.keys(GithubAccountsSchema.shape)], feishu: Object.keys(FeishuBotSchema.shape) }
 
-export interface Deployment extends Machine {
+export interface DeploymentTarget extends Machine {
+  /** Chain id; absent for legacy callers that construct a single deployment by hand. */
+  chain?: string
   /** Code repository: workers check out and open pull requests here. */
   repository: string
   /** Repository whose Issues are received and discussed; equal to `repository` when not split. */
   intakeRepository: string
   github: { cli: string; login: string; noreply: string }
+}
+export interface Deployment extends DeploymentTarget {
+  /** Every configured chain, keyed by chain id. */
+  chains?: Record<string, DeploymentTarget>
   feishu?: FeishuBot
 }
 export interface FeishuBot { cli: string; appId: string; brand: 'feishu' | 'lark'; botId: string; name: string }
@@ -102,32 +130,39 @@ function parsed<T>(schema: z.ZodType<T>, text: string): T | undefined {
   const result = schema.safeParse(value)
   return result.success ? result.data : undefined
 }
-/** Verify the agent's GitHub CLI identity, push access to the code repository, and read access to the intake repository. */
+/** Verify the agent's GitHub CLI identity, push access to every code repository, and read access to every intake repository. */
 export async function resolveDeployment(machine: Machine, github: unknown, probe: Probe, path = process.env.PATH ?? ''): Promise<Deployment> {
   const { stateDir } = machine
-  const accounts = GithubAccountsSchema.parse(github ?? {})
-  const { code: codeRemote, intake: intakeRemote } = githubRepositories(accounts)
-  if (!codeRemote) throw new SetupError('repositoryUnset')
-  if (!accounts.cli) throw new SetupError('agentCliUnset')
+  const config = GithubConfigSchema.parse(github ?? {})
+  const chains = githubChains(config)
+  if (!chains.length) throw new SetupError('repositoryUnset')
+  if (!config.cli) throw new SetupError('agentCliUnset')
   let cli: string
-  try { cli = executable(accounts.cli, path, workerBin(stateDir)) } catch (error) { throw new SetupError('agentCliMissing', { output: reason(error) }) }
+  try { cli = executable(config.cli, path, workerBin(stateDir)) } catch (error) { throw new SetupError('agentCliMissing', { output: reason(error) }) }
   const text = await probe([cli, 'api', 'user']).catch((error: unknown) => { throw new SetupError('agentCliSignedOut', { output: reason(error) }) })
   const agent = parsed(GithubUser, text)
   if (!agent) throw new SetupError('agentCliNoAccount')
-  const lookup = async (remote: string, requirePush: boolean): Promise<string> => {
+  const lookup = async (chain: string, remote: string, requirePush: boolean): Promise<string> => {
     // Use the canonical repository name returned by GitHub so renamed repositories match incoming notifications.
     const access = parsed(RepositoryAccess, await probe([cli, 'api', `repos/${remote}`, '--jq', '{name: .full_name, push: .permissions.push}']).catch((error: unknown) => {
-      throw new SetupError('repositoryUnreadable', { account: agent.login, repository: remote, output: reason(error) })
+      throw new SetupError('repositoryUnreadable', { account: agent.login, repository: remote, chain, output: reason(error) })
     }))
-    if (!access) throw new SetupError('repositoryUnreported', { repository: remote })
-    if (requirePush && access.push !== true) throw new SetupError('repositoryReadOnly', { account: agent.login, repository: access.name })
+    if (!access) throw new SetupError('repositoryUnreported', { repository: remote, chain })
+    if (requirePush && access.push !== true) throw new SetupError('repositoryReadOnly', { account: agent.login, repository: access.name, chain })
     return access.name
   }
-  const repository = await lookup(codeRemote, true)
-  const intakeRepository = intakeRemote === codeRemote ? repository : await lookup(intakeRemote, false)
-  return { ...machine, repository, intakeRepository, github: { cli, login: agent.login, noreply: `${agent.id}+${agent.login}@users.noreply.github.com` } }
+  const targets: Record<string, DeploymentTarget> = {}
+  for (const chain of chains) {
+    if (Object.hasOwn(targets, chain.id)) throw new SetupError('chainDuplicate', { chain: chain.id })
+    const { code: codeRemote, intake: intakeRemote } = githubRepositories(chain)
+    if (!codeRemote) throw new SetupError('repositoryUnset', { chain: chain.id })
+    const repository = await lookup(chain.id, codeRemote, true)
+    const intakeRepository = intakeRemote === codeRemote ? repository : await lookup(chain.id, intakeRemote, false)
+    targets[chain.id] = { ...machine, chain: chain.id, repository, intakeRepository, github: { cli, login: agent.login, noreply: `${agent.id}+${agent.login}@users.noreply.github.com` } }
+  }
+  const first = targets[chains[0]!.id]!
+  return { ...first, chains: targets }
 }
-
 const AuthStatus = z.object({ appId: z.string().regex(/^cli_[A-Za-z0-9]+$/), brand: z.enum(['feishu', 'lark']).default('feishu'), identities: z.object({ bot: z.object({ status: z.string() }) }) })
 const BotInfo = z.object({ bot: z.object({ open_id: z.string().regex(/^ou_[A-Za-z0-9]+$/), app_name: z.string().default('') }) })
 /**

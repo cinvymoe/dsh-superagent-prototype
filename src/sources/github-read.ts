@@ -165,9 +165,11 @@ export const githubThreadContext: ThreadContext<unknown> = {
       const message = { id: trigger.url ?? trigger.id, from: 'CI', at: trigger.at, text: trigger.text, bot: true as const }
       return { messages: [message], body: { status: 'branch_ci', messages: [message] }, status: 'branch_ci' }
     }
+    const chain = typeof trigger.meta.chain === 'string' ? trigger.meta.chain : 'default'
+    const deployment = commands.deploymentFor?.(chain) ?? commands.deployment
     const repository = (typeof trigger.url === 'string' ? githubRepository(trigger.url) : undefined)
-      ?? (trigger.meta.isPr === true ? commands.deployment.repository : commands.deployment.intakeRepository)
-    commands = commands.withRepository(repository)
+      ?? (trigger.meta.isPr === true ? deployment.repository : deployment.intakeRepository)
+    commands = (commands.withDeployment?.(deployment) ?? commands).withRepository(repository)
     const number = Number(trigger.meta.number)
     if (trigger.meta.kind === 'inline' && typeof trigger.meta.commentId === 'number') {
       const thread = await reviewThread(commands, number, trigger.meta.commentId)

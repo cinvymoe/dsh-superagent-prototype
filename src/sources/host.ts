@@ -30,6 +30,8 @@ export interface ThreadDescription { label?: string; url?: string; facts?: Recor
 /** Application capabilities exposed to a Source kind for reading state, ingesting triggers, managing threads/tickets, and reporting health. */
 export interface SourceContext {
   readonly deployment: Deployment
+  /** The deployment of one configured chain, or the default deployment when the chain is unknown. */
+  deploymentFor(chain?: string): Deployment
   readonly commands: Commands
   readonly ready: Promise<void>
   /** True once setup resolved the repository and accounts; Sources poll only then. */

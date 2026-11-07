@@ -25,7 +25,7 @@ import { CliError, Commands } from '../src/infra/commands.ts'
 import { UserError, key, runningAssignment, said, threadKey, waitsForPerson, type Trigger } from '../src/core/index.ts'
 import { feishuTrigger } from '../src/sources/feishu.ts'
 import { feishuChannel } from '../src/sources/feishu-trigger.ts'
-import { commentTrigger, githubChannel } from '../src/sources/github-trigger.ts'
+import { commentTrigger, githubChannel, issueTrigger } from '../src/sources/github-trigger.ts'
 import { IM_WORDS } from '../src/infra/text.ts'
 import { observePull, pullOf } from '../src/sources/github-pull.ts'
 import { credentialHelper, workerGitConfig } from '../src/infra/environment.ts'
@@ -469,6 +469,27 @@ it('treats GitHub comments through the same gate: mentions by members are explic
   const ci = { ...stranger, id: 'ci-1', human: false, text: 'GitHub PR #7 CI: failing', meta: { ci: true } }
   await receive(ci)
   expect(runtime.store.tickets.get(ticket.id)!.inputs).toEqual([expect.objectContaining({ triggerId: 'ci-1' })])
+})
+
+it('binds a PR a report names in its summary and copies the result reply to the intake Issue and the PR', async () => {
+  const issue = issueTrigger({ number: 12, title: 'Login fails', body: '@agent-bot please fix the login',
+    created_at: '2026-09-09T00:00:00Z', html_url: 'https://github.com/acme/widgets/issues/12', user: { login: 'alice', type: 'User' } }, 'agent-bot')
+  await receive(issue)
+  const result = await route({ kind: 'accept', trigger_id: issue.id, title: 'Fix login', worktree_name: 'fix-login', acknowledgement: 'On it.' })
+  const ticket = runtime.store.tickets.get((result.ticket as { ticket_id: string }).ticket_id)!
+  const sessionId = `worker-${ticket.id}`
+  // The worker names its PR only in the report: the ticket still follows it, so its ready report waits for the merge.
+  expect(await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'PR opened: https://github.com/acme/widgets/pull/42' }))
+    .toMatchObject({ reported: true })
+  expect(pullOf(runtime.store.tickets.get(ticket.id)!)).toBe(42)
+  await runTool(sessionId, 'orchestrator_report', { state: 'ready', summary: 'Fixed; PR is https://github.com/acme/widgets/pull/42' })
+  expect(runtime.store.tickets.get(ticket.id)!.ended).toBeUndefined()
+  const text = '已就绪，请评审并合并。'
+  await runTool(runtime.masterId, 'orchestrator_reply', { ticket_id: ticket.id, purpose: 'result', text })
+  const receipts = runtime.store.db.prepare('SELECT value FROM outbox').all().map(row => JSON.parse(String((row as { value: string }).value)) as
+    { kind: string; text: string; channel: { thread: string } })
+  expect(receipts.filter(item => item.kind === 'reply' && item.text === text).map(item => item.channel.thread).sort())
+    .toEqual(['github:12', 'github:42'])
 })
 
 it('relays an allowed sender\'s mention in a new Issue as an explicit candidate from the poll that reads its notification', async () => {

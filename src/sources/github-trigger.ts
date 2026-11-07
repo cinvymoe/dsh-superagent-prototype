@@ -8,13 +8,19 @@ export const SOURCE = 'github'
  * The Thread id of an Issue or PR: bare `number` while the deployment uses one repository (Issue and PR numbers share one
  * sequence there), `owner/name/number` once the intake and code repositories differ and their numbers become independent.
  */
-export const threadId = (split: boolean, repository: string, number: number): string => split ? `${repository}/${number}` : String(number)
+export const threadId = (split: boolean, repository: string, number: number, chain = 'default'): string => {
+  const base = split ? `${repository}/${number}` : String(number)
+  return chain === 'default' ? base : `${chain}:${base}`
+}
+/** The chain id encoded in a Thread id built by `threadId`. */
+export const threadChain = (id: string): string => /^([a-z][a-z0-9-]*):/.exec(id)?.[1] ?? 'default'
 /** The bare Issue or PR number of a Thread id built by `threadId`. */
-export const threadNumber = (id: string): number => Number(id.split('/').at(-1))
+export const threadNumber = (id: string): number => Number(id.split(/[/:]/).at(-1))
 /** GitHub reply address: issue/PR conversation, or a review thread when `url` points at a discussion comment. The ref is a Thread ref (repository-qualified in split deployments) or a bare number. */
 export const githubChannel = (ref: string | number, url?: string): ChannelRef => {
   const id = String(ref)
-  return { source: SOURCE, thread: `github:${id}`, address: { number: String(threadNumber(id)), ...(url ? { url } : {}) } }
+  const chain = threadChain(id)
+  return { source: SOURCE, thread: `github:${id}`, address: { number: String(threadNumber(id)), ...(chain !== 'default' ? { chain } : {}), ...(url ? { url } : {}) } }
 }
 export const githubPage = (repository: string, number: number, pr = false): string =>
   `https://github.com/${repository}/${pr ? 'pull' : 'issues'}/${number}`
@@ -79,13 +85,14 @@ export function commentTrigger(comment: GithubComment, ref: PullRef, kind: 'conv
   const at = comment.updated_at ?? comment.submitted_at ?? comment.created_at ?? new Date().toISOString()
   const version = comment.updated_at ?? comment.submitted_at ?? ''
   const thread = ref.threadId ?? String(ref.number)
+  const chain = threadChain(thread)
   const id = key('github-comment', comment.html_url ?? `github:${thread}`, String(comment.id), version)
   return { id, source: SOURCE, threads: [{ source: SOURCE, id: thread }], ...author(comment.user, agent), at,
     text: commentText(comment, kind),
     ...(mentions(comment.body ?? '', agent) ? { addressed: 'mention' as const } : {}),
     channel: githubChannel(thread, comment.html_url ?? undefined),
     ...(comment.html_url ?? ref.url ? { url: comment.html_url ?? ref.url } : {}),
-    meta: { number: ref.number, isPr: ref.isPr, ...(ref.prAuthor ? { prAuthor: ref.prAuthor } : {}), commentId: comment.id, kind,
+    meta: { number: ref.number, isPr: ref.isPr, ...(chain === 'default' ? {} : { chain }), ...(ref.prAuthor ? { prAuthor: ref.prAuthor } : {}), commentId: comment.id, kind,
       ...comment.path ? { path: comment.path, line: comment.line ?? comment.original_line ?? null } : {},
       ...comment.in_reply_to_id ? { inReplyTo: comment.in_reply_to_id } : {} } }
 }
@@ -99,25 +106,28 @@ export function issueTrigger(issue: Opened, agent: string, thread = String(issue
     threads: [{ source: SOURCE, id: thread }], ...author(issue.user, agent), at: issue.created_at,
     text: `${issue.title}\n\n${body}`,
     ...(mentions(body, agent) ? { addressed: 'mention' as const } : {}),
-    channel: githubChannel(thread, issue.html_url), url: issue.html_url, meta: { number: issue.number, isPr: false, kind: 'issue' } }
+    channel: githubChannel(thread, issue.html_url), url: issue.html_url, meta: { number: issue.number, isPr: false, ...(threadChain(thread) === 'default' ? {} : { chain: threadChain(thread) }), kind: 'issue' } }
 }
 /**
  * Builds the trigger for a newly opened PR's title and description.
  * PR and Issue numbers share one sequence in GitHub and never collide, so this reuses `issueTrigger`'s `github-issue` ID format.
  */
 export function pullTrigger(pull: Opened, agent: string, thread?: string): Trigger {
-  return { ...issueTrigger(pull, agent, thread), meta: { number: pull.number, isPr: true, prAuthor: pull.user.login, kind: 'pull' } }
+  const issue = issueTrigger(pull, agent, thread)
+  return { ...issue, meta: { ...issue.meta, isPr: true, prAuthor: pull.user.login, kind: 'pull' } }
 }
 /** Builds a trigger for a default-branch CI transition; default-branch CI has no person to reply to, so it has no `channel`. */
-export function branchCiTrigger(branch: string, sha: string, revision: number, summary: string, url: string): Trigger {
-  return { id: key('github-ci', `branch:${branch}`, String(revision)), source: SOURCE,
-    threads: [{ source: SOURCE, id: `ci:${branch}` }], actor: { source: SOURCE, id: '' }, human: false, at: new Date().toISOString(),
-    text: summary, url, meta: { ci: true, branch, sha, revision } }
+export function branchCiTrigger(branch: string, sha: string, revision: number, summary: string, url: string, chain = 'default'): Trigger {
+  const ref = chain === 'default' ? `ci:${branch}` : `ci:${chain}:${branch}`
+  return { id: key('github-ci', ref, String(revision)), source: SOURCE,
+    threads: [{ source: SOURCE, id: ref }], actor: { source: SOURCE, id: '' }, human: false, at: new Date().toISOString(),
+    text: summary, url, meta: { ci: true, branch, sha, revision, ...(chain === 'default' ? {} : { chain }) } }
 }
 export function ciTrigger(pr: { number: number; html_url: string; user: { login: string } }, revision: number, summary: string, thread?: string): Trigger {
   const ref = thread ?? String(pr.number)
+  const chain = threadChain(ref)
   return { id: key('github-ci', ref, String(revision)), source: SOURCE, threads: [{ source: SOURCE, id: ref }],
     actor: { source: SOURCE, id: '' }, human: false, at: new Date().toISOString(),
     text: summary, channel: githubChannel(ref), url: pr.html_url,
-    meta: { number: pr.number, isPr: true, prAuthor: pr.user.login, ci: true, revision } }
+    meta: { number: pr.number, isPr: true, prAuthor: pr.user.login, ci: true, revision, ...(chain === 'default' ? {} : { chain }) } }
 }
