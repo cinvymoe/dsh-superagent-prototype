@@ -35,7 +35,7 @@ export interface Api {
   'GET tickets': { query?: Paged & { state?: TicketFilter }; response: TicketListView }
   'GET tickets/:id': { response: TicketPageView }
   'GET local/projects': { response: { projects: LocalProject[] } }
-  'POST local/projects': { body: { name: string; repository: string }; response: { project: LocalProject } }
+  'POST local/projects': { body: { name: string; repository: string; worktreeRoot?: string }; response: { project: LocalProject } }
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssue[] } }
   'POST local/issues': { body: { title: string; body?: string; project: string }; response: { issue: LocalIssue } }
   'GET local/issues/:id': { response: { issue: LocalIssue; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }

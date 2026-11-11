@@ -33,6 +33,7 @@ export function DiscussBoard() {
   const [filter, setFilter] = useState('')
   const [projectName, setProjectName] = useState('')
   const [repository, setRepository] = useState('')
+  const [worktreeRoot, setWorktreeRoot] = useState('')
   const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
   const projects = data?.projects ?? []
@@ -56,9 +57,12 @@ export function DiscussBoard() {
     if (busy || !projectName.trim() || !repository.trim()) return
     setBusy(true)
     try {
-      const { project } = await call('POST local/projects', { body: { name: projectName.trim(), repository: repository.trim() } })
+      const root = worktreeRoot.trim()
+      const { project } = await call('POST local/projects', { body: { name: projectName.trim(), repository: repository.trim(),
+        ...(root ? { worktreeRoot: root } : {}) } })
       setProjectName('')
       setRepository('')
+      setWorktreeRoot('')
       setCreating(false)
       setProjectId(project.id)
       await reload()
@@ -75,6 +79,7 @@ export function DiscussBoard() {
           <Icon name="hash" size={14} /><div className="dt-row-main">
             <div className="dt-row-title dt-line">{project.name}</div>
             <div className="dt-row-meta"><span className="dt-mono">{project.repository}</span>
+              {project.worktreeRoot && <span className="dt-mono">{project.worktreeRoot}</span>}
               {!filter && <button type="button" className="dt-textlink" onClick={() => setFilter(project.id)}>{t('discuss.useProject')}</button>}
               {filter === project.id && <button type="button" className="dt-textlink" onClick={() => setFilter('')}>{t('discuss.allProjects')}</button>}
             </div>
@@ -86,6 +91,10 @@ export function DiscussBoard() {
               onChange={event => setProjectName(event.target.value)} />
             <input className="dt-text-input" value={repository} maxLength={200} placeholder={t('discuss.projectRepository')}
               onChange={event => setRepository(event.target.value)} />
+            <input className="dt-text-input dt-mono" value={worktreeRoot} maxLength={4096}
+              placeholder={t('discuss.projectWorktreeRoot')} aria-label={t('discuss.projectWorktreeRoot')}
+              spellCheck={false} onChange={event => setWorktreeRoot(event.target.value)} />
+            <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
             <div className="dt-actions"><Button type="submit" variant="primary" size="sm" disabled={busy || !projectName.trim() || !repository.trim()}>
               {t('discuss.createProject')}</Button><Button type="button" variant="ghost" size="sm" onClick={() => setCreating(false)}>
               {t('cancel')}</Button></div>
@@ -171,7 +180,8 @@ export function DiscussIssue({ id }: { id: string }) {
       <section className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.requirement')}</span></div>
         <div className="dt-row-meta"><span>{t('discuss.author')}：{issue.author}</span><When at={issue.createdAt} />
-          <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {data.project.repository}</span>}</div>
+          <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {data.project.repository}
+            {data.project.worktreeRoot ? ` · ${data.project.worktreeRoot}` : ''}</span>}</div>
         {issue.body && <MarkdownLite text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
       </section>

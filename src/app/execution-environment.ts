@@ -15,7 +15,22 @@ export const EXECUTOR_VARIABLES: readonly (VariableSpec & { ticket?: true })[] =
 ]
 export interface Variable { key: string; value: string; description: Localized; owner: string }
 
-export const executionRoot = (settings: Settings, stateDir: string): string => settings.executor.directory || join(stateDir, 'work')
+/** The directory root a new ticket is created under, and whether it was configured explicitly rather than defaulted. */
+export interface ResolvedExecutionRoot { root: string; explicit: boolean }
+
+/**
+ * Resolves the root under which a new ticket's directory lives: a local project's `worktreeRoot` first, then the Executor's
+ * configured `directory`, then `<stateDir>/work`. A configured root is explicit and validated before a launch creates anything;
+ * the default is created when missing, as it always was.
+ */
+export function resolvedExecutionRoot(input: { settings: Settings; stateDir: string; projectRoot?: string }): ResolvedExecutionRoot {
+  const { settings, stateDir, projectRoot } = input
+  if (projectRoot) return { root: projectRoot, explicit: true }
+  return { root: settings.executor.directory || join(stateDir, 'work'), explicit: settings.executor.directory !== '' }
+}
+
+/** The root the settings view shows: the Executor directory, or `<stateDir>/work` when it is empty. */
+export const executionRoot = (settings: Settings, stateDir: string): string => resolvedExecutionRoot({ settings, stateDir }).root
 
 /** Lists all declared variables grouped by owner; `enabled` is false for Sources that are currently switched off. */
 export function declaredVariables(sources: SourceRegistry, settings?: Settings): { owner: string; enabled: boolean; variables: readonly VariableSpec[] }[] {

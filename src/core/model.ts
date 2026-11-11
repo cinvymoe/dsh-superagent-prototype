@@ -331,6 +331,12 @@ export interface Follow { thread: string; own: boolean; closed?: { at: string; o
 export interface Execution {
   name: string
   directory: string
+  /**
+   * The explicitly configured root the directory was created under (a local project's `worktreeRoot` or a non-empty
+   * `executor.directory`). Absent for the default `<stateDir>/work`, and never updated after acceptance: a launch validates
+   * the root accepted with the ticket.
+   */
+  worktreeRoot?: string
   assignment: string
   /** The GitHub chain this ticket executes in, when the Source configures more than the legacy single chain. */
   chain?: string

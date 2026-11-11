@@ -9,6 +9,8 @@ export interface LocalProject {
   id: string
   name: string
   repository: string
+  /** Optional absolute root under which new tickets create their worktrees; absent keeps the Executor's root. */
+  worktreeRoot?: string
   createdAt: string
   updatedAt: string
 }

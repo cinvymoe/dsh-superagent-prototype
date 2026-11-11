@@ -900,6 +900,18 @@ describe('the Executor\'s parts', () => {
     expect(execution.assignment).not.toContain(mandateInstructions(ticket.mandate))
     expect(execution.assignment).toContain('- Copy fixes (copy): Fix typos only.')
     expect(mandateInstructions({ strength: 'explicit' })).toBe('')
+    // A project root, or an explicit executor directory, chooses the directory and is kept for the launch to validate;
+    // the default <stateDir>/work leaves no worktreeRoot.
+    const outcome = { kind: 'accept', title: 'Fix', scope: 'the typo', reason: 'r', name: 'fix-typo' } as never
+    expect(execution.directory).toBe('/state/work/fix-typo-ticket-01234')
+    expect(execution).not.toHaveProperty('worktreeRoot')
+    const rooted = ticketExecution(ticket, outcome, settings, '/state', undefined, '/roots')
+    expect(rooted.directory).toBe('/roots/fix-typo-ticket-01234')
+    expect(rooted.worktreeRoot).toBe('/roots')
+    const configured = SettingsSchema.parse({ executor: { directory: '/srv/work' } })
+    const explicit = ticketExecution(ticket, outcome, configured, '/state')
+    expect(explicit.directory).toBe('/srv/work/fix-typo-ticket-01234')
+    expect(explicit.worktreeRoot).toBe('/srv/work')
   })
   it('renders each kind of Input as its worker reads it, inline, and no reopen Input', () => {
     const asked = { id: 'tr1', source: 'feishu', threads: [{ source: 'feishu', id: 'oc:om_1' }], actor: { source: 'feishu', id: 'ou_a' }, human: true,

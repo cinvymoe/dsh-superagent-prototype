@@ -202,7 +202,8 @@ function routes(runtime: HttpHost): Routes {
     'GET tickets/:id': ({ params }) => ticketPage(runtime, params.id),
     'GET local/projects': () => ({ projects: runtime.local.projects() }),
     'POST local/projects': async ({ body }) => {
-      const input = z.object({ name: z.string().trim().min(1).max(80), repository: z.string().trim().min(3).max(200) }).parse(await body())
+      const input = z.object({ name: z.string().trim().min(1).max(80), repository: z.string().trim().min(3).max(200),
+        worktreeRoot: z.string().trim().max(4096).optional() }).parse(await body())
       return { project: runtime.local.createProject(input) }
     },
     'GET local/issues': ({ query }) => {

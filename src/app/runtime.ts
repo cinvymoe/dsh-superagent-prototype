@@ -31,6 +31,7 @@ import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
 import { LocalIssues } from './local.ts'
+import type { LocalProject } from '../sources/local-format.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
@@ -130,6 +131,7 @@ export class Runtime extends Service implements SourceHost {
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
         lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment,
         workerEnvironment: () => setup.workerEnvironment, deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,
+        worktreeRoot: ticket => this.ticketProject(ticket)?.worktreeRoot,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, deploymentFor: chain => setup.deploymentFor(chain), effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
@@ -191,11 +193,18 @@ export class Runtime extends Service implements SourceHost {
       ...(resolved.chains ? { chains: Object.fromEntries(Object.entries(resolved.chains).map(([id, chain]) => [id, { repository: chain.repository, intakeRepository: chain.intakeRepository }])) } : {}) } : {}
     return channel => this.sources.link(channel, links)
   }
+  /**
+   * The local project a ticket belongs to, from the project its origin trigger names. GitHub and Feishu tickets carry no
+   * project, so their execution keeps the chain's deployment and the Executor's root.
+   */
+  ticketProject(ticket: Ticket): LocalProject | undefined {
+    const trigger = sourceTrigger(this, ticket)
+    return typeof trigger?.meta.project === 'string' ? this.local.project(trigger.meta.project) : undefined
+  }
   /** The deployment a ticket executes under: its local project's repository, or its chain's configured repository. */
   ticketDeployment(ticket: Ticket): Deployment {
     const base = this.setup.deploymentFor(ticket.execution?.chain)
-    const trigger = sourceTrigger(this, ticket)
-    const project = typeof trigger?.meta.project === 'string' ? this.local.project(trigger.meta.project) : undefined
+    const project = this.ticketProject(ticket)
     return project ? { ...base, repository: project.repository, intakeRepository: project.repository } : base
   }
   ticketEnvironment(ticket: Ticket): Variable[] {

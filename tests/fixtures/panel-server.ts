@@ -98,7 +98,7 @@ export interface PanelServer {
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
   localIssues: LocalIssue[]
-  localProjects: { id: string; name: string; repository: string; createdAt: string; updatedAt: string }[]
+  localProjects: { id: string; name: string; repository: string; worktreeRoot?: string; createdAt: string; updatedAt: string }[]
   threads: ThreadRow[]
   threadPages: (key: string, query: { before?: string; around?: string }) => ThreadPageView | undefined
   person: TicketRow[]; search: Pick<ApiResponse<'GET search'>, 'items' | 'threads'>; history: HistoryView
@@ -339,7 +339,9 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET tickets/:id': { answer: ({ params }) => server.ticketDetails[params.id] ?? refuse(404, 'Ticket not found') },
   'GET local/projects': { answer: () => ({ projects: server.localProjects }) },
   'POST local/projects': { body: true, answer: ({ body }) => {
-    const project = { id: 'p-fixture', name: body.name, repository: body.repository, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
+    const project = { id: 'p-fixture', name: body.name, repository: body.repository,
+      ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}),
+      createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
     server.localProjects = [project, ...server.localProjects]
     return { project }
   } },

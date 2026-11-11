@@ -1,4 +1,5 @@
 /** Read/write operations for requirements submitted through the built-in local issue board. */
+import { isAbsolute } from 'node:path'
 import { key, UserError, type ActorRef, type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
@@ -12,7 +13,7 @@ export interface LocalIssuesHost {
 }
 
 export interface LocalIssueInput { title: string; body?: string; author?: string; project: string }
-export interface LocalProjectInput { name: string; repository: string }
+export interface LocalProjectInput { name: string; repository: string; worktreeRoot?: string }
 export interface LocalAlignmentInput { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }
 
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
@@ -47,9 +48,14 @@ export class LocalIssues {
     const repository = input.repository.trim()
     if (!REPOSITORY.test(repository)) throw new UserError('projectRepository')
     if (this.projects().some(project => project.name.toLowerCase() === name.toLowerCase())) throw new UserError('projectTaken', { name })
+    // Omitted and exactly empty mean no project root; any other value must name an absolute directory. Existence and
+    // writability are checked at a ticket's launch, not here, because the root may not exist yet when the project is made.
+    const worktreeRoot = input.worktreeRoot === undefined || input.worktreeRoot === '' ? undefined : input.worktreeRoot.trim()
+    if (worktreeRoot !== undefined && !isAbsolute(worktreeRoot)) throw new UserError('projectWorktreeRoot')
     const at = this.clock()
     const project: LocalProject = {
-      id: `p-${key('local-project', at, name).slice(0, 8)}`, name, repository, createdAt: at, updatedAt: at,
+      id: `p-${key('local-project', at, name).slice(0, 8)}`, name, repository, ...(worktreeRoot !== undefined ? { worktreeRoot } : {}),
+      createdAt: at, updatedAt: at,
     }
     this.host.store.set(KV.local.project(project.id), project)
     return project
