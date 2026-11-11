@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Router 决策 · Worker 执行 · dsh-superagent 架构</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+    .container { max-width: 1360px; margin: 0 auto; }
+    .header { margin-bottom: 2.25rem; max-width: 760px; }
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.2vw + 0.8rem, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin-bottom: 0.65rem;
+    }
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 62ch;
+    }
+    .diagram-container {
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 1.05fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 900px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: 1.25rem;
+    }
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.52rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.55rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.85rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.ink { background: var(--color-ink); }
+    .card h3 { font-size: 0.9rem; font-weight: 600; letter-spacing: -0.005em; }
+    .card p, .card ul {
+      color: var(--color-muted);
+      font-size: 0.82rem;
+      line-height: 1.6;
+      list-style: none;
+    }
+    .card li {
+      margin-bottom: 0.35rem;
+      padding-left: 0.9rem;
+      position: relative;
+    }
+    .card li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: rgba(45,49,66,0.25);
+      font-size: 0.75rem;
+    }
+    .card code {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--color-ink);
+      background: rgba(45,49,66,0.04);
+      padding: 0.05rem 0.2rem;
+      border-radius: 2px;
+    }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    @media print {
+      .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+      svg { min-width: 0; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <p class="header-eyebrow">DSH Superagent · Architecture</p>
+      <h1>Router 决策 · Worker 执行</h1>
+      <p class="subtitle">主 Session 只做研判与路由；每个 Ticket 派生一个持久 Worker Session；Engine 是唯一状态写入者。候选、决策、派工、回报与回写都在同一个闭环里。</p>
+    </header>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="router-worker-architecture-title router-worker-architecture-desc">
+        <title id="router-worker-architecture-title">Router 决策 · Worker 执行</title>
+        <desc id="router-worker-architecture-desc">架构图：Source 触发 Engine，Router 对候选作出接受、挂接、停止或忽略决策，Engine 按 Ticket 派工给 Worker，Worker 回报后再由 Engine 回写 Source。</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- Arrows first: z-order puts connectors behind boxes -->
+        <line x1="304" y1="146" x2="416" y2="146" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <line x1="704" y1="224" x2="904" y2="224" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="904" y1="264" x2="704" y2="264" stroke="#bf4520" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <line x1="704" y1="456" x2="904" y2="456" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="904" y1="488" x2="704" y2="488" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="416" y1="560" x2="304" y2="560" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 704,360 H 1040 Q 1048,360 1048,352 V 296" fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+        <!-- Arrow labels: opaque masks with a visible 6–10px gap -->
+        <rect x="336" y="122" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="356" y="134" fill="#2e5aa8" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">触发</text>
+
+        <rect x="780" y="200" width="48" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="804" y="212" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">候选卡</text>
+
+        <rect x="784" y="240" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="804" y="252" fill="#bf4520" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">接受</text>
+
+        <rect x="784" y="432" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="804" y="444" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">派工</text>
+
+        <rect x="784" y="496" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="804" y="508" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">回报</text>
+
+        <rect x="336" y="536" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="356" y="548" fill="#2e5aa8" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">回写</text>
+
+        <rect x="848" y="336" width="48" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="872" y="348" fill="#5a6580" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">转发</text>
+
+        <!-- Node: Source -->
+        <rect x="56" y="104" width="248" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="104" width="248" height="84" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="64" y="112" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="88" y="121" fill="#5a6580" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">SOURCE</text>
+        <text x="180" y="152" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">GitHub / 飞书</text>
+        <text x="180" y="172" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">Issue · PR · 评论 · 消息</text>
+
+        <!-- Node: Engine (the only writer) -->
+        <rect x="416" y="128" width="288" height="464" rx="6" fill="#f5f5f5"/>
+        <rect x="416" y="128" width="288" height="464" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="432" y="144" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="454" y="153" fill="#5a6580" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">CORE</text>
+
+        <text x="448" y="190" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">Engine</text>
+        <text x="448" y="212" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">唯一状态写入者</text>
+        <line x1="448" y1="234" x2="672" y2="234" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+
+        <text x="448" y="268" fill="#5a6580" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">INTAKE</text>
+        <text x="544" y="268" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">Trigger 去重</text>
+        <line x1="448" y1="292" x2="672" y2="292" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="448" y="328" fill="#5a6580" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">EVAL</text>
+        <text x="544" y="328" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">Gate 准入 + 研判</text>
+        <line x1="448" y1="352" x2="672" y2="352" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="448" y="388" fill="#5a6580" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">TICKET</text>
+        <text x="544" y="388" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">Mandate + 派工</text>
+        <line x1="448" y1="412" x2="672" y2="412" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="448" y="448" fill="#5a6580" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.06em">EFFECTS</text>
+        <text x="544" y="448" fill="#2d3142" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">launch · delivery</text>
+        <line x1="448" y1="472" x2="672" y2="472" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="448" y="508" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">SQLite · 持久化</text>
+        <text x="448" y="528" fill="#5a6580" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">Router / Worker 不直接改状态</text>
+
+        <!-- Node: Router (focal) -->
+        <rect x="904" y="192" width="288" height="104" rx="6" fill="#f5f5f5"/>
+        <rect x="904" y="192" width="288" height="104" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.2"/>
+        <rect x="920" y="204" width="48" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.50)" stroke-width="0.8"/>
+        <text x="944" y="213" fill="#bf4520" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">AGENT</text>
+
+        <text x="1048" y="242" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">Router</text>
+        <text x="1048" y="262" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">主 Session · 研判路由</text>
+        <text x="1048" y="280" fill="#5a6580" font-size="9" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle">14 tools · 5s</text>
+
+        <!-- Node: Worker -->
+        <rect x="904" y="400" width="288" height="112" rx="6" fill="#f5f5f5"/>
+        <rect x="904" y="400" width="288" height="112" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="920" y="412" width="48" height="12" rx="2" fill="transparent" stroke="rgba(79,93,117,0.40)" stroke-width="0.8"/>
+        <text x="944" y="421" fill="#5a6580" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">EXEC</text>
+
+        <text x="1048" y="450" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">Worker</text>
+        <text x="1048" y="470" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">Executor Session · 每 Ticket 一个</text>
+        <text x="1048" y="490" fill="#5a6580" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">maxWorkers 3 · 5s 转后台</text>
+
+        <!-- Node: Source writeback -->
+        <rect x="56" y="528" width="248" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="528" width="248" height="84" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="64" y="536" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="88" y="545" fill="#5a6580" font-size="7" font-family="'Geist Mono', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">SINK</text>
+        <text x="180" y="576" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">Source 回写</text>
+        <text x="180" y="596" fill="#4f5d75" font-size="12" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif" text-anchor="middle">PR · 评论 · 飞书</text>
+
+        <!-- Legend strip -->
+        <line x1="40" y1="648" x2="1240" y2="648" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+        <text x="40" y="675" fill="#4f5d75" font-size="8" font-family="'Geist Mono', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+
+        <line x1="140" y1="671" x2="164" y2="671" stroke="#4f5d75" stroke-width="1.2"/>
+        <text x="172" y="675" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">主动流转</text>
+
+        <line x1="300" y1="671" x2="324" y2="671" stroke="#bf4520" stroke-width="1.4"/>
+        <text x="332" y="675" fill="#bf4520" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">决策动作</text>
+
+        <line x1="460" y1="671" x2="484" y2="671" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="492" y="675" fill="#5a6580" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">异步回传</text>
+
+        <text x="700" y="675" fill="#4f5d75" font-size="12" font-weight="500" font-family="'Geist','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">每个 Ticket 一个 Worker Session</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <section class="card">
+        <p class="eyebrow">01 / Router</p>
+        <div class="card-header">
+          <span class="card-dot coral"></span>
+          <h3>决策面：只研判，不写代码</h3>
+        </div>
+        <ul>
+          <li>角色 <code>orchestrator</code>，preset <code>dsh-superagent-router</code></li>
+          <li>模型取 <code>settings.eval.model</code></li>
+          <li>14 个 <code>orchestrator_*</code> 工具，读上下文 + 路由</li>
+          <li>四类决策：<code>accept</code> / <code>attach</code> / <code>stop</code> / <code>ignore</code></li>
+          <li>shell 与 job 等待上限 5 秒，禁止 sleep 轮询</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <p class="eyebrow">02 / Worker</p>
+        <div class="card-header">
+          <span class="card-dot muted"></span>
+          <h3>执行面：一个 Ticket 一个 Session</h3>
+        </div>
+        <ul>
+          <li>session id <code>worker-&lt;ticketId&gt;</code>，跨 turn 持久</li>
+          <li>模型取 <code>settings.executor.model</code></li>
+          <li>6 个 <code>orchestrator_*</code> 工具 + 完整工作工具</li>
+          <li>独立工作目录；<code>prepare</code> 只在首次派工前跑一次</li>
+          <li><code>maxWorkers</code> 默认 3（1–16），另加 1 个人工插槽</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <p class="eyebrow">03 / Engine</p>
+        <div class="card-header">
+          <span class="card-dot ink"></span>
+          <h3>唯一写入者：所有状态在这里落账</h3>
+        </div>
+        <ul>
+          <li>Intake / Eval / Ticket / Effects 四段式</li>
+          <li>SQLite 持久化；主 Session 与 Worker 都不直接改状态</li>
+          <li>effects：<code>assessment</code> · <code>launch</code> · <code>delivery</code> · <code>relay</code> · <code>reply</code></li>
+          <li><code>reportRelay</code> 把 Worker 报告转回 Router</li>
+          <li>已订阅 Thread 的人消息可绕过 Router 直达 Worker</li>
+        </ul>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <span>Source: docs/007-architecture.md · src/app/sessions.ts · src/executor/dsh.ts</span>
+      <span>Diagram Design · doc-wide 1280×720</span>
+    </footer>
+  </div>
+</body>
+</html>

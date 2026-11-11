@@ -3,6 +3,25 @@
 > 对应源码版本：`/data/project/dsh-superagent`（截至 2026-11-06，含工作区中未提交的多链路改动）。
 > Router 在代码与提示词里叫 **主 Session / `orchestrator`**；Worker 叫 **Executor Session / `worker`**。
 
+
+## 图 0：编辑版总览（2026-11-10 重设计）
+
+[![Router 决策 · Worker 执行](./router-worker-architecture-editorial-diagram.png)](./router-worker-architecture.html)
+
+- 单文件 HTML：[`router-worker-architecture.html`](./router-worker-architecture.html)（内联 SVG，可直接浏览器打开）。
+- 阅读方式：Source → Engine → Router → Engine → Worker → Engine → Source 回写；Router 只研判与路由，Worker 每 Ticket 一个，Engine 是唯一状态写入者。
+- 图例：实线为主动流转，coral 为决策动作，虚线为异步回传（reportRelay / notice）。
+- 画布：`doc-wide` 1280×720；整体版式与三张角色卡片在同一页。
+
+## 图 0b：Agent 协作拓扑（调度 Agent 与 Worker）
+
+[![Agent 协作拓扑](./agent-dispatch-worker.png)](./agent-dispatch-worker.html)
+
+- 单文件 HTML：[`agent-dispatch-worker.html`](./agent-dispatch-worker.html)（内联 SVG + 三张角色卡片）。
+- 视角：Dispatcher Agent（Router / 主 Session）在右上，Worker Agents 在右下，Engine 在中间做唯一中转与账本；两者不直接对话。
+- 读法：Source → Engine → Dispatcher 决策 → Engine 派工 → Worker → Engine 回报/转提问 → Dispatcher 回复 → Source；已订阅 Thread 的人消息由 Engine 绕过 Router 直达 Worker。
+- 画布：`doc-wide` 1280×720；图例：实线调用/派工，coral 决策动作，虚线异步回传/直达。
+
 ## 图 1：总体架构与数据流
 
 ![Router 与 Worker 总体架构](./router-worker-architecture.png)
