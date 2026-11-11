@@ -27,6 +27,7 @@ import { settingsView } from './views/settings.ts'
 import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
+import type { LocalIssues } from './local.ts'
 
 export interface HttpHost {
   readonly store: Store
@@ -41,6 +42,8 @@ export interface HttpHost {
   readonly health: Record<string, Health>
   readonly machine: Machine
   readonly masterId: string
+  readonly local: LocalIssues
+  dispatchPlan(issueId: string): Ticket[]
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
   /** Resolved deployment; throws if read while waiting for setup (`!configured()`). */
@@ -197,6 +200,46 @@ function routes(runtime: HttpHost): Routes {
       return ticketList(views(runtime), state, offset, limit)
     },
     'GET tickets/:id': ({ params }) => ticketPage(runtime, params.id),
+    'GET local/issues': () => ({ issues: runtime.local.list() }),
+    'POST local/issues': async ({ body }) => {
+      const input = z.object({ title: z.string().trim().min(1).max(200), body: z.string().max(20_000).optional() }).parse(await body())
+      return { issue: runtime.local.create(input) }
+    },
+    'GET local/issues/:id': ({ params }) => {
+      const issue = runtime.local.get(params.id)
+      if (!issue) throw new RouteError(404, 'Local issue not found')
+      const thread = threadDetail(views(runtime), runtime.local.thread(issue.id), undefined, 200)
+      if (!thread) throw new RouteError(404, 'Local issue thread not found')
+      return { issue, thread, replies: runtime.store.receipts.thread('local', runtime.local.thread(issue.id)) }
+    },
+    'POST local/issues/:id/comments': async ({ params, body }) => {
+      const input = z.object({ text: z.string().trim().min(1).max(20_000) }).parse(await body())
+      const issue = runtime.local.comment(params.id, input.text)
+      if (!issue) throw new RouteError(404, 'Local issue not found')
+      return { issue }
+    },
+    'POST local/issues/:id/alignment': async ({ params, body }) => {
+      const input = z.object({ summary: z.string().max(20_000).optional(), slices: z.array(z.object({
+        id: z.string().min(1), title: z.string().min(1), outcome: z.string().default(''), inScope: z.array(z.string()).default([]),
+        outOfScope: z.array(z.string()).default([]), acceptance: z.array(z.string()).default([]), dependsOn: z.array(z.string()).default([]),
+        lane: z.enum(['full', 'light']).default('full') })).optional(), acceptance: z.array(z.string()).optional() }).parse(await body())
+      const issue = runtime.local.propose(params.id, input)
+      if (!issue) throw new RouteError(404, 'Local issue not found')
+      return { issue }
+    },
+    'POST local/issues/:id/alignment/decision': async ({ params, body }) => {
+      const input = z.object({ decision: z.enum(['confirm', 'reject']), reason: z.string().max(4_000).optional() }).parse(await body())
+      const issue = runtime.local.decide(params.id, input.decision, input.reason)
+      if (!issue) throw new RouteError(404, 'Local issue or alignment not found')
+      // The person's confirmation is the authorization to dispatch: each slice becomes a worker ticket, dependencies gated by the executor.
+      const tickets = input.decision === 'confirm' ? runtime.dispatchPlan(params.id).map(ticket => ({ id: ticket.id, title: ticket.title })) : []
+      return { issue, tickets }
+    },
+    'POST local/issues/:id/close': ({ params }) => {
+      const issue = runtime.local.close(params.id)
+      if (!issue) throw new RouteError(404, 'Local issue not found')
+      return { issue }
+    },
     'POST tickets/:id/retry': ({ params }) => { const id = ticket(params.id); runtime.engine.retryTicket(id); return { retried: true } },
     'POST tickets/:id/stop': ({ params }) => { const id = ticket(params.id); runtime.engine.stopTicket(id); return { stopped: true } },
     'POST executor/pause': async ({ body }) => runtime.settings.pause(z.object({ paused: z.boolean() }).parse(await body()).paused, 'panel'),

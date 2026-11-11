@@ -380,3 +380,7 @@ a.dt-btn, a.dt-btn:hover { text-decoration: none; }
 .dt-admission-slot { display: inline-flex; flex: none; width: 16px; }
 .dt-info-warn { color: var(--dsw-alias-state-warn-primary); }
 .dt-field-segmented { max-width: 240px; }
+/* Local issue board: a plain single-line input that matches the textarea treatment. */
+.dt-text-input { box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 0 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, transparent); font: inherit; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); }
+.dt-text-input::placeholder { color: var(--dsw-alias-label-dimmed); }
+.dt-text-input:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }

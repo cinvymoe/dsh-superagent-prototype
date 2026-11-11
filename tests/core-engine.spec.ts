@@ -287,6 +287,40 @@ describe('subscription fan-out', () => {
     expect(() => h.engine.markUnrelated(first, 'gh:pr-9', 'its PR')).toThrow(new UserError('followedThread'))
   })
 })
+describe('plan dispatch', () => {
+  const slice = (id: string, dependsOn: string[] = []) => ({ id, title: `Slice ${id}`, outcome: `Outcome ${id}`, acceptance: ['test'],
+    dependsOn, lane: 'full' as const })
+  it('creates one execution ticket per confirmed slice, keyed by issue and slice, and gates each on the tickets its dependencies became', () => {
+    const h = harness()
+    h.engine.receive(trigger('1')); h.pump()
+    const tickets = h.engine.acceptPlan({ source: 'chat', id: 't1' }, { issueId: 'q-1', triggerIds: ['1'], actor: member,
+      slices: [slice('C1'), slice('C2', ['C1'])] })
+    expect(tickets.map(ticket => [ticket.plan, ticket.mode, ticket.dependsOn])).toEqual([
+      [{ issueId: 'q-1', sliceId: 'C1', acceptance: ['test'] }, 'work', undefined],
+      [{ issueId: 'q-1', sliceId: 'C2', acceptance: ['test'] }, 'work', [key('ticket', 'plan', 'q-1', 'C1')]],
+    ])
+    expect(tickets.map(ticket => ticket.title)).toEqual(['C1 · Slice C1', 'C2 · Slice C2'])
+    expect(h.repo.threads.get('chat:t1')?.subscriptions).toEqual(tickets.map(ticket => ticket.id))
+    expect(h.executor.start).toHaveBeenCalledTimes(2)
+  })
+  it('reuses the tickets a repeated confirmation would dispatch again', () => {
+    const h = harness()
+    h.engine.receive(trigger('1')); h.pump()
+    const input = { issueId: 'q-1', triggerIds: ['1'], actor: member, slices: [slice('C1')] }
+    const first = h.engine.acceptPlan({ source: 'chat', id: 't1' }, input)
+    const second = h.engine.acceptPlan({ source: 'chat', id: 't1' }, input)
+    expect(second.map(ticket => ticket.id)).toEqual(first.map(ticket => ticket.id))
+    expect(h.repo.tickets.list()).toHaveLength(1)
+    expect(h.executor.start).toHaveBeenCalledOnce()
+  })
+  it('refuses a plan whose thread has no human message', () => {
+    const h = harness()
+    h.engine.receive(trigger('1')); h.pump()
+    expect(() => h.engine.acceptPlan({ source: 'chat', id: 't1' }, { issueId: 'q-1', triggerIds: [], actor: member, slices: [slice('C1')] }))
+      .toThrow('A confirmed plan needs at least one human message on its thread')
+  })
+})
+
 describe('resume and stop', () => {
   async function ended(h: ReturnType<typeof harness>, by: 'executor' | 'human') {
     const decision = accepted(h)

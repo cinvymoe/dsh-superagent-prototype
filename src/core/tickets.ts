@@ -41,7 +41,8 @@ export class Tickets extends EnginePart {
     const primary = this.repo.triggers.get(evaluation.primary ?? triggerIds.at(-1)!)
     const origin = { triggerId: primary?.id ?? triggerIds[0]!, triggerIds }
     let ticket: Ticket = { id, title: outcome.title, decisionId, mandate, channels: [], assignments: [], inputs: [], undelivered: [],
-      createdAt: at, updatedAt: at, origin }
+      createdAt: at, updatedAt: at, origin, ...(outcome.mode ? { mode: outcome.mode } : {}),
+      ...(outcome.dependsOn?.length ? { dependsOn: outcome.dependsOn } : {}), ...(outcome.plan ? { plan: outcome.plan } : {}) }
     for (const triggerId of triggerIds) {
       const channel = this.repo.triggers.get(triggerId)?.channel
       if (channel && !ticket.channels.some(item => sameChannel(item, channel))) ticket.channels.push(channel)

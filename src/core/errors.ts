@@ -44,6 +44,8 @@ export const USER_ERRORS = {
   sourceNotInstalled: ['refused', 'The {source} Source kind is not installed'],
   noLabels: ['refused', 'This Source has no names to refresh'],
   nothingToSync: ['refused', 'The {source} Source\'s part of the Policy has nothing to sync from, or the Source is off or waiting for setup'],
+  planNeedsTriggers: ['refused', 'A confirmed plan needs at least one human message on its thread'],
+  planEmpty: ['refused', 'The alignment has no slices to dispatch'],
 } as const satisfies Record<string, readonly ['missing' | 'refused', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
 

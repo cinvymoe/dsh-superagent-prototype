@@ -5,6 +5,7 @@ import { IM_WORDS } from '../../infra/text.ts'
 import { claimPull, readPull, reportedPull } from '../../sources/github-pull.ts'
 import type { SourceContext } from '../../sources/host.ts'
 import { readResource, type ResourceHost } from '../resources.ts'
+import type { LocalIssues } from '../local.ts'
 import type { Store } from '../store.ts'
 import { reportRelay, threadFollowedNotice } from '../notices.ts'
 import type { Sessions } from '../sessions.ts'
@@ -15,6 +16,8 @@ export interface ExecutorToolsHost {
   readonly store: Pick<Store, 'tickets' | 'replyStatus' | 'atomic'>
   readonly sessions: Pick<Sessions, 'relay' | 'notify'>
   readonly resources: ResourceHost
+  /** The local requirement board, for the aligner's proposal. */
+  readonly local: Pick<LocalIssues, 'proposeForTicket'>
   /** GitHub Source context whose pull-request rules govern claiming a reported PR. */
   readonly github: SourceContext
   sendReplies(): Promise<void>
@@ -71,6 +74,31 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       }).strict(),
       execute: async args => ({ trigger_id: args.trigger_id, queued: host.engine.handback(ticketId, args.trigger_id, args.reason) }),
     }),
+    ...(ticket.mode === 'align' ? [tool({
+      name: 'orchestrator_align',
+      description: 'Publish the requirement alignment to the local discussion board: a summary, one or more execution slices with acceptance criteria and dependencies, and the overall acceptance. A person then confirms or sends it back; this does not create execution tickets.',
+      schema: z.object({
+        summary: z.string().trim().min(1).max(20_000).describe('What the requirement is, what is in and out of scope, and the key decisions.'),
+        slices: z.array(z.object({
+          id: z.string().regex(/^[A-Za-z0-9_-]+$/).describe('A short stable id, such as C1.'),
+          title: z.string().trim().min(1).max(200),
+          outcome: z.string().trim().min(1).max(4_000).describe('The concrete result this slice delivers.'),
+          in_scope: z.array(z.string()).default([]),
+          out_of_scope: z.array(z.string()).default([]),
+          acceptance: z.array(z.string()).min(1).describe('Observable acceptance criteria, one per item.'),
+          depends_on: z.array(z.string()).default([]).describe('Ids of slices that must finish first; the graph must be acyclic.'),
+          lane: z.enum(['full', 'light']).default('full'),
+        })).min(1),
+        acceptance: z.array(z.string()).default([]).describe('Overall acceptance criteria for the requirement.'),
+      }).strict(),
+      execute: async args => {
+        const updated = host.local.proposeForTicket(ticketId, { summary: args.summary, acceptance: args.acceptance,
+          slices: args.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome, inScope: slice.in_scope,
+            outOfScope: slice.out_of_scope, acceptance: slice.acceptance, dependsOn: slice.depends_on, lane: slice.lane })) })
+        if (!updated) throw new Error('This ticket is not a local requirement')
+        return { issue_id: updated.id, status: updated.alignment?.status, slices: updated.alignment?.slices.length ?? 0 }
+      },
+    })] : []),
     tool({
       name: 'orchestrator_report',
       description: 'Report progress, ready, blocked, failed or dropped, as the work and handoff sections say.',

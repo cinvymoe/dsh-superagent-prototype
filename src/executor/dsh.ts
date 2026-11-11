@@ -108,9 +108,12 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
     .map(rule => `\n- ${rule.name} (${rule.id}): ${rule.instruction}`).join('')
   const precedence = rules ? `\nMatched rules; their procedure and communication instructions take precedence over the default acknowledgement and messaging policy for this ticket:${rules}` : ''
   // The origin trigger is delivered alongside the assignment, so `assignment` omits the trigger text.
-  const assignment = ticket.mandate.strength === 'inferred' && ruleIds
+  const acceptance = ticket.plan
+    ? `\nAlignment: issue ${ticket.plan.issueId}, slice ${ticket.plan.sliceId}.\nAcceptance criteria:${ticket.plan.acceptance?.length ? `\n${ticket.plan.acceptance.map(item => `- ${item}`).join('\n')}` : ' see the alignment record.'}`
+    : ''
+  const assignment = (ticket.mandate.strength === 'inferred' && ruleIds
     ? `Proactively accepted under ${ruleIds.join(', ')}. Scope: ${outcome.scope}.${precedence}${note}`
-    : note.trim()
+    : note.trim()) + acceptance
   return { name, directory: join(executionRoot(settings, stateDir), name), assignment,
     ...(deployment?.chain ? { chain: deployment.chain } : {}),
     ...(deployment ? { repository: deployment.repository, intakeRepository: deployment.intakeRepository } : {}) }
@@ -279,6 +282,9 @@ export class DshExecutor implements Executor {
     const ticket = this.host.store.tickets.get(ticketId)
     const assignment = ticket && latestAssignment(ticket)
     if (!ticket || !liveTicket(ticket) || assignment?.id !== assignmentId || assignment.state !== 'pending') return
+    // A planned slice waits for the tickets its dependencies became; the launch retries until they end.
+    const waiting = ticket.dependsOn?.filter(id => { const dependency = this.host.store.tickets.get(id); return dependency && liveTicket(dependency) })
+    if (waiting?.length) throw new Later()
     this.slots.reserve(ticketId, 'launch')
     try { await this.launch(ticket, assignment); this.transient.delete(`launch:${assignmentId}`) }
     catch (error) {

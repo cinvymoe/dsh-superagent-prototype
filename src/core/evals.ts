@@ -2,11 +2,18 @@
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
 import { liveTicket, threadKey } from './model.ts'
-import type { Decision, DecisionKind, Evaluation, Mandate, MandateBasis, Strength, Thread, Trigger } from './model.ts'
+import type { ActorRef, Decision, DecisionKind, Evaluation, Mandate, MandateBasis, PlanSlice, Strength, Thread, Ticket, Trigger } from './model.ts'
 import type { AssessmentOutcome, Candidate, Policy } from './ports.ts'
 import { said, type Reason } from './reasons.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
 import type { Tickets } from './tickets.ts'
+
+/** A short English ticket name for a plan slice, from its id and title, as the worktree naming rules require. */
+function sliceName(slice: PlanSlice): string {
+  // The first word must be letters only, so an id such as `C1` cannot lead; `slice` stands in for one.
+  const words = slice.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(word => /^[a-z][a-z0-9]*$/.test(word))
+  return [words[0] ?? 'slice', ...words.slice(1, 3)].join('-').slice(0, 32).replace(/-+$/, '')
+}
 
 /** An outcome for the Eval that holds a Trigger; `evalId` names the Eval it was judged for, so a later Eval refuses it. */
 export type Outcome = AssessmentOutcome & { evalId?: string }
@@ -313,6 +320,38 @@ export class Evals extends EnginePart {
     const decision = this.finish(thread, evaluation, { kind: 'accept', reason: reasonOf(outcome.reason), ...audit, mandate, ticketId })
     this.tickets.create(ticketId, decision.id, mandate, evaluation, outcome, at)
     return decision
+  }
+  /**
+   * Create one execution ticket per slice of a confirmed requirement plan. A slice's ticket is keyed by the issue and slice,
+   * and a slice already dispatched reuses its ticket, so a repeated confirmation is idempotent. The trigger ids are the local
+   * issue's human messages, which give the tickets their channels and thread subscription.
+   */
+  acceptPlan(thread: Thread, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[]; at?: string }): Ticket[] {
+    if (!input.triggerIds.length) throw new UserError('planNeedsTriggers')
+    const at = input.at ?? this.now()
+    const policyVersion = this.policy().version
+    const existing = new Map(this.repo.tickets.list().filter(ticket => ticket.plan?.issueId === input.issueId)
+      .map(ticket => [ticket.plan!.sliceId, ticket]))
+    const tickets: Ticket[] = []
+    for (const slice of input.slices) {
+      const found = existing.get(slice.id)
+      if (found) { tickets.push(found); continue }
+      const ticketId = key('ticket', 'plan', input.issueId, slice.id)
+      const evaluation: Evaluation = { id: key('evaluation', 'plan', input.issueId, slice.id), threadKey: thread.key,
+        triggerIds: input.triggerIds, primary: input.triggerIds[0], strength: 'explicit', actor: input.actor,
+        basis: { via: 'addressed', addressed: 'direct', source: input.actor.source }, policyVersion, startedAt: at, deadline: at }
+      const mandate: Mandate = { strength: 'explicit', policyVersion, basis: evaluation.basis, actor: input.actor,
+        scope: slice.outcome || slice.title }
+      const dependsOn = slice.dependsOn.map(dependency => key('ticket', 'plan', input.issueId, dependency))
+      const decision = this.record(thread, evaluation, { kind: 'accept', reason: [{ code: 'explicitRouted' }], mandate, ticketId })
+      this.tickets.create(ticketId, decision.id, mandate, evaluation, { kind: 'accept', title: `${slice.id} · ${slice.title}`,
+        scope: mandate.scope, reason: { code: 'explicitRouted' }, mode: 'work', name: sliceName(slice),
+        plan: { issueId: input.issueId, sliceId: slice.id, acceptance: slice.acceptance },
+        ...(dependsOn.length ? { dependsOn } : {}) }, at)
+      const created = this.repo.tickets.get(ticketId)
+      if (created) tickets.push(created)
+    }
+    return tickets
   }
   /** Record an Eval's Decision; the Thread's own Eval ends with it, while a gate-only one leaves the Thread's Eval going. */
   private finish(thread: Thread, evaluation: Evaluation, outcome: Finished): Decision {

@@ -30,6 +30,7 @@ import { TextCache } from './cache.ts'
 import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
+import { LocalIssues } from './local.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
@@ -70,6 +71,7 @@ export class Runtime extends Service implements SourceHost {
   readonly outbox: Outbox
   readonly engine: Engine
   readonly passes: Passes
+  readonly local: LocalIssues
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
@@ -134,7 +136,7 @@ export class Runtime extends Service implements SourceHost {
         deliver: (id, text) => sessions.prompt(masterId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused() })
       const { assessor, executor } = this
-      const policy = () => settingsPolicy(store.settings(), sources)
+      const policy = () => settingsPolicy(store.settings(), sources, source => sources.policyPart(source))
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
         outbox, replyCopies: ticket => setup.configured() ? pullReplyChannels(ticket, setup.deploymentFor(ticket.execution?.chain)) : [],
         prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
@@ -158,10 +160,11 @@ export class Runtime extends Service implements SourceHost {
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
+      this.local = new LocalIssues({ store, receive: trigger => this.passes.receive(trigger) })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger) }
-      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources, local: this.local,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
@@ -196,6 +199,15 @@ export class Runtime extends Service implements SourceHost {
   }
   checkSetup(): void { this.setup.check() }
   receive(trigger: Trigger): ReceiveResult { return this.passes.receive(trigger) }
+  /** Dispatch the confirmed slices of a local requirement as execution tickets; repeated calls reuse their tickets. */
+  dispatchPlan(issueId: string): Ticket[] {
+    const input = this.local.planInput(issueId)
+    const issue = this.local.get(issueId)
+    if (!input || !issue?.alignment) throw new Error('No confirmed alignment to dispatch')
+    return this.engine.acceptPlan({ source: 'local', id: issueId }, { issueId, triggerIds: input.triggerIds, actor: input.actor,
+      slices: issue.alignment.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome,
+        acceptance: slice.acceptance, dependsOn: slice.dependsOn, lane: slice.lane })) })
+  }
   idle(): Promise<void> { return this.passes.idle() }
   pump(): Promise<void> { return this.passes.pump() }
   sendReplies(): Promise<void> { return this.outbox.sent() }
@@ -223,12 +235,13 @@ export class Runtime extends Service implements SourceHost {
   private httpHost(): HttpHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
-    return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks,
+    return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog() }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(),
+      dispatchPlan: (id: string) => runtime.dispatchPlan(id) }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }

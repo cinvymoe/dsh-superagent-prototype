@@ -6,6 +6,7 @@ import type { PromptVersion } from './app/prompts.ts'
 import type { SettingsVersion } from './app/store.ts'
 import type { SettingsSave } from './policy.ts'
 import type { Retry } from './sources/github.ts'
+import type { LocalIssue } from './sources/local-format.ts'
 
 /** Key of a KV record whose value has type `V`; a plain string represents an untyped key. */
 export type Key<V> = string & { readonly __value?: V }
@@ -36,6 +37,8 @@ export const KV = {
   /** Schema 11 migration: legacy main-Session queues imported into the effect table. */
   queues: { relays: record<{ id: string; text: string }[]>('relay-queue'), unsubscribed: record<string[]>('subscription-results'),
     prompts: record<number | null>('prompt-notification'), settings: record<number | null>('settings-notification') },
+  /** Local web Source: requirements submitted from the management panel. */
+  local: { issue: family<LocalIssue, [id: string]>('local-issue:') },
   /** Per-Source resolved display names mapping a named ID (such as a Feishu chat ID) to its display name. */
   sources: { labels: family<Record<string, string>, [source: string]>('source-labels:') },
   /**

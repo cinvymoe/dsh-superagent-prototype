@@ -337,6 +337,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory root and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
+| `src/app/local.ts` | `LocalIssues`: the local issue records, their comments as human Triggers, and the read-only alignment proposal a person confirms or sends back |
 | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
 | `src/app/resources.ts` | `RESOURCES` and `readResource`: what `orchestrator_read` reads, for each role |
 | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
@@ -368,6 +369,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/github-pull.ts` | The pull request rules: which pull requests a Ticket follows (`claimPull`, `observePull`), the closes it reports to the Engine, `pullReplyChannels`, which selects the pull request channels that receive a copy of a result reply, `pullDescriptionNotices`, which copies a PR description's problem, change, and verification sections to the Ticket's source GitHub conversation, and `pullEndNotices`, the terminal notice of a Ticket that ended merged or closed to its IM Channels, its pull request, and its source GitHub conversation |
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
+| `src/sources/local.ts` | The local panel kind and plugin entry, exported as `./local-watch`: human Triggers, a Channel that needs no transport, and the default local policy |
+| `src/sources/local-format.ts` | The local issue, its slices and alignment proposal, shared by the host and the panel |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
@@ -379,6 +382,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/app.tsx` | The panel: header, search, glossary, tabs and the page of the current route |
 | `src/client/provider.tsx` | What every page reads from its host: copy, calls, navigation, notices, the state poll, and `restart`, which reads the state quickly while dsh-superagent restarts |
 | `src/client/api.ts` | Calls and polls of the management API, typed by `src/app/api.ts`, and the Decision filters of the Eval status |
+| `src/client/discuss.tsx` | The local issue board: submit a requirement, read its discussion, and confirm or send back the Aligner's proposal |
 | `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads, and the route memory with the settings group opened last |
 | `src/client/overview.tsx` | The overview |
 | `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
@@ -398,7 +402,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/locales.ts` | All copy in both languages, and the glossary of [001 Domain model](001-domain.md) |
 | `src/client/client.css`, `css.d.ts` | The panel's stylesheet, loaded as text |
 
-`src/sources/github.ts` and `src/sources/feishu.ts` are also the entries of the two Source plugins, built by `tsdown.config.ts` and exported in `package.json` as `./github-watch` and `./feishu-watch`. The bundle's `cordis.patch.yml` inserts the three plugins, with Feishu disabled.
+`src/sources/github.ts`, `src/sources/feishu.ts` and `src/sources/local.ts` are also the entries of the Source plugins, built by `tsdown.config.ts` and exported in `package.json` as `./github-watch`, `./feishu-watch` and `./local-watch`. The bundle's `cordis.patch.yml` inserts the four plugins, with Feishu disabled.
 
 ## Tests
 
@@ -406,6 +410,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | --- | --- |
 | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
+| `tests/local.spec.ts` | The local issue board: a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
+| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, and dispatching a confirmed plan's slices as tickets |
 | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
 | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |
 | `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, the pull request rules, health |
@@ -530,6 +536,12 @@ Each Executor has six application tools:
 
 A hand-back returns `queued: false` if another Ticket still owns the message, or this Ticket never owned it. For example, a bot message went to Eval independently.
 
+An align Ticket (`mode: 'align'`) also gets `orchestrator_align`, which publishes the requirement's summary, execution slices and acceptance criteria to the local issue it came from. An aligner never runs feature-exec: its plan is the source of truth. The slices stay a proposal: confirming them in the panel calls `Engine.acceptPlan`, which creates one execution Ticket per slice and reuses the Tickets a repeated confirmation would otherwise duplicate. A Ticket created from a confirmed slice gets the `feature_exec_*` execution tools (`feature_exec_start`, `feature_exec_plan`, `feature_exec_dispatch`, the stage gates and `feature_exec_close`) and starts a `flow: 'execute'` run, which begins at execution intake and skips the feature-exec discuss and decomposition stages.
+
+### Plan slices
+
+A Ticket created from a confirmed slice carries `plan: { issueId, sliceId, acceptance }` and `mode: 'work'`; its assignment carries the acceptance criteria as a list so the worker does not have to reconstruct them from the issue thread; its `dependsOn` lists the Tickets its slice's dependencies became. `DshExecutor.launchQueued` throws `Later` while any dependency is still live, so a dependent slice waits for a worker slot only once its predecessors ended. Slice Tickets are keyed by issue and slice, which makes confirmation idempotent.
+
 The worker preset is defined in `cordis.patch.yml` and selected through `WORKER_PRESET`. `WORK_TOOLS` in `src/app/sessions.ts` retains available file, search, shell, job, web, skill, todo and subagent tools. Workers do not receive tools for asking or presenting to a person, changing the profile, scheduling work outside worker slots, starting or messaging other Sessions, or editing external documents. Tool calls are refused after the Ticket ends.
 
 ### Result shapes and assessment context
@@ -598,7 +610,7 @@ Workers receive assignments and Inputs inline. The first message includes the ti
 
 There is no tool for dismissing an unavailable Decision, rerunning setup, refreshing Source display names, or sending an Executor-owned human follow-up to Eval. The last action is deliberately refused by `orchestrator_trigger_requeue`. Other panel actions have equivalent tools.
 
-Most built-in instructions live in `prompts/*.md`, with one sentence per line joined by `promptFile`. Source skills live in `skills/dsh-superagent-*/SKILL.md`. Tool descriptions and fixed notices such as restart recovery notes remain in code. Assessment instructions live only in `prompts/admission.md`.
+Most built-in instructions live in `prompts/*.md`, with one sentence per line joined by `promptFile`. `prompts/align.md` is the core of an align Ticket's dedicated prompt; `Prompts.composeAlign` composes the shared rules and guides without the worker's implementation mandate, so an aligner plans instead of implementing. `prompts/execute.md` is appended to a slice worker's prompt; `Prompts.composeExecute` keeps the worker rules and adds the execution-only handoff. Neither is a built-in part a team overrides. Source skills live in `skills/dsh-superagent-*/SKILL.md`. Tool descriptions and fixed notices such as restart recovery notes remain in code. Assessment instructions live only in `prompts/admission.md`.
 
 `tests/model-surface.spec.ts` checks these surfaces for drift. [004 Prompts](004-prompts.md) explains the team's editable parts.
 
