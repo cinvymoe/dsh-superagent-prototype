@@ -40,6 +40,33 @@ it('lists Tickets under Execution by who they wait on, with the Executor state a
   expect(server.settings).toMatchObject({ paused: true, executor: { maxWorkers: 4 } })
 })
 
+it('offers to clear a Ticket filter other than Open in either language, and returns the list to Open from it', async () => {
+  await mount()
+  await click(zh['tab.execution'])
+  const clear = () => all('.dt-filters .dt-btn')
+  expect(clear()).toEqual([])
+  // Every other filter carries one small outline button after the Pills.
+  for (const filter of ['person', 'working', 'idle', 'ended'] as const) {
+    await click(zh[`ticketFilter.${filter}`])
+    expect(server.requests.some(request => request.path === `tickets?state=${filter}&limit=20`)).toBe(true)
+    expect(clear()).toHaveLength(1)
+    expect(clear()[0]!.className).toBe('dt-btn dt-btn-outline dt-btn-sm')
+    expect(clear()[0]!.textContent).toBe(zh.clearFilters)
+    expect(clear()[0]!.querySelector('.dt-btn-icon svg')).not.toBeNull()
+    expect(clear()[0]!.previousElementSibling).toBe(all('.dt-filters .dt-pill').at(-1))
+  }
+  // It returns to Open exactly as the Open Pill does: a fresh request, the same route, no new history entry.
+  const beforeReset = server.requests.length
+  await click(clear()[0]!)
+  expect(server.requests.slice(beforeReset).some(request => request.path === 'tickets?state=open&limit=20')).toBe(true)
+  expect(find(zh['ticketFilter.open'], '.dt-pill').getAttribute('aria-pressed')).toBe('true')
+  expect(clear()).toEqual([])
+  expect(JSON.parse(sessionStorage.getItem('dsh-superagent/route')!)).toMatchObject({ route: { page: 'execution' }, stack: [] })
+  at({ page: 'execution', query: { filter: 'person' } })
+  await remount(en)
+  expect(find(en.clearFilters, '.dt-filters .dt-btn').textContent).toBe(en.clearFilters)
+})
+
 it('stops an open Ticket from its page after confirmation', async () => {
   await mount()
   await click('修复回归')
