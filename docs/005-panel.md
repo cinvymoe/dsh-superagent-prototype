@@ -17,7 +17,7 @@ The tabs follow the workflow: **Overview**, **Discuss**, **Source**, **Trigger**
 | Tab | Shows |
 | --- | --- |
 | Overview | Tickets needing action, system problems, activity counts for the last 24 hours, and Executor load. Each block links to its detailed page |
-| Discuss | Local requirements: submit one in the panel, follow its discussion, review the alignment proposal, and confirm or send it back. Confirming dispatches one Ticket per slice |
+| Discuss | Local projects and requirements: create a project with its own execution repository, submit requirements into it, follow the discussion, review the alignment proposal, and confirm or send it back. Confirming dispatches one Ticket per slice |
 | Source | Source state, setup problems and non-zero counts. Filtered Triggers and dropped messages cover the same 24-hour window as Overview |
 | Trigger | Threads filtered by Subscribed, Evaluating, New Triggers in 24 h, or All Threads. Each Thread shows its Triggers newest first, Decisions and Subscriptions |
 | Eval | Decisions with their reason and matched rules |
@@ -34,7 +34,7 @@ Ticket details show the originating Trigger, Decision and reason, scope and Poli
 
 ## Settings groups
 
-- **Sources:** one card per Source with its switch, fields and verified account facts. The local source backs the Discuss board; its issues and replies stay in this installation. GitHub also offers receive-all switches for new Issues, pull requests, comments and default-branch CI. Polling and read limits are under Advanced.
+- **Sources:** one card per Source with its switch, fields and verified account facts. The local source backs the Discuss board; its projects, issues and replies stay in this installation, and each project's repository is the execution target for its requirements. GitHub also offers receive-all switches for new Issues, pull requests, comments and default-branch CI. Polling and read limits are under Advanced.
 - **Eval:** the Policy version and rules, followed by **On each Source** and the Eval settings. Each Source tab contains its allowed list, membership sync, admission table and bot list. Sync runs at startup and on **Sync now**. The admission table distinguishes receiving scope, sender membership and whether the message addresses the agent. Eval settings select the accept mode, timeout and assessment model.
 - **Execution:** worker model, concurrency, directory root, prepare command and blocked commands. Clicking an available variable inserts it into the prepare command.
 - **Prompts:** **Edit** changes team sections, built-in parts and skills. **Full prompt** shows the assembled text and compares it with saved text or defaults. **History** lists versions. Edited built-in parts are marked changed and can be reset; templates list their required placeholders.

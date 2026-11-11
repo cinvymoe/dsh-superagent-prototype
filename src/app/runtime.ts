@@ -129,7 +129,7 @@ export class Runtime extends Service implements SourceHost {
         sourceHost: this, setup, requestPass: () => { this.passes.request() } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
         lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment,
-        workerEnvironment: () => setup.workerEnvironment, deploymentFor: chain => setup.deploymentFor(chain), sourceLink: link,
+        workerEnvironment: () => setup.workerEnvironment, deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, deploymentFor: chain => setup.deploymentFor(chain), effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
@@ -191,10 +191,17 @@ export class Runtime extends Service implements SourceHost {
       ...(resolved.chains ? { chains: Object.fromEntries(Object.entries(resolved.chains).map(([id, chain]) => [id, { repository: chain.repository, intakeRepository: chain.intakeRepository }])) } : {}) } : {}
     return channel => this.sources.link(channel, links)
   }
+  /** The deployment a ticket executes under: its local project's repository, or its chain's configured repository. */
+  ticketDeployment(ticket: Ticket): Deployment {
+    const base = this.setup.deploymentFor(ticket.execution?.chain)
+    const trigger = sourceTrigger(this, ticket)
+    const project = typeof trigger?.meta.project === 'string' ? this.local.project(trigger.meta.project) : undefined
+    return project ? { ...base, repository: project.repository, intakeRepository: project.repository } : base
+  }
   ticketEnvironment(ticket: Ticket): Variable[] {
     const trigger = sourceTrigger(this, ticket)
-    const { setup, sources } = this
-    const deployment = setup.deploymentFor(ticket.execution?.chain)
+    const { sources } = this
+    const deployment = this.ticketDeployment(ticket)
     return ticketEnvironment({ deployment, sources, settings: this.store.settings(), ticket, ...trigger ? { trigger } : {} })
   }
   checkSetup(): void { this.setup.check() }

@@ -6,7 +6,7 @@ import type { SourceKind } from './kind.ts'
 import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalIssue } from './local-format.ts'
 
 export { LOCAL_ACTOR, LOCAL_SOURCE } from './local-format.ts'
-export type { LocalAlignment, LocalIssue, LocalSlice } from './local-format.ts'
+export type { LocalAlignment, LocalIssue, LocalProject, LocalSlice } from './local-format.ts'
 
 /** Thread ID and key used by every message about one local issue. */
 export function localThreadId(issueId: string): string { return issueId }
@@ -24,7 +24,7 @@ export function localTrigger(input: { issue: LocalIssue; text: string; at: strin
     at: input.at,
     text: input.text,
     channel: { source: LOCAL_SOURCE, thread: localThreadKey(input.issue.id), address: { issue: input.issue.id } },
-    meta: {},
+    meta: input.issue.project ? { project: input.issue.project } : {},
   }
 }
 

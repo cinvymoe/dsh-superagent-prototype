@@ -46,7 +46,7 @@ const TICKET = {
 export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketStage = { stage: 'working' }): TicketRow =>
   ({ ...TICKET, ...fields, ...stage })
 export const localIssue = (title: string, body = ''): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
-  createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+  project: 'p-fixture', createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
 const localThread = (issue: LocalIssue): ThreadPageView => ({ key: `local:${issue.id}`, source: 'local', title: issue.title,
   stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
   evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
@@ -98,6 +98,7 @@ export interface PanelServer {
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
   localIssues: LocalIssue[]
+  localProjects: { id: string; name: string; repository: string; createdAt: string; updatedAt: string }[]
   threads: ThreadRow[]
   threadPages: (key: string, query: { before?: string; around?: string }) => ThreadPageView | undefined
   person: TicketRow[]; search: Pick<ApiResponse<'GET search'>, 'items' | 'threads'>; history: HistoryView
@@ -265,6 +266,7 @@ function initial(): PanelServer {
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
     tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
+    localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
       { stage: 'person', action: 'answer' }),
@@ -335,6 +337,12 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET tickets': { query: ['state', 'offset', 'limit'], answer: ({ query }) => page(server.tickets[query.state === 'ended' ? 'ended'
     : 'open']) },
   'GET tickets/:id': { answer: ({ params }) => server.ticketDetails[params.id] ?? refuse(404, 'Ticket not found') },
+  'GET local/projects': { answer: () => ({ projects: server.localProjects }) },
+  'POST local/projects': { body: true, answer: ({ body }) => {
+    const project = { id: 'p-fixture', name: body.name, repository: body.repository, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
+    server.localProjects = [project, ...server.localProjects]
+    return { project }
+  } },
   'GET local/issues': { answer: () => ({ issues: server.localIssues }) },
   'POST local/issues': { body: true, answer: ({ body }) => {
     const issue = localIssue(body.title, body.body)
@@ -343,7 +351,8 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   } },
   'GET local/issues/:id': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
-    return issue ? { issue, thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue), replies: [] }
+    return issue ? { issue, project: server.localProjects.find(project => project.id === issue.project) ?? null,
+      thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue), replies: [] }
       : refuse(404, 'Local issue not found')
   } },
   'POST local/issues/:id/comments': { body: true, answer: ({ params, body }) => {

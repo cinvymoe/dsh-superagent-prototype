@@ -2,7 +2,7 @@
 import { key, UserError, type ActorRef, type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalAlignment, type LocalIssue, type LocalSlice } from '../sources/local-format.ts'
+import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalAlignment, type LocalIssue, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 
 export interface LocalIssuesHost {
@@ -11,8 +11,11 @@ export interface LocalIssuesHost {
   now?(): string
 }
 
-export interface LocalIssueInput { title: string; body?: string; author?: string }
+export interface LocalIssueInput { title: string; body?: string; author?: string; project: string }
+export interface LocalProjectInput { name: string; repository: string }
 export interface LocalAlignmentInput { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }
+
+const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
 /** Owns the local issue records; every comment still enters the Engine through a normal human Trigger. */
 export class LocalIssues {
@@ -20,12 +23,36 @@ export class LocalIssues {
 
   private clock(): string { return this.host.now?.() ?? new Date().toISOString() }
 
-  /** All local issues, newest first. */
-  list(): LocalIssue[] {
+  /** All local issues, newest first, optionally narrowed to one project. */
+  list(project?: string): LocalIssue[] {
     return this.host.store.keys(KV.local.issue.prefix).flatMap(entry => {
       const issue = this.host.store.get(KV.local.issue(entry.slice(KV.local.issue.prefix.length)))
-      return issue ? [issue] : []
+      return issue && (!project || issue.project === project) ? [issue] : []
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+
+  /** All projects, newest first. */
+  projects(): LocalProject[] {
+    return this.host.store.keys(KV.local.project.prefix).flatMap(entry => {
+      const project = this.host.store.get(KV.local.project(entry.slice(KV.local.project.prefix.length)))
+      return project ? [project] : []
+    }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  }
+
+  project(id: string): LocalProject | undefined { return this.host.store.get(KV.local.project(id)) }
+
+  /** Create a project; its repository is the only execution target for requirements in it. */
+  createProject(input: LocalProjectInput): LocalProject {
+    const name = input.name.trim()
+    const repository = input.repository.trim()
+    if (!REPOSITORY.test(repository)) throw new UserError('projectRepository')
+    if (this.projects().some(project => project.name.toLowerCase() === name.toLowerCase())) throw new UserError('projectTaken', { name })
+    const at = this.clock()
+    const project: LocalProject = {
+      id: `p-${key('local-project', at, name).slice(0, 8)}`, name, repository, createdAt: at, updatedAt: at,
+    }
+    this.host.store.set(KV.local.project(project.id), project)
+    return project
   }
 
   get(id: string): LocalIssue | undefined { return this.host.store.get(KV.local.issue(id)) }
@@ -34,11 +61,12 @@ export class LocalIssues {
 
   /** Create the issue and submit its original requirement as the first Trigger of its Thread. */
   create(input: LocalIssueInput): LocalIssue {
+    if (!this.project(input.project)) throw new UserError('unknownProject')
     const at = this.clock()
     const id = `q-${key('local-issue', at, input.title, String(this.list().length)).slice(0, 8)}`
     const issue: LocalIssue = {
       id, title: input.title.trim(), body: (input.body ?? '').trim(), author: input.author?.trim() || LOCAL_ACTOR,
-      createdAt: at, updatedAt: at, state: 'open',
+      project: input.project, createdAt: at, updatedAt: at, state: 'open',
     }
     this.host.store.set(KV.local.issue(id), issue)
     this.host.receive(localTrigger({ issue, text: issue.body ? `${issue.title}\n\n${issue.body}` : issue.title, at,

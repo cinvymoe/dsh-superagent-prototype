@@ -8,7 +8,7 @@ import type { SettingsView } from './views/settings.ts'
 import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
-import type { LocalIssue, LocalSlice } from '../sources/local-format.ts'
+import type { LocalIssue, LocalProject, LocalSlice } from '../sources/local-format.ts'
 import type { Receipt } from './store.ts'
 
 export const TICKET_FILTERS = ['open', 'person', 'working', 'idle', 'ended'] as const
@@ -34,9 +34,11 @@ export interface Api {
   'POST decisions/:id/dismiss': { response: { dismissed: true } }
   'GET tickets': { query?: Paged & { state?: TicketFilter }; response: TicketListView }
   'GET tickets/:id': { response: TicketPageView }
-  'GET local/issues': { response: { issues: LocalIssue[] } }
-  'POST local/issues': { body: { title: string; body?: string }; response: { issue: LocalIssue } }
-  'GET local/issues/:id': { response: { issue: LocalIssue; thread: ThreadDetailView; replies: Receipt[] } }
+  'GET local/projects': { response: { projects: LocalProject[] } }
+  'POST local/projects': { body: { name: string; repository: string }; response: { project: LocalProject } }
+  'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssue[] } }
+  'POST local/issues': { body: { title: string; body?: string; project: string }; response: { issue: LocalIssue } }
+  'GET local/issues/:id': { response: { issue: LocalIssue; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }
   'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssue } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssue } }
   'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string }; response: { issue: LocalIssue; tickets: { id: string; title: string }[] } }

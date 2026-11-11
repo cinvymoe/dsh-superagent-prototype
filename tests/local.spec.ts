@@ -16,12 +16,13 @@ describe('the local issue board', () => {
     const store = new Store(join(directory, 'orchestrator.sqlite'))
     const triggers: Trigger[] = []
     const issues = new LocalIssues({ store, receive: trigger => { triggers.push(trigger); return { kind: 'stored' } as never } })
-    return { issues, triggers }
+    const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
+    return { issues, triggers, project }
   }
 
   it('creates an issue and submits its text as a human Trigger on a local Thread', () => {
-    const { issues, triggers } = setup()
-    const issue = issues.create({ title: 'Local requirement', body: 'The body' })
+    const { issues, triggers, project } = setup()
+    const issue = issues.create({ title: 'Local requirement', body: 'The body', project: project.id })
     expect(issues.list().map(entry => entry.id)).toEqual([issue.id])
     expect(issue.id).toMatch(/^q-[0-9a-f]{8}$/)
     expect(triggers).toHaveLength(1)
@@ -34,8 +35,8 @@ describe('the local issue board', () => {
   })
 
   it('adds comments as further Triggers without changing the requirement', () => {
-    const { issues, triggers } = setup()
-    const issue = issues.create({ title: 'Local requirement' })
+    const { issues, triggers, project } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
     issues.comment(issue.id, 'One more detail')
     expect(triggers).toHaveLength(2)
     expect(triggers[1]).toMatchObject({ source: 'local', human: true, text: 'One more detail' })
@@ -43,8 +44,8 @@ describe('the local issue board', () => {
   })
 
   it('records a proposal and the person\'s review, and refuses a review without one', () => {
-    const { issues } = setup()
-    const issue = issues.create({ title: 'Local requirement' })
+    const { issues, project } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
     expect(issues.decide(issue.id, 'confirm')).toBeUndefined()
     const proposed = issues.propose(issue.id, { summary: 'Two slices', acceptance: ['typecheck'],
       slices: [{ id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' }] })
@@ -56,9 +57,21 @@ describe('the local issue board', () => {
     expect(rejected?.alignment).toMatchObject({ status: 'rejected', reason: 'Needs a narrower scope' })
   })
 
+  it('binds requirements to projects and rejects unknown or malformed projects', () => {
+    const { issues, project } = setup()
+    expect(issues.projects().map(entry => entry.id)).toEqual([project.id])
+    expect(issues.list(project.id)).toHaveLength(0)
+    const issue = issues.create({ title: 'Project scoped', project: project.id })
+    expect(issues.list(project.id).map(entry => entry.id)).toEqual([issue.id])
+    expect(issues.list('p-other')).toEqual([])
+    expect(() => issues.create({ title: 'Unknown', project: 'p-other' })).toThrow('Unknown local project')
+    expect(() => issues.createProject({ name: 'Bad', repository: 'not-a-repository' })).toThrow('owner/name')
+    expect(() => issues.createProject({ name: 'Demo', repository: 'acme/other' })).toThrow('already exists')
+  })
+
   it('closes an issue without deleting its record', () => {
-    const { issues } = setup()
-    const issue = issues.create({ title: 'Local requirement' })
+    const { issues, project } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
     expect(issues.close(issue.id)?.state).toBe('closed')
     expect(issues.get(issue.id)?.state).toBe('closed')
   })

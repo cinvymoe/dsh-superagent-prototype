@@ -4,6 +4,15 @@
 export const LOCAL_SOURCE = 'local'
 export const LOCAL_ACTOR = 'local'
 
+/** A local project names one execution repository; every requirement in the project uses the same flow. */
+export interface LocalProject {
+  id: string
+  name: string
+  repository: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** One task slice produced by the alignment stage of a local requirement. */
 export interface LocalSlice {
   id: string
@@ -33,6 +42,8 @@ export interface LocalIssue {
   title: string
   body: string
   author: string
+  /** Project that binds this requirement to one execution repository. */
+  project?: string
   createdAt: string
   updatedAt: string
   state: 'open' | 'closed'

@@ -80,6 +80,8 @@ export interface ExecutorHost {
   workerEnvironment(): Record<string, string>
   /** The deployment of one configured chain, or the default deployment when the chain is absent. */
   deploymentFor?(chain?: string): Deployment
+  /** The deployment for one ticket, including a local project's repository override. */
+  deploymentForTicket?(ticket: Ticket): Deployment
   sourceLink(trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }>
   /** Stored Trigger of the message `trigger` replies to, when it replies to one. */
   repliedTo(trigger: Trigger): Trigger | undefined
@@ -247,7 +249,8 @@ export class DshExecutor implements Executor {
   prepare(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Ticket {
     const source = sourceTrigger(this.host, ticket)
     const chain = ticket.execution?.chain ?? (typeof source?.meta.chain === 'string' ? source.meta.chain : undefined)
-    return { ...ticket, execution: ticketExecution(ticket, outcome, this.host.store.settings(), this.host.machine.stateDir, this.host.deploymentFor?.(chain)) }
+    const deployment = this.host.deploymentForTicket?.(ticket) ?? this.host.deploymentFor?.(chain)
+    return { ...ticket, execution: ticketExecution(ticket, outcome, this.host.store.settings(), this.host.machine.stateDir, deployment) }
   }
   /**
    * Runs the configured `executor.prepare` command for a new ticket workspace in its parent directory with the ticket's

@@ -200,9 +200,18 @@ function routes(runtime: HttpHost): Routes {
       return ticketList(views(runtime), state, offset, limit)
     },
     'GET tickets/:id': ({ params }) => ticketPage(runtime, params.id),
-    'GET local/issues': () => ({ issues: runtime.local.list() }),
+    'GET local/projects': () => ({ projects: runtime.local.projects() }),
+    'POST local/projects': async ({ body }) => {
+      const input = z.object({ name: z.string().trim().min(1).max(80), repository: z.string().trim().min(3).max(200) }).parse(await body())
+      return { project: runtime.local.createProject(input) }
+    },
+    'GET local/issues': ({ query }) => {
+      const project = typeof query?.project === 'string' && query.project ? query.project : undefined
+      return { issues: runtime.local.list(project) }
+    },
     'POST local/issues': async ({ body }) => {
-      const input = z.object({ title: z.string().trim().min(1).max(200), body: z.string().max(20_000).optional() }).parse(await body())
+      const input = z.object({ title: z.string().trim().min(1).max(200), body: z.string().max(20_000).optional(),
+        project: z.string().min(1) }).parse(await body())
       return { issue: runtime.local.create(input) }
     },
     'GET local/issues/:id': ({ params }) => {
@@ -210,7 +219,8 @@ function routes(runtime: HttpHost): Routes {
       if (!issue) throw new RouteError(404, 'Local issue not found')
       const thread = threadDetail(views(runtime), runtime.local.thread(issue.id), undefined, 200)
       if (!thread) throw new RouteError(404, 'Local issue thread not found')
-      return { issue, thread, replies: runtime.store.receipts.thread('local', runtime.local.thread(issue.id)) }
+      return { issue, project: issue.project ? runtime.local.project(issue.project) ?? null : null,
+        thread, replies: runtime.store.receipts.thread('local', runtime.local.thread(issue.id)) }
     },
     'POST local/issues/:id/comments': async ({ params, body }) => {
       const input = z.object({ text: z.string().trim().min(1).max(20_000) }).parse(await body())

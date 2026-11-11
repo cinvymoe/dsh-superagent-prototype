@@ -23,48 +23,104 @@ function statusTag(t: T, issue: LocalIssue) {
 /** New-requirement composer; each submission becomes a Thread and enters the Engine as a human Trigger. */
 export function DiscussBoard() {
   const { t, call, notify, navigate } = usePanel()
-  const { data, error, reload } = usePoll(() => call('GET local/issues'), [])
+  const { data, error, reload } = usePoll(async () => {
+    const [issues, projects] = await Promise.all([call('GET local/issues', {}), call('GET local/projects', {})])
+    return { issues: issues.issues, projects: projects.projects }
+  }, [])
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [filter, setFilter] = useState('')
+  const [projectName, setProjectName] = useState('')
+  const [repository, setRepository] = useState('')
+  const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
+  const projects = data?.projects ?? []
+  const active = projects.find(project => project.id === projectId) ?? projects[0]
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const clean = title.trim()
-    if (!clean || busy) return
+    if (!clean || busy || !active) return
     setBusy(true)
     try {
-      const { issue } = await call('POST local/issues', { body: { title: clean, ...(body.trim() ? { body: body.trim() } : {}) } })
+      const { issue } = await call('POST local/issues', { body: { title: clean, project: active.id,
+        ...(body.trim() ? { body: body.trim() } : {}) } })
       setTitle('')
       setBody('')
       await reload()
       navigate({ page: 'discuss', id: issue.id })
     } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
   }
+  const addProject = async (event: FormEvent) => {
+    event.preventDefault()
+    if (busy || !projectName.trim() || !repository.trim()) return
+    setBusy(true)
+    try {
+      const { project } = await call('POST local/projects', { body: { name: projectName.trim(), repository: repository.trim() } })
+      setProjectName('')
+      setRepository('')
+      setCreating(false)
+      setProjectId(project.id)
+      await reload()
+    } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
+  }
+  const shown = (data?.issues ?? []).filter(issue => !filter || issue.project === filter)
+  const projectOf = (issue: LocalIssue) => projects.find(project => project.id === issue.project)
   return <>
     <PageHead title={t('discuss.title')}><span className="dt-hint">{t('discuss.subtitle')}</span></PageHead>
     <div className="dt-column">
+      <Section title={t('discuss.projects')} count={projects.length}>
+        {projects.length === 0 && <p className="dt-hint">{t('discuss.noProjects')}</p>}
+        {projects.length > 0 && <ul className="dt-list">{projects.map(project => <li key={project.id} className="dt-row">
+          <Icon name="hash" size={14} /><div className="dt-row-main">
+            <div className="dt-row-title dt-line">{project.name}</div>
+            <div className="dt-row-meta"><span className="dt-mono">{project.repository}</span>
+              {!filter && <button type="button" className="dt-textlink" onClick={() => setFilter(project.id)}>{t('discuss.useProject')}</button>}
+              {filter === project.id && <button type="button" className="dt-textlink" onClick={() => setFilter('')}>{t('discuss.allProjects')}</button>}
+            </div>
+          </div></li>)}</ul>}
+        {creating
+          ? <form className="dt-card dt-form" onSubmit={event => { void addProject(event) }}>
+            <div className="dt-card-head"><span className="dt-card-title">{t('discuss.newProject')}</span></div>
+            <input className="dt-text-input" value={projectName} maxLength={80} placeholder={t('discuss.projectName')}
+              onChange={event => setProjectName(event.target.value)} />
+            <input className="dt-text-input" value={repository} maxLength={200} placeholder={t('discuss.projectRepository')}
+              onChange={event => setRepository(event.target.value)} />
+            <div className="dt-actions"><Button type="submit" variant="primary" size="sm" disabled={busy || !projectName.trim() || !repository.trim()}>
+              {t('discuss.createProject')}</Button><Button type="button" variant="ghost" size="sm" onClick={() => setCreating(false)}>
+              {t('cancel')}</Button></div>
+          </form>
+          : <div className="dt-actions"><Button variant="outline" size="sm" icon={<Icon name="plus" size={14} />}
+            onClick={() => setCreating(true)}>{t('discuss.newProject')}</Button></div>}
+      </Section>
       <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.new')}</span></div>
+        {projects.length === 0
+          ? <p className="dt-hint">{t('discuss.projectRequired')}</p>
+          : <select className="dt-select" value={active?.id ?? ''} aria-label={t('discuss.project')}
+            onChange={event => setProjectId(event.target.value)}>
+            {projects.map(project => <option key={project.id} value={project.id}>{project.name} · {project.repository}</option>)}
+          </select>}
         <input className="dt-text-input" value={title} maxLength={200} placeholder={t('discuss.titlePlaceholder')}
           aria-label={t('discuss.titlePlaceholder')} onChange={event => setTitle(event.target.value)} />
         <textarea className="dt-textarea" value={body} maxLength={20000} rows={5}
           placeholder={t('discuss.bodyPlaceholder')} aria-label={t('discuss.bodyPlaceholder')}
           onChange={event => setBody(event.target.value)} />
         <div className="dt-actions">
-          <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />} disabled={busy || !title.trim()}>
+          <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />} disabled={busy || !title.trim() || !active}>
             {t('discuss.submit')}</Button>
         </div>
       </form>
       {error && <p className="dt-error" role="alert">{error.message}</p>}
-      <Section title={t('discuss.issues')} count={data?.issues.length ?? 0}>
-        {data && data.issues.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
-        <ul className="dt-list dt-cards">{data?.issues.map(issue => <li key={issue.id} className="dt-row">
+      <Section title={filter ? `${t('discuss.issues')} · ${projects.find(project => project.id === filter)?.name ?? ''}` : t('discuss.issues')} count={shown.length}>
+        {data && shown.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
+        <ul className="dt-list dt-cards">{shown.map(issue => <li key={issue.id} className="dt-row">
           <Icon name="message" size={14} />
           <div className="dt-row-main">
             <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
               onClick={() => navigate({ page: 'discuss', id: issue.id })}>{issue.title}</button></div>
-            <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}<When at={issue.createdAt} />
-              <span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span></div>
+            <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}{projectOf(issue) && <Tag tone="neutral">{projectOf(issue)!.name}</Tag>}
+              <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span></div>
           </div>
         </li>)}</ul>
       </Section>
@@ -115,7 +171,7 @@ export function DiscussIssue({ id }: { id: string }) {
       <section className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.requirement')}</span></div>
         <div className="dt-row-meta"><span>{t('discuss.author')}：{issue.author}</span><When at={issue.createdAt} />
-          <span className="dt-mono">{issue.id}</span></div>
+          <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {data.project.repository}</span>}</div>
         {issue.body && <MarkdownLite text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
       </section>

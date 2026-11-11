@@ -317,8 +317,11 @@ export class Evals extends EnginePart {
     const mandate: Mandate = { strength, policyVersion, basis, actor, scope: outcome.scope }
     const ticketId = key('ticket', evaluation.id)
     const audit = outcome.audit ? { audit: outcome.audit } : {}
+    // A local requirement always goes through its alignment stage first; the panel's confirmation dispatches its slices.
+    const accepted: Extract<AssessmentOutcome, { kind: 'accept' }> = evaluation.actor.source === 'local'
+      ? { ...outcome, mode: 'align' } : outcome
     const decision = this.finish(thread, evaluation, { kind: 'accept', reason: reasonOf(outcome.reason), ...audit, mandate, ticketId })
-    this.tickets.create(ticketId, decision.id, mandate, evaluation, outcome, at)
+    this.tickets.create(ticketId, decision.id, mandate, evaluation, accepted, at)
     return decision
   }
   /**

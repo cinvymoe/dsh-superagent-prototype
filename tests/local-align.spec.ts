@@ -6,7 +6,8 @@ import { startRuntime, type Host } from './fixtures/host.ts'
 const firstTrigger = (h: Host, issueId: string) => h.runtime.store.read.threadTriggers(`local:${issueId}`, 1)[0]!.id
 
 let h: Host
-beforeEach(async () => { h = await startRuntime() })
+let project: { id: string }
+beforeEach(async () => { h = await startRuntime(); project = h.runtime.local.createProject({ name: 'Demo', repository: 'deepseek-ai/dsh-superagent-prototype' }) })
 afterEach(async () => { await h.stop() })
 
 const slices = [
@@ -15,10 +16,10 @@ const slices = [
 ]
 
 it('accepts a local requirement for alignment and gives its worker the align tool instead of execution', async () => {
-  const issue = h.runtime.local.create({ title: 'Add a local board', body: 'Requirements arrive in the panel.' })
+  const issue = h.runtime.local.create({ title: 'Add a local board', body: 'Requirements arrive in the panel.', project: project.id })
   await h.runtime.idle()
   const result = await h.route({ kind: 'accept', trigger_id: firstTrigger(h, issue.id), title: 'Align the local board',
-    worktree_name: 'align-local-board', acknowledgement: '收到，先做需求对齐。', mode: 'align' }) as { ticket: { ticket_id: string } }
+    worktree_name: 'align-local-board', acknowledgement: '收到，先做需求对齐。' }) as { ticket: { ticket_id: string } }
   await h.runtime.idle()
   const ticket = h.runtime.store.tickets.get(result.ticket.ticket_id)!
   expect(ticket.mode).toBe('align')
@@ -32,7 +33,7 @@ it('accepts a local requirement for alignment and gives its worker the align too
 })
 
 it('dispatches the confirmed slices as tickets, one per slice, and only after the person confirms', async () => {
-  const issue = h.runtime.local.create({ title: 'Add a local board' })
+  const issue = h.runtime.local.create({ title: 'Add a local board', project: project.id })
   await h.runtime.idle()
   const accepted = await h.route({ kind: 'accept', trigger_id: firstTrigger(h, issue.id), title: 'Align the local board',
     worktree_name: 'align-local-board', acknowledgement: '收到，先做需求对齐。', mode: 'align' }) as { ticket: { ticket_id: string } }
@@ -50,6 +51,9 @@ it('dispatches the confirmed slices as tickets, one per slice, and only after th
   expect(tickets.map(ticket => ticket.plan!.sliceId).sort()).toEqual(['C1', 'C2'])
   expect(tickets.find(ticket => ticket.plan!.sliceId === 'C1')!.plan!.acceptance).toEqual(['typecheck passes'])
   expect(tickets.find(ticket => ticket.plan!.sliceId === 'C1')!.execution?.assignment).toContain('Acceptance criteria:\n- typecheck passes')
+  expect(tickets.find(ticket => ticket.plan!.sliceId === 'C1')!.execution?.repository).toBe('deepseek-ai/dsh-superagent-prototype')
+  const environment = Object.fromEntries(h.runtime.ticketEnvironment(tickets[0]!).map(variable => [variable.key, variable.value]))
+  expect(environment.DSH_SUPERAGENT_GITHUB_REPOSITORY).toBe('deepseek-ai/dsh-superagent-prototype')
   expect(tickets.find(ticket => ticket.plan!.sliceId === 'C2')!.dependsOn)
     .toEqual([tickets.find(ticket => ticket.plan!.sliceId === 'C1')!.id])
   // The dependent slice waits for its dependency to end before its worker launches.
@@ -61,4 +65,18 @@ it('dispatches the confirmed slices as tickets, one per slice, and only after th
   const again = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
   expect(again.status).toBe(200)
   expect(h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)).toHaveLength(2)
+})
+
+it('creates projects over HTTP and keeps requirements scoped to them', async () => {
+  const created = await h.api('POST', 'local/projects', { name: 'Other', repository: 'acme/other' })
+  expect(created.status).toBe(200)
+  const project = created.body.project as { id: string }
+  const submitted = await h.api('POST', 'local/issues', { title: 'Project requirement', project: project.id })
+  expect(submitted.status).toBe(200)
+  const issue = submitted.body.issue as { id: string; project: string }
+  expect(issue.project).toBe(project.id)
+  const detail = await h.api('GET', `local/issues/${issue.id}`)
+  expect(detail.body.project).toMatchObject({ id: project.id, repository: 'acme/other' })
+  const missing = await h.api('POST', 'local/issues', { title: 'No project' })
+  expect(missing.status).toBe(400)
 })
