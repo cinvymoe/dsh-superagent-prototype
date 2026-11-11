@@ -22,6 +22,16 @@
 - 读法：Source → Engine → Dispatcher 决策 → Engine 派工 → Worker → Engine 回报/转提问 → Dispatcher 回复 → Source；已订阅 Thread 的人消息由 Engine 绕过 Router 直达 Worker。
 - 画布：`doc-wide` 1280×720；图例：实线调用/派工，coral 决策动作，虚线异步回传/直达。
 
+## 图 0c：当前架构与角色（2026-11-11）
+
+[![当前架构与角色](./current-architecture.png)](./current-architecture.html)
+
+- 单文件 HTML：[`current-architecture.html`](./current-architecture.html)（内联 SVG + 角色卡 + 角色矩阵 + 实例绑定表）。
+- 当前完整链路：Discuss 面板提交需求 → `local` Source 触发 → Router 以 `mode='align'` 接单 → Aligner 提案 slices/验收标准 → 人在面板确认 → Engine `acceptPlan` 每 slice 建一个 Ticket → Worker 先 `feature_exec_start({flow:'execute'})` 再走 e1–e5 → PR 回到 deployment 绑定的 GitHub 仓库。
+- 角色：Human（Discuss 审阅/确认）、Router（主 Session，研判路由）、Aligner（align Ticket，只提案）、Worker（work Ticket，执行）、Engine（唯一状态写入者）。
+- 注意：本地 issue 目前没有仓库字段，执行仓库来自 deployment 的默认 GitHub 链；页面底部的实例表记录当前正式/测试绑定。
+- 这是当前实现的权威总览；图 0 / 0b 保留为早期 Router/Worker 视角。
+
 ## 图 1：总体架构与数据流
 
 ![Router 与 Worker 总体架构](./router-worker-architecture.png)
