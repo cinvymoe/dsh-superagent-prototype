@@ -74,3 +74,13 @@ worktrees: []
 - 评审：`docs/issues/review.md`（Standards approve，无 must-fix；Spec 5/5 PASS）。
 - 视觉证据：`docs/evidence/c1-github-chains/before-source.png` / `after-source.png`（同场景、1440×1100、浅色、zh-CN；Before = `04cb0449` 真实面板，After = 本分支 head）。
 - 未启用 auto-merge，PR 由人复核合并。
+
+## 沉淀记录
+
+- 回归案例：`benchmarks/github-source-chains/c1-explicit-chains/`（README、requirement、task-contract、review、environment、retrospective、patterns、attempt-log、evidence/）；`docs/issues/benchmark` 符号链接指向该目录供 e5 门识别。
+- 模式沉淀：schema 收敛 + 读取归一化 + 严格保存；`chains` 键存在（含空数组）即不回退旧字段；旧形状读取与面板保存的端到端断言；真实面板 Before/After 共享同一 SQLite 状态。
+- 试错台账：`attempt-log.md`（实现 lane 一次通过；review lane 无输出后 worker 自审；profile 复制的 bundle 安装；环境敏感测试用干净环境复跑）。
+- 测试环境前置：`environment.md`（Node 22 / pnpm 11.7，干净环境 `env -u GIT_CONFIG_GLOBAL LC_ALL=C pnpm check`；真实面板隔离 profile + fake gh + 1440×1100 浅色 zh-CN）。
+- 两索引：仓库无 `issues/README.md` 与 ADR 库索引，无需同步。
+- 架构复核：仓库无 `docs/architecture` 与 `arch_*` 脚本；按 `docs/007-architecture.md` 人工复核模块/测试表无变化，`arch_impact: local`。
+- worktree 回收：临时基线 worktree `/tmp/c1-chain-before` 已删除；本 ticket worktree 为当前执行会话目录且 PR #11 未合并，保留。`git worktree list` 无本 ticket 额外残留。
