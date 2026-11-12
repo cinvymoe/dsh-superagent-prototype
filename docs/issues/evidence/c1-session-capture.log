@@ -1,0 +1,8 @@
+MODE before
+PAGE TEXT: 返回需求列表 | 导出工单列表为 CSV | 需求详情与对齐审阅 | 开放 | 待对齐 | 需求原文 | 提交人：local | 3小时前 | q-export | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 导出工单列表为 CSV |  | 在需求详情里查看关联工单，每个已启动的执行会话可以直接打开。 |  | 对齐结果 | 待对齐 |  | 还没有对齐结果。等待 Aligner 分析这条需求。 |  | 消息记录 | 1 | local | 3小时前 |  | 三个切片都拆好了，开始执行。 |  | 发表评论 | 关联工单 | 3 | 修复导出权限校验 | 补齐导出接口分页 | 导出任务进度提示 | 关闭需求
+LINKED ROWS: [('修复导出权限校验', []), ('补齐导出接口分页', []), ('导出任务进度提示', [])]
+SCREENSHOTS: /tmp/e31c-shots/before-detail.png /tmp/e31c-shots/before-linked.png
+MODE after
+PAGE TEXT: 返回需求列表 | 导出工单列表为 CSV | 需求详情与对齐审阅 | 开放 | 待对齐 | 需求原文 | 提交人：local | 3小时前 | q-export | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 导出工单列表为 CSV |  | 在需求详情里查看关联工单，每个已启动的执行会话可以直接打开。 |  | 对齐结果 | 待对齐 |  | 还没有对齐结果。等待 Aligner 分析这条需求。 |  | 消息记录 | 1 | local | 3小时前 |  | 三个切片都拆好了，开始执行。 |  | 发表评论 | 关联工单 | 3 | 修复导出权限校验 | 打开 Session | 补齐导出接口分页 | 导出任务进度提示 | 打开 Session | 关闭需求
+LINKED ROWS: [('修复导出权限校验', ['打开 Session']), ('补齐导出接口分页', []), ('导出任务进度提示', ['打开 Session'])]
+SCREENSHOTS: /tmp/e31c-shots/after-detail.png /tmp/e31c-shots/after-linked.png

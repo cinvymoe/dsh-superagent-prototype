@@ -4,7 +4,7 @@ import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, remount, all, click, settle, type, text, at, tab } from './fixtures/panel.tsx'
-import { localComment, localIssue, localReply, server } from './fixtures/panel-server.ts'
+import { localComment, localIssue, localReply, server, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
 
 usePanel()
 
@@ -273,6 +273,42 @@ it('shows a requirement text once and leaves its original message out of the tim
   expect(text().split('The full description').length - 1).toBe(1)
   expect(text()).toContain(zh['discuss.timeline'])
   expect(document.querySelector('.dt-timeline')?.textContent).not.toContain('The full description')
+})
+
+it('opens each linked Ticket\'s started Executor Session from the requirement detail', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [localIssue('Linked requirement')]
+  server.threadPages = () => ({ ...threadSummary(), correlated: [], decisions: [], earlier: null, context: [], timeline: [],
+    tickets: [ticketSummary(), ticketSummary({ id: 't2', title: '尚未启动', sessionId: '' }),
+      ticketSummary({ id: 't3', title: '另一个工单', sessionId: 'worker-t3' })] })
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  // The page has several sections with rows, so the linked-Tickets one is found by its heading.
+  const linked = (dictionary: Record<string, string>) => {
+    const section = all('.dt-section').find(item => item.querySelector('.dt-section-name')?.textContent === dictionary['discuss.tickets'])
+    if (!section) throw new Error('No linked Tickets section')
+    return section
+  }
+  const rows = [...linked(zh).querySelectorAll<HTMLElement>('.dt-row')]
+  expect(rows.map(row => row.querySelector('.dt-row-title')?.textContent)).toEqual(['修复回归', '尚未启动', '另一个工单'])
+  const sessionButtons = (label: string) => rows.map(row => [...row.querySelectorAll('button')]
+    .filter(button => button.textContent?.trim() === label))
+  // Only the Tickets that started an Executor Session carry the localized Session button.
+  expect(sessionButtons(zh['openSession']).map(buttons => buttons.length)).toEqual([1, 0, 1])
+  expect(server.opened).toEqual([])
+  await click(sessionButtons(zh['openSession'])[2]![0]!)
+  expect(server.opened).toEqual(['worker-t3'])
+  // The title link still enters that Ticket's Execution detail instead of opening its Session.
+  await click(rows[0]!.querySelector<HTMLElement>('.dt-row-title .dt-textlink')!)
+  expect(server.requests.some(request => request.method === 'GET' && request.path === 'tickets/t1')).toBe(true)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('修复回归')
+  expect(server.opened).toEqual(['worker-t3'])
+  // English keeps the existing label and the same conditional rendering.
+  at({ page: 'requirements', id: 'q-fixture' })
+  await remount(en)
+  const englishRows = [...linked(en).querySelectorAll<HTMLElement>('.dt-row')]
+  expect(englishRows.map(row => [...row.querySelectorAll('button')].filter(button => button.textContent?.trim() === en['openSession'])
+    .length)).toEqual([1, 0, 1])
 })
 
 it('lists the message timeline newest first and keeps the follow-up box above the list', async () => {
