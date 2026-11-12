@@ -1,8 +1,9 @@
 /** Evals: the Thread-level assessments of queued Triggers, and the Decisions they end with. */
 import { key } from './ids.ts'
 import { UserError } from './errors.ts'
-import { liveTicket, threadKey } from './model.ts'
-import type { ActorRef, Decision, DecisionKind, Evaluation, Mandate, MandateBasis, PlanSlice, Strength, Thread, Ticket, Trigger } from './model.ts'
+import { DEFAULT_EXECUTION_STRATEGY, liveTicket, threadKey } from './model.ts'
+import type { ActorRef, Decision, DecisionKind, Evaluation, ExecutionStrategy, Mandate, MandateBasis, PlanSlice, Strength, Thread, Ticket,
+  Trigger } from './model.ts'
 import type { AssessmentOutcome, Candidate, Policy } from './ports.ts'
 import { said, type Reason } from './reasons.ts'
 import { EnginePart, type EngineOptions } from './part.ts'
@@ -326,12 +327,15 @@ export class Evals extends EnginePart {
   }
   /**
    * Create one execution ticket per slice of a confirmed requirement plan. A slice's ticket is keyed by the issue and slice,
-   * and a slice already dispatched reuses its ticket, so a repeated confirmation is idempotent. The trigger ids are the local
-   * issue's human messages, which give the tickets their channels and thread subscription.
+   * and a slice already dispatched reuses its ticket, so a repeated confirmation is idempotent. The ticket pins the execution
+   * strategy it is dispatched under, `input.execution` or the native default, and a repeated confirmation never rewrites it.
+   * The trigger ids are the local issue's human messages, which give the tickets their channels and thread subscription.
    */
-  acceptPlan(thread: Thread, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[]; at?: string }): Ticket[] {
+  acceptPlan(thread: Thread, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[]; execution?: ExecutionStrategy;
+    at?: string }): Ticket[] {
     if (!input.triggerIds.length) throw new UserError('planNeedsTriggers')
     const at = input.at ?? this.now()
+    const execution = input.execution ?? DEFAULT_EXECUTION_STRATEGY
     const policyVersion = this.policy().version
     const existing = new Map(this.repo.tickets.list().filter(ticket => ticket.plan?.issueId === input.issueId)
       .map(ticket => [ticket.plan!.sliceId, ticket]))
@@ -349,7 +353,7 @@ export class Evals extends EnginePart {
       const decision = this.record(thread, evaluation, { kind: 'accept', reason: [{ code: 'explicitRouted' }], mandate, ticketId })
       this.tickets.create(ticketId, decision.id, mandate, evaluation, { kind: 'accept', title: `${slice.id} · ${slice.title}`,
         scope: mandate.scope, reason: { code: 'explicitRouted' }, mode: 'work', name: sliceName(slice),
-        plan: { issueId: input.issueId, sliceId: slice.id, acceptance: slice.acceptance },
+        plan: { issueId: input.issueId, sliceId: slice.id, acceptance: slice.acceptance, execution },
         ...(dependsOn.length ? { dependsOn } : {}) }, at)
       const created = this.repo.tickets.get(ticketId)
       if (created) tickets.push(created)
