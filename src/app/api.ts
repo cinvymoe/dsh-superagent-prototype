@@ -9,7 +9,7 @@ import type { SettingsView } from './views/settings.ts'
 import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
-import type { LocalImageInput, LocalIssue, LocalProject, LocalSlice } from '../sources/local-format.ts'
+import type { LocalImageInput, LocalIssueView, LocalProject, LocalSlice } from '../sources/local-format.ts'
 import type { ExecutionMode } from '../core/model.ts'
 import type { Receipt } from './store.ts'
 
@@ -40,14 +40,15 @@ export interface Api {
   'GET local/projects': { response: { projects: LocalProject[] } }
   'POST local/projects': { body: { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string }; response: { project: LocalProject } }
   'PUT local/projects/:id': { body: { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string }; response: { project: LocalProject } }
-  'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssue[] } }
-  'POST local/issues': { body: { title?: string; body?: string; project: string; images?: LocalImageInput[] }; response: { issue: LocalIssue } }
-  'GET local/issues/:id': { response: { issue: LocalIssue; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }
-  'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssue } }
-  'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssue } }
-  'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string }; response: { issue: LocalIssue; tickets: { id: string; title: string }[] } }
-  'POST local/issues/:id/execution': { body: { mode: ExecutionMode }; response: { issue: LocalIssue } }
-  'POST local/issues/:id/close': { response: { issue: LocalIssue } }
+  // Local requirement responses carry the HTTP view (`LocalIssueView`), whose `slicesFinished` is derived per read.
+  'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }
+  'POST local/issues': { body: { title?: string; body?: string; project: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }
+  'GET local/issues/:id': { response: { issue: LocalIssueView; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }
+  'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssueView } }
+  'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssueView } }
+  'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string }; response: { issue: LocalIssueView; tickets: { id: string; title: string }[] } }
+  'POST local/issues/:id/execution': { body: { mode: ExecutionMode }; response: { issue: LocalIssueView } }
+  'POST local/issues/:id/close': { response: { issue: LocalIssueView } }
   'POST tickets/:id/retry': { response: { retried: true } }
   'POST tickets/:id/stop': { response: { stopped: true } }
   'POST executor/pause': { body: { paused: boolean }; response: { paused: boolean } }

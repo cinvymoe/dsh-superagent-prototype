@@ -1,7 +1,7 @@
 /** Requirement pages: submit a requirement, list the project's requirements, and review the Aligner's proposal. */
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { REQUIREMENT_IMAGES } from '../limits.ts'
-import { projectRepositories, requirementExecutionMode, type LocalImage, type LocalIssue } from '../sources/local-format.ts'
+import { projectRepositories, requirementExecutionMode, type LocalImage, type LocalIssue, type LocalIssueView } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
 import { Button, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
@@ -47,8 +47,10 @@ function RequirementImages({ issue }: { issue: LocalIssue }) {
   </figure>)}</div>
 }
 
-const stateTag = (t: T, issue: LocalIssue) => issue.state === 'closed'
-  ? <Tag tone="quiet">{t('discuss.closed')}</Tag> : <Tag tone="success">{t('discuss.open')}</Tag>
+// 待关闭 is the requirement's own state, derived from its slice Tickets; the alignment tag beside it is unchanged.
+const stateTag = (t: T, issue: LocalIssueView) => issue.state === 'closed'
+  ? <Tag tone="quiet">{t('discuss.closed')}</Tag>
+  : issue.slicesFinished ? <Tag tone="info">{t('discuss.pendingClose')}</Tag> : <Tag tone="success">{t('discuss.open')}</Tag>
 
 function statusTag(t: T, issue: LocalIssue) {
   const alignment = issue.alignment

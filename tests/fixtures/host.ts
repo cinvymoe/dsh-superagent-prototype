@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { vi, type Mock } from 'vitest'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { Runtime } from '../../src/app/runtime.ts'
 import { Store } from '../../src/app/store.ts'
 import { SettingsSchema } from '../../src/policy.ts'
@@ -38,6 +39,8 @@ type FakeAgent = {
 const notice = (id: string, text: string) => ({ id, role: 'user', content: [{ type: 'text', text }], source: { kind: 'tool-jobs', form: 'notice' } }) as unknown as UserMessage
 type HttpHandler = (req: unknown, res: unknown) => Promise<void>
 type Delivery = { sessionId: string; mode: 'queue' | 'steer'; id: string; text: string }
+/** A system prompt section a Session registered, captured so a spec can read its completion flag and text. */
+type SystemPromptSection = { text: (context: { signal?: AbortSignal }) => string; complete?: boolean }
 
 /**
  * DSH's job registry as the Executor uses it, with DSH's job tools: the jobs a Session can see, their events, a wait and a
@@ -172,7 +175,17 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const steps = new Map<string, () => void>(), claims = new Map<string, () => void>()
   const tools = new Map<string, Map<string, RegisteredTool>>()
   // The host's built-ins the main Session is restricted to; a real host always provides these, and none other.
-  const builtins = ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill']
+  const builtins = ['skill', 'bash', 'read', 'read_image', 'glob', 'grep', 'job_output', 'job_list', 'job_kill']
+  /** Each Session's event log, which `snapshotEvents` and `inspect` read and a spec may seed. */
+  const events = new Map<string, SessionEvent[]>()
+  /** Each Session's header; a fork sets the inherited prefix to the source events it copied. */
+  const headers = new Map<string, { inheritedEventCount: number; cwd: string }>()
+  /** Each Session's newest system prompt section. */
+  const sections = new Map<string, SystemPromptSection>()
+  /** Each Session's tool restrictions, newest last, so a spec can assert the exact allow list it was given. */
+  const restrictions = new Map<string, string[][]>()
+  let forks = 0
+  const archiveSession = vi.fn(async () => {})
   const deliveries = vi.fn<(request: Delivery) => void>()
   let http!: HttpHandler
   const resolveDefault = async (id: string) => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } }
@@ -182,10 +195,20 @@ export async function startRuntime(seed?: (store: Store) => void) {
       const agentCtx = new Context()
       const sessionTools = new Map<string, RegisteredTool>()
       tools.set(sessionId, sessionTools)
+      events.set(sessionId, [])
+      const header = headers.get(sessionId) ?? { inheritedEventCount: 0, cwd: directory }
+      headers.set(sessionId, header)
       const register = (tool: RegisteredTool) => { sessionTools.set(tool.name, tool); return () => sessionTools.delete(tool.name) }
-      agentCtx.reflect.provide('tools', { register, get: (name: string) => builtins.includes(name) ? { name } : undefined, restrict: vi.fn(() => () => {}), guard: vi.fn(() => () => {}) })
+      agentCtx.reflect.provide('tools', { register, get: (name: string) => builtins.includes(name) ? { name } : undefined,
+        restrict: vi.fn(({ allow }: { allow: string[] }) => {
+          restrictions.set(sessionId, [...restrictions.get(sessionId) ?? [], [...allow]])
+          return () => {}
+        }), guard: vi.fn(() => () => {}) })
       agentCtx.reflect.provide('skills', { register: () => () => {} })
-      agentCtx.reflect.provide('systemPrompt', { section: () => () => {} })
+      agentCtx.reflect.provide('systemPrompt', { section: (spec: SystemPromptSection) => {
+        sections.set(sessionId, spec)
+        return () => { if (sections.get(sessionId) === spec) sections.delete(sessionId) }
+      } })
       const inbox = { nextTurn: [] as UserMessage[], nextStep: [] as UserMessage[],
         // A pending message taken out, as DSH's inbox does by its id.
         remove: (id: string) => [inbox.nextTurn, inbox.nextStep].some(list => {
@@ -219,7 +242,9 @@ export async function startRuntime(seed?: (store: Store) => void) {
         turn++
         take(true)
       })
-      const session = { id: sessionId, snapshotEvents: () => [], requestHeader: () => undefined, append: vi.fn() }
+      // DSH keeps the inherited prefix length on the Session; the fake header mirrors it, as its fork writes it there first.
+      const session = { id: sessionId, header, get inheritedEventCount() { return header.inheritedEventCount },
+        snapshotEvents: () => [...(events.get(sessionId) ?? [])], requestHeader: () => undefined, append: vi.fn() }
       let status = 'idle'
       const idle: (() => void)[] = []
       // A cancel drops the inbox unless kept, and the turn it stops ends a moment later, which DSH says.
@@ -238,17 +263,33 @@ export async function startRuntime(seed?: (store: Store) => void) {
         // Once its turn ended, as DSH's does.
         whenIdle: () => status === 'idle' ? Promise.resolve() : new Promise<void>(resolve => { idle.push(resolve) }) } as never)
     }),
+    // A fork copies the source's latest completed-turn prefix into a new Session and records the copied prefix as its
+    // inherited count, as DSH's fork does; creating it here lets a spec assert its decoration and its archive.
+    fork: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+      const source = events.get(sessionId) ?? []
+      const completed = source.findLastIndex(event => event.type === 'turn/end')
+      if (completed < 0) throw new Error(`Session ${sessionId} has no completed turn to fork at`)
+      const prefix = source.slice(0, completed + 1)
+      const forkedId = `session-fork-${++forks}`
+      await controller.create({ sessionId: forkedId })
+      events.get(forkedId)!.push(...prefix)
+      const forked = headers.get(forkedId)!
+      forked.inheritedEventCount = prefix.length
+      forked.cwd = headers.get(sessionId)!.cwd
+      return { sessionId: forkedId }
+    }),
     selectModel: vi.fn(async () => {}), resolveAgent: vi.fn(resolveDefault), rename: vi.fn(async () => {}),
     prompt: vi.fn(() => { throw new Error('Plugin delivery must not use user RPC') }),
-    inspect: vi.fn(async () => ({ events: [] })),
+    inspect: vi.fn(async (sessionId: string) => ({ events: events.get(sessionId) ?? [] })),
   }
   const reader = { read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} }
   const persistence = { flush: vi.fn(async () => {}), open: vi.fn(async () => reader) }
   const webServer = { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }
   const jobs = jobRegistry(id => agents.get(id))
   const subagents = subagentRuntime(agents)
+  const workspaceRegistry = { create: async (cwd: string) => ({ id: cwd }), archiveSession }
   const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller,
-    sessionPersistence: persistence, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer,
+    sessionPersistence: persistence, workspaceRegistry, permissionPresets: { set: () => {} }, subprocess, webServer,
     jobs: jobs.service, subagents: subagents.service }
   const ctx = new Context()
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
@@ -312,6 +353,6 @@ export async function startRuntime(seed?: (store: Store) => void) {
   /** A step of the worker claims what waits for it, and is cut off before the Session took it. */
   const claim = (sessionId: string) => { claims.get(sessionId)!() }
   return { runtime, ctx, directory, agents, tools, deliveries, relays, candidates, runTool, route, acceptedTicket, api, raw, controller, subprocess, hooks, resolveDefault, stop,
-    jobs, subagents, step, claim }
+    jobs, subagents, step, claim, events, headers, sections, restrictions, archiveSession }
 }
 export type Host = Awaited<ReturnType<typeof startRuntime>>
