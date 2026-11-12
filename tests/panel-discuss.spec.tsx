@@ -234,6 +234,55 @@ it('renders a legacy requirement whose project has no worktree root', async () =
   expect(text()).not.toContain('/srv/worktrees')
 })
 
+/** A one-slice alignment proposal, enough for the requirement detail to offer its execution switch. */
+const proposal = (status: 'proposed' | 'confirmed') => ({ status, summary: '', acceptance: [],
+  slices: [{ id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }],
+  proposedAt: '2026-09-23T00:00:00Z', ...(status === 'confirmed' ? { decidedAt: '2026-09-23T00:00:00Z' } : {}) })
+
+it('starts the execution switch off and saves feature-exec before the alignment is confirmed', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Switched requirement'), alignment: proposal('proposed') }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const toggle = document.querySelector<HTMLElement>('[role="switch"]')!
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  expect(toggle.getAttribute('aria-label')).toBe(zh['discuss.executionSwitch'])
+  expect(text()).toContain(zh['discuss.executionSwitch'])
+  await click(toggle)
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/execution')!
+  expect(posted).toMatchObject({ method: 'POST', body: { mode: 'feature-exec' } })
+  expect(server.localIssues[0]?.execution).toBe('feature-exec')
+  expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true')
+  // A refresh reads the stored mode back, so the switch stays on instead of falling back to native.
+  await remount()
+  expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true')
+})
+
+it('fixes the execution mode once the requirement dispatched tickets', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Dispatched requirement'), execution: 'feature-exec' as const,
+    alignment: proposal('confirmed') }]
+  server.dispatchedIssues.add('q-fixture')
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  expect(document.querySelector('[role="switch"]')).toBe(null)
+  expect(all('.dt-tag').map(tag => tag.textContent)).toContain(zh['discuss.executionFeatureExec'])
+  expect(text()).toContain(zh['discuss.executionLocked'])
+  expect(text()).toContain('C1 · dispatched slice')
+})
+
+it('shows the execution mode on every requirement list row, native when unchosen', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Feature requirement'), id: 'q-feature', execution: 'feature-exec' as const },
+    { ...localIssue('Native requirement'), id: 'q-native' }]
+  at({ page: 'requirements' })
+  await mount()
+  const metas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
+  expect(metas[0]).toContain(zh['discuss.executionFeatureExec'])
+  expect(metas[1]).toContain(zh['discuss.executionNative'])
+  expect(metas[1]).not.toContain(zh['discuss.executionFeatureExec'])
+})
+
 it('shows the localized refusal when the worktree root is relative and stays on the creation page', async () => {
   at({ page: 'requirements' })
   await mount()

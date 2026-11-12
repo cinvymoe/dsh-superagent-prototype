@@ -51,7 +51,7 @@ const localTrigger = (issue: LocalIssue): TriggerRow => ({ id: `local-${issue.id
   actor: { source: 'local', id: issue.author || 'local' }, human: true, at: issue.createdAt, text: issue.body || issue.title,
   preview: issue.body || issue.title, url: undefined, threads: [`local:${issue.id}`], actions: { requeue: false },
   disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined } })
-const localThread = (issue: LocalIssue): ThreadPageView => {
+const localThread = (issue: LocalIssue, dispatched = false): ThreadPageView => {
   // The host appends one absolute path per image to the original requirement Trigger's text, as C2 does.
   const images = issue.images ?? []
   const base = issue.body || issue.title
@@ -59,7 +59,9 @@ const localThread = (issue: LocalIssue): ThreadPageView => {
     ? `${base}\n\nImages:\n${images.map(image => `- /srv/local-images/${issue.id}/${image.id} (${image.mediaType}, ${image.bytes} bytes)`).join('\n')}`
     : base
   return { key: `local:${issue.id}`, source: 'local', title: issue.title,
-    stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
+    stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0,
+    // A confirmed requirement dispatches one Ticket per slice; the fixture carries one to exercise the fixed mode.
+    tickets: dispatched ? [ticketSummary({ id: `ticket-${issue.id}`, title: 'C1 · dispatched slice' })] : [],
     evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
     // The original requirement is the Thread's first Trigger, as the host records it, so detail de-duplication stays testable.
     timeline: [{ ...localTrigger(issue), text, preview: text }], earlier: null }
@@ -408,7 +410,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET local/issues/:id': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     return issue ? { issue, project: server.localProjects.find(project => project.id === issue.project) ?? null,
-      thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue), replies: [] }
+      thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue, server.dispatchedIssues.has(issue.id)), replies: [] }
       : refuse(404, 'Local issue not found')
   } },
   'POST local/issues/:id/comments': { body: true, answer: ({ params, body }) => {
