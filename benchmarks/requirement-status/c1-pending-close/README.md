@@ -5,6 +5,7 @@
 - Branch: `agent/slice-687169eff807`
 - Base / merge: 实现基线 deployment `main` @ `40191e32`；收尾时合并 `main` @ `934a1f07`；head `6c91a4f7`；owner 合并后的 main merge commit `422a21a4`
 - PR: https://github.com/cinvymoe/dsh-superagent-prototype/pull/27 （MERGED，由 owner `cinvymoe` 合并，未启用 auto-merge）
+- Sediment follow-up: https://github.com/cinvymoe/dsh-superagent-prototype/pull/36 （评审记录、回归案例与 review findings 处置）
 - Scope: 需求状态派生（`slicesFinished`）、local 路由视图契约、面板「待关闭」状态标签、双语文案、测试、005/007 文档与同场景 Before/After 截图
 
 ## Artifacts
