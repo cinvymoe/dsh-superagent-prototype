@@ -8,6 +8,7 @@ import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-
 import type { Api, ApiResponse, RouteParams } from '../../src/app/api.ts'
 import { SKILL_NAME, SKILL_PREFIX, TEAM_SECTIONS, builtInBase, builtInPart, builtInParts, composePrompt, composeSkill, defaultPrompts,
   environmentSection, policySection, promptParts } from '../../src/app/prompts.ts'
+import type { Receipt } from '../../src/app/store.ts'
 import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, SourceStatusRow, SourceView, StateView, ThreadPageView,
   ThreadRow, TicketPageView,
   TicketRow, TicketStage,
@@ -51,7 +52,14 @@ const localTrigger = (issue: LocalIssue): TriggerRow => ({ id: `local-${issue.id
   actor: { source: 'local', id: issue.author || 'local' }, human: true, at: issue.createdAt, text: issue.body || issue.title,
   preview: issue.body || issue.title, url: undefined, threads: [`local:${issue.id}`], actions: { requeue: false },
   disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined } })
-const localThread = (issue: LocalIssue): ThreadPageView => {
+/** A human message on a requirement's thread, as the panel's comment form posts it. */
+export const localComment = (issue: LocalIssue, text: string, at: string): TriggerRow =>
+  ({ ...localTrigger(issue), id: `local-comment-${at}`, at, text, preview: text })
+/** A sent agent reply on a requirement's thread, as the outbox records it. */
+export const localReply = (issue: LocalIssue, text: string, sentAt: string): Receipt =>
+  ({ id: `local-reply-${sentAt}`, channel: { source: 'local', thread: `local:${issue.id}`, address: { issue: issue.id } },
+    text, kind: 'reply', status: 'sent', sentAt })
+const localThread = (issue: LocalIssue, extra: TriggerRow[] = []): ThreadPageView => {
   // The host appends one absolute path per image to the original requirement Trigger's text, as C2 does.
   const images = issue.images ?? []
   const base = issue.body || issue.title
@@ -62,7 +70,7 @@ const localThread = (issue: LocalIssue): ThreadPageView => {
     stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
     evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
     // The original requirement is the Thread's first Trigger, as the host records it, so detail de-duplication stays testable.
-    timeline: [{ ...localTrigger(issue), text, preview: text }], earlier: null }
+    timeline: [{ ...localTrigger(issue), text, preview: text }, ...extra], earlier: null }
 }
 export const threadSummary = (fields: Partial<ThreadRow> = {}): ThreadRow => ({
   key: 'feishu:oc_1:om_root', source: 'feishu', title: '这个文案好奇怪', stage: 'subscribed', latest: undefined, lastAt: '2026-09-23T00:00:00Z',
@@ -111,6 +119,10 @@ export interface PanelServer {
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
   localIssues: LocalIssue[]
+  /** Human messages posted into a requirement's thread, oldest first, keyed by issue id (the comment form appends here). */
+  localComments: Record<string, TriggerRow[]>
+  /** Sent agent replies shown on a requirement's thread, keyed by issue id. */
+  localReplies: Record<string, Receipt[]>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
     worktreeRoot?: string; createdAt: string; updatedAt: string }[]
   /** When set, the create-requirement route refuses with this JSON error (and creates nothing). */
@@ -284,6 +296,7 @@ function initial(): PanelServer {
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
     tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
+    localComments: {}, localReplies: {},
     localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
@@ -405,14 +418,19 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET local/issues/:id': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     return issue ? { issue, project: server.localProjects.find(project => project.id === issue.project) ?? null,
-      thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue), replies: [] }
+      thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue, server.localComments[params.id] ?? []),
+      replies: server.localReplies[params.id] ?? [] }
       : refuse(404, 'Local issue not found')
   } },
   'POST local/issues/:id/comments': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
-    const next = { ...issue, updatedAt: '2026-09-23T00:00:00Z', body: `${issue.body}\n${body.text}` }
+    // The host only bumps updatedAt and receives one human Trigger; it never appends the comment to issue.body.
+    const posted = server.localComments[params.id] ?? []
+    const at = new Date(Date.UTC(2026, 8, 24, 0, 0, posted.length)).toISOString()
+    const next = { ...issue, updatedAt: at }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    server.localComments = { ...server.localComments, [params.id]: [...posted, localComment(next, String(body.text).trim(), at)] }
     return { issue: next }
   } },
   'POST local/issues/:id/alignment': { body: true, answer: ({ params, body }) => {
