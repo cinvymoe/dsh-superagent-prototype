@@ -123,10 +123,14 @@ export function StatusHead({ hint, settings }: { hint: string; settings?: Settin
       onClick={() => navigate(settingsRoute(settings))}>{t('tab.settings')}</Button>}
   </div>
 }
-export function PageHead({ title, children }: { title: ReactNode; children?: ReactNode }) {
-  const { back, backLabel } = usePanel()
+export function PageHead({ title, children, back }: { title: ReactNode; children?: ReactNode
+  back?: false | { label: string; onClick: () => void } }) {
+  // `undefined` keeps the contextual back button; `false` drops it; an object names its own destination.
+  const { back: goBack, backLabel } = usePanel()
+  const control = back === undefined ? { label: backLabel, onClick: goBack } : back
   return <div className="dt-page-head">
-    <Button variant="ghost" size="sm" icon={<Icon name="chevron-left" />} onClick={back}>{backLabel}</Button>
+    {control !== false && <Button variant="ghost" size="sm" icon={<Icon name="chevron-left" />}
+      onClick={control.onClick}>{control.label}</Button>}
     <div className="dt-page-title"><h2>{title}</h2>{children && <span className="dt-actions">{children}</span>}</div>
   </div>
 }

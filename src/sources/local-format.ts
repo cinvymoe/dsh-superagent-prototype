@@ -52,6 +52,25 @@ export interface LocalAlignment {
   reason?: string
 }
 
+/** One image attached to a local requirement; its bytes live under `<stateDir>/local-images/<issue id>/`. */
+export interface LocalImage {
+  id: string
+  /** Original file name the person attached. */
+  name: string
+  /** Media type sniffed from the bytes: image/png, image/jpeg, image/webp or image/gif. */
+  mediaType: string
+  /** Size of the stored bytes. */
+  bytes: number
+}
+
+/** An image as submitted with a requirement: base64 content, original name and declared media type. */
+export interface LocalImageInput {
+  name: string
+  mediaType: string
+  /** Standard base64, optionally prefixed with a `data:<type>;base64,` header. */
+  data: string
+}
+
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */
 export interface LocalIssue {
   id: string
@@ -60,6 +79,8 @@ export interface LocalIssue {
   author: string
   /** Project that binds this requirement to one execution repository. */
   project?: string
+  /** Images attached when the requirement was submitted; absent when there are none. */
+  images?: LocalImage[]
   createdAt: string
   updatedAt: string
   state: 'open' | 'closed'

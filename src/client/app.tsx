@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import type { SearchView } from './api.ts'
 import { Button, Dot, Icon, Input, Modal, SegmentedTabs } from './controls.tsx'
 import type { DeploymentForm } from './deployment.tsx'
-import { DiscussBoard, DiscussIssue } from './discuss.tsx'
+import { NewRequirementPage, RequirementDetail, RequirementList } from './discuss.tsx'
 import { EvalStatus } from './eval.tsx'
 import { ExecutionStatus } from './execution.tsx'
 import { ticketMark } from './marks.ts'
@@ -149,9 +149,10 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
   const page = (() => {
     switch (route.page) {
       case 'overview': return <OverviewPage />
-      case 'discuss': return route.id !== undefined ? <DiscussIssue key={route.id} id={route.id} />
+      case 'newRequirement': return <NewRequirementPage />
+      case 'requirements': return route.id !== undefined ? <RequirementDetail key={route.id} id={route.id} />
         : route.edit ? <ProjectFormPage key={route.edit} edit={route.edit} />
-        : route.create ? <ProjectFormPage /> : <DiscussBoard />
+        : route.create ? <ProjectFormPage /> : <RequirementList />
       case 'source': return <SourceStatus />
       case 'trigger': return route.id !== undefined ? <ThreadPage key={route.id} id={route.id} target={route.query?.trigger} />
         : <TriggerStatus filter={route.query?.filter ?? 'subscribed'} />
@@ -186,12 +187,13 @@ export function App({ t, openSession, deploymentForm }: AppProps) {
   const navigate = useCallback((route: Route, replace = false) => move(current => ({ route,
     stack: replace ? current.stack : [...current.stack, current.route].slice(-20) })), [move])
   const back = useCallback(() => move(current => ({ route: current.stack.at(-1) ?? HOME, stack: current.stack.slice(0, -1) })), [move])
-  // Each page tab opens its own fresh route; Discuss and Overview carry no record, the others carry no query.
+  // Each page tab opens its own fresh route; Overview and New requirement carry no record, the others carry no query.
   const openTab = useCallback((tab: Tab) => move(current => ({ stack: [], route: (() => {
     switch (tab) {
       case 'settings': return settingsRoute(lastSettingsGroup(current))
-      case 'discuss': return { page: 'discuss' as const }
       case 'overview': return { page: 'overview' as const }
+      case 'newRequirement': return { page: 'newRequirement' as const }
+      case 'requirements': return { page: 'requirements' as const }
       case 'source': return { page: 'source' as const }
       case 'trigger': return { page: 'trigger' as const }
       case 'eval': return { page: 'eval' as const }

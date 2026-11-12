@@ -1,0 +1,41 @@
+(node:893927) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:893940) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-de236aab51cc
+
+(node:893994) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:893993) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:893996) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:894016) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:894013) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:894007) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:894025) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:894001) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:894031) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (11 tests) 37ms
+ ✓ tests/styles.spec.ts (2 tests) 69ms
+ ✓ tests/locales.spec.ts (6 tests) 14ms
+(node:894007) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/navigation.spec.ts (8 tests) 14ms
+ ✓ tests/local.spec.ts (8 tests) 224ms
+ ✓ tests/panel-projects.spec.tsx (5 tests) 520ms
+ ✓ tests/panel-panel.spec.tsx (8 tests) 654ms
+ ✓ tests/panel-discuss.spec.tsx (14 tests) 666ms
+ ✓ tests/panel-overview.spec.tsx (13 tests) 949ms
+
+ Test Files  9 passed (9)
+      Tests  75 passed (75)
+   Start at  16:17:21
+   Duration  3.27s (transform 3.69s, setup 0ms, import 6.25s, tests 3.15s, environment 4.60s)
+

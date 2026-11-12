@@ -47,10 +47,23 @@ export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketS
   ({ ...TICKET, ...fields, ...stage })
 export const localIssue = (title: string, body = '', project = 'p-fixture'): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
   project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
-const localThread = (issue: LocalIssue): ThreadPageView => ({ key: `local:${issue.id}`, source: 'local', title: issue.title,
-  stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
-  evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
-  timeline: [], earlier: null })
+const localTrigger = (issue: LocalIssue): TriggerRow => ({ id: `local-${issue.id}`, source: 'local',
+  actor: { source: 'local', id: issue.author || 'local' }, human: true, at: issue.createdAt, text: issue.body || issue.title,
+  preview: issue.body || issue.title, url: undefined, threads: [`local:${issue.id}`], actions: { requeue: false },
+  disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined } })
+const localThread = (issue: LocalIssue): ThreadPageView => {
+  // The host appends one absolute path per image to the original requirement Trigger's text, as C2 does.
+  const images = issue.images ?? []
+  const base = issue.body || issue.title
+  const text = images.length
+    ? `${base}\n\nImages:\n${images.map(image => `- /srv/local-images/${issue.id}/${image.id} (${image.mediaType}, ${image.bytes} bytes)`).join('\n')}`
+    : base
+  return { key: `local:${issue.id}`, source: 'local', title: issue.title,
+    stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
+    evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
+    // The original requirement is the Thread's first Trigger, as the host records it, so detail de-duplication stays testable.
+    timeline: [{ ...localTrigger(issue), text, preview: text }], earlier: null }
+}
 export const threadSummary = (fields: Partial<ThreadRow> = {}): ThreadRow => ({
   key: 'feishu:oc_1:om_root', source: 'feishu', title: '这个文案好奇怪', stage: 'subscribed', latest: undefined, lastAt: '2026-09-23T00:00:00Z',
   createdAt: '2026-09-22T00:00:00Z', subscriptions: 1, tickets: [{ id: 't1', title: '修复回归', state: 'open' }], evaluating: undefined,
@@ -100,6 +113,8 @@ export interface PanelServer {
   localIssues: LocalIssue[]
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
     worktreeRoot?: string; createdAt: string; updatedAt: string }[]
+  /** When set, the create-requirement route refuses with this JSON error (and creates nothing). */
+  refuseIssueCreate?: { status: 400; error: string; code: string; values: Record<string, string> }
   threads: ThreadRow[]
   threadPages: (key: string, query: { before?: string; around?: string }) => ThreadPageView | undefined
   person: TicketRow[]; search: Pick<ApiResponse<'GET search'>, 'items' | 'threads'>; history: HistoryView
@@ -369,7 +384,21 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET local/issues': { query: ['project'], answer: ({ query }) =>
     ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project) }) },
   'POST local/issues': { body: true, answer: ({ body }) => {
-    const issue = localIssue(body.title, body.body, body.project)
+    // The fixture switch mirrors a host refusal of the whole create request.
+    if (server.refuseIssueCreate) {
+      const { status, error, code, values } = server.refuseIssueCreate
+      return refuse(status, error, { code, values })
+    }
+    // Mirror the host's title derivation: the first non-empty line of the description, collapsed and shortened to 200.
+    const description = (body.body ?? '').trim()
+    const title = body.title?.trim() || (description.split('\n').find((line: string) => line.trim()) ?? '').trim()
+      .replace(/\s+/g, ' ').slice(0, 200)
+    // Echo the submitted image metadata: a stable id, the original name and media type, and the decoded byte count.
+    const images = (body.images ?? []).map((image, index) => ({
+      id: `img-${index + 1}`, name: image.name, mediaType: image.mediaType,
+      bytes: Buffer.from(image.data.replace(/^data:[^;,]*;base64,/i, ''), 'base64').length,
+    }))
+    const issue = { ...localIssue(title, description, body.project), ...(images.length ? { images } : {}) }
     server.localIssues = [issue, ...server.localIssues]
     return { issue }
   } },
@@ -518,6 +547,19 @@ class Reply extends Response {
   override async text() { server.pending--; return super.text() }
 }
 
+/** A valid 1×1 PNG, so the image-bytes route answers real bytes rather than JSON. */
+const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64')
+/** The requirement-image bytes route answers raw bytes, not JSON, so it is handled before the typed route table. */
+function imageReply(path: string): Response | undefined {
+  const segments = path.split('/')
+  if (segments.length !== 5 || segments[0] !== 'local' || segments[1] !== 'issues' || segments[3] !== 'images') return undefined
+  const issue = server.localIssues.find(item => item.id === decodeURIComponent(segments[2]!))
+  const image = issue?.images?.find(item => item.id === decodeURIComponent(segments[4]!))
+  if (!image) return new Response(null, { status: 404 })
+  return new Response(PIXEL_PNG, { status: 200, headers: { 'content-type': image.mediaType } })
+}
+
 export function usePanelServer(cleanup: () => void) {
   beforeEach(() => {
     sessionStorage.clear()
@@ -529,6 +571,8 @@ export function usePanelServer(cleanup: () => void) {
       const method = init?.method ?? 'GET'
       const body: unknown = init?.body ? JSON.parse(String(init.body)) : undefined
       server.requests.push({ path: decodeURIComponent(`${path}${address.search}`), method, ...body === undefined ? {} : { body } })
+      const image = method === 'GET' ? imageReply(path) : undefined
+      if (image) return image
       const route = match(method, path.split('/'))
       if (!route) return new Reply({ error: 'Unknown operation' }, 404)
       const answer = await run(route.key, route.params, address.searchParams, body)

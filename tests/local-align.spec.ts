@@ -1,14 +1,18 @@
 /** Local Discuss paths: a requirement accepted for alignment, dispatched slices, and the project worktree root its tickets execute under. */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { feishu, startRuntime, type Host } from './fixtures/host.ts'
 import { KV } from '../src/kv.ts'
 import type { Ticket } from '../src/core/index.ts'
+import { REQUIREMENT_BODY_BYTES } from '../src/limits.ts'
 
 /** The id of the first human message on a local issue's thread. */
 const firstTrigger = (h: Host, issueId: string) => h.runtime.store.read.threadTriggers(`local:${issueId}`, 1)[0]!.id
+/** A 1x1 transparent PNG and a 1x1 GIF, byte for byte the images the upload tests send. */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
 
 /** Real roots a test configured as a project worktree root or executor directory, removed after it. */
 const roots: string[] = []
@@ -320,6 +324,74 @@ describe('project worktree roots', () => {
     expect(next.execution?.worktreeRoot).toBe(second)
     expect(h.runtime.store.tickets.get(accepted.id)!.execution).toEqual(execution)
   })
+})
+
+it('stores requirement images, returns their metadata and serves the bytes back with no caching', async () => {
+  const submitted = await h.api('POST', 'local/issues', { title: 'With a screenshot', project: project.id,
+    images: [{ name: 'shot.png', mediaType: 'image/png', data: PNG.toString('base64') }] })
+  expect(submitted.status).toBe(200)
+  const issue = submitted.body.issue as { id: string; images?: { id: string; name: string; mediaType: string; bytes: number }[] }
+  expect(issue.images).toMatchObject([{ name: 'shot.png', mediaType: 'image/png', bytes: PNG.length }])
+  const imageId = issue.images![0]!.id
+  expect(imageId).toMatch(/^img-[0-9a-f]{8}$/)
+  // The requirement detail carries the same metadata the record stores.
+  const detail = await h.api('GET', `local/issues/${issue.id}`)
+  expect((detail.body.issue as { images?: unknown }).images).toEqual(issue.images)
+  // The image answers its own bytes, its stored media type and no caching.
+  const served = await h.raw('GET', `local/issues/${issue.id}/images/${imageId}`)
+  expect(served.status).toBe(200)
+  expect(served.headers['content-type']).toBe('image/png')
+  expect(served.headers['cache-control']).toBe('no-store')
+  expect(served.body.equals(PNG)).toBe(true)
+  // The Trigger carries every image's absolute path, and the file there is the submitted image.
+  const text = h.runtime.store.read.threadTriggers(`local:${issue.id}`, 1)[0]!.text
+  const path = join(h.directory, 'local-images', issue.id, `${imageId}.png`)
+  expect(text).toContain(path)
+  expect(existsSync(path)).toBe(true)
+  expect(readFileSync(path).equals(PNG)).toBe(true)
+  // Unknown image or issue ids are missing records; a request without the same-origin header is refused.
+  expect((await h.api('GET', `local/issues/${issue.id}/images/img-unknown`)).status).toBe(404)
+  expect((await h.api('GET', `local/issues/q-unknown/images/${imageId}`)).status).toBe(404)
+  expect((await h.raw('GET', `local/issues/${issue.id}/images/${imageId}`, undefined, { 'x-orchestrator-request': undefined })).status)
+    .toBe(403)
+})
+
+it('refuses an invalid image upload without creating the requirement or writing files', async () => {
+  const before = h.runtime.local.list().length
+  // A declared type that the bytes do not match is refused whole.
+  const mismatched = await h.api('POST', 'local/issues', { title: 'Bad type', project: project.id,
+    images: [{ name: 'x.png', mediaType: 'image/png', data: GIF.toString('base64') }] })
+  expect(mismatched.status).toBe(400)
+  expect(mismatched.body).toMatchObject({ code: 'issueImageType', values: { name: 'x.png' } })
+  expect(h.runtime.local.list()).toHaveLength(before)
+  expect(existsSync(join(h.directory, 'local-images'))).toBe(false)
+  const tooMany = await h.api('POST', 'local/issues', { title: 'Too many', project: project.id,
+    images: Array.from({ length: 5 }, (_value, index) => ({ name: `${index}.png`, mediaType: 'image/png', data: PNG.toString('base64') })) })
+  expect(tooMany.status).toBe(400)
+  expect(tooMany.body).toMatchObject({ code: 'issueImageCount', values: { max: '4' } })
+  const oversized = await h.api('POST', 'local/issues', { title: 'Too large', project: project.id,
+    images: [{ name: 'big.png', mediaType: 'image/png', data: Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]).toString('base64') }] })
+  expect(oversized.status).toBe(400)
+  expect(oversized.body).toMatchObject({ code: 'issueImageSize', values: { name: 'big.png' } })
+  expect(h.runtime.local.list()).toHaveLength(before)
+  expect(existsSync(join(h.directory, 'local-images'))).toBe(false)
+})
+
+it('lets only the create-requirement route carry a body above the management limit', async () => {
+  const large = Buffer.concat([PNG, Buffer.alloc(200 * 1024)])
+  const accepted = await h.api('POST', 'local/issues', ({ title: 'A large image', project: project.id,
+    images: [{ name: 'large.png', mediaType: 'image/png', data: large.toString('base64') }] }))
+  expect(accepted.status).toBe(200)
+  expect((accepted.body.issue as { images?: { bytes: number }[] }).images![0]!.bytes).toBe(large.length)
+  // Another management route keeps the 128 KiB limit.
+  const comment = await h.api('POST', `local/issues/${(accepted.body.issue as { id: string }).id}/comments`, { text: 'x'.repeat(200 * 1024) })
+  expect(comment.status).toBe(400)
+  expect(comment.body).toMatchObject({ error: `Request exceeds ${128 * 1024} bytes` })
+  // The create route itself refuses a body above the limit that holds four full-size images.
+  const huge = await h.api('POST', 'local/issues', { title: 'Too much', project: project.id,
+    images: [{ name: 'huge.png', mediaType: 'image/png', data: 'A'.repeat(REQUIREMENT_BODY_BYTES) }] })
+  expect(huge.status).toBe(400)
+  expect(huge.body).toMatchObject({ error: `Request exceeds ${REQUIREMENT_BODY_BYTES} bytes` })
 })
 
 /** A local project owns one GitHub chain: creating or editing it touches only that chain, and its tickets execute through it. */

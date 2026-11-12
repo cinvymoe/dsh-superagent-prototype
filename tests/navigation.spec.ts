@@ -56,13 +56,24 @@ it('reads each page a tab remembered with the parameters it takes, and leaves ou
     .toEqual({ page: 'trigger', id: 'github:1', query: { trigger: 'e1' } })
   expect(parseRoute({ page: 'eval', query: { filter: 'stop', window: '7d' } })).toEqual({ page: 'eval', query: { filter: 'stop' } })
   expect(parseRoute({ page: 'execution', id: 5, query: { filter: 'idle' } })).toEqual({ page: 'execution', query: { filter: 'idle' } })
-  // The Discuss page remembers its project form: the standalone create page, and the edit page of one project.
-  expect(parseRoute({ page: 'discuss', create: true })).toEqual({ page: 'discuss', create: true })
-  expect(parseRoute({ page: 'discuss', edit: 'p-1', create: true })).toEqual({ page: 'discuss', edit: 'p-1' })
-  expect(parseRoute({ page: 'discuss', edit: 7 })).toEqual({ page: 'discuss' })
+  // A saved Discuss route keeps the project edit page: the edit id wins over a create flag, a non-string one is dropped.
+  expect(parseRoute({ page: 'discuss', edit: 'p-1', create: true })).toEqual({ page: 'requirements', edit: 'p-1' })
+  expect(parseRoute({ page: 'discuss', edit: 7 })).toEqual({ page: 'requirements' })
   expect(parseRoute({ page: 'settings', query: { group: 'policy', source: 'feishu' } }))
     .toEqual({ page: 'settings', query: { group: 'source', source: 'feishu' } })
   expect([parseRoute('overview'), parseRoute(null)]).toEqual([undefined, undefined])
+})
+it('reads the requirement pages and maps a saved Discuss route onto them', () => {
+  expect(parseRoute({ page: 'newRequirement', id: 'q1', create: true })).toEqual({ page: 'newRequirement' })
+  expect(parseRoute({ page: 'requirements' })).toEqual({ page: 'requirements' })
+  expect(parseRoute({ page: 'requirements', create: true })).toEqual({ page: 'requirements', create: true })
+  expect(parseRoute({ page: 'requirements', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
+  expect(parseRoute({ page: 'requirements', edit: 'p-1' })).toEqual({ page: 'requirements', edit: 'p-1' })
+  expect(parseRoute({ page: 'requirements', edit: 'p-1', create: true })).toEqual({ page: 'requirements', edit: 'p-1' })
+  // The removed Discuss tab stays readable: detail, create page and list open their matching requirement page.
+  expect(parseRoute({ page: 'discuss', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
+  expect(parseRoute({ page: 'discuss', create: true })).toEqual({ page: 'requirements', create: true })
+  expect(parseRoute({ page: 'discuss' })).toEqual({ page: 'requirements' })
 })
 it('opens the settings that fix each setup problem: the Deployment group, or the card of the Source it names', () => {
   expect(setupPage('deployment')).toEqual({ page: 'settings', query: { group: 'deployment' } })

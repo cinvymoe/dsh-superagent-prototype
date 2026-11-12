@@ -4,14 +4,15 @@ import type { SetupPlace } from '../setup.ts'
 import { DECISION_FILTERS, type DecisionFilter } from './api.ts'
 import type { T } from './text.ts'
 
-export const TABS = ['overview', 'discuss', 'source', 'trigger', 'eval', 'execution', 'settings'] as const
+export const TABS = ['overview', 'newRequirement', 'requirements', 'source', 'trigger', 'eval', 'execution', 'settings'] as const
 export type Tab = typeof TABS[number]
 export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'prompts', 'deployment'] as const
 export type SettingsGroup = typeof SETTINGS_GROUPS[number]
 export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undefined }
-  | { page: 'discuss'; id?: undefined; create?: true; edit?: undefined; query?: undefined }
-  | { page: 'discuss'; id?: undefined; create?: undefined; edit: string; query?: undefined }
-  | { page: 'discuss'; id: string; create?: undefined; edit?: undefined; query?: undefined }
+  | { page: 'newRequirement'; id?: undefined; query?: undefined }
+  | { page: 'requirements'; id?: undefined; create?: true; edit?: undefined; query?: undefined }
+  | { page: 'requirements'; id?: undefined; create?: undefined; edit: string; query?: undefined }
+  | { page: 'requirements'; id: string; create?: undefined; edit?: undefined; query?: undefined }
   | { page: 'trigger'; id?: undefined; query?: { filter?: ThreadFilter } }
   | { page: 'trigger'; id: string; query?: { trigger?: string } }
   | { page: 'eval'; id?: undefined; query?: { filter?: DecisionFilter; window?: '24h' } }
@@ -26,7 +27,7 @@ export const setupPage = (place: SetupPlace): Route =>
 export const routeLabel = (t: T, route: Route): string =>
   'create' in route && route.create ? t('discuss.newProject')
     : 'edit' in route && route.edit ? t('discuss.editProject')
-    : route.id ? t(route.page === 'trigger' ? 'term.thread' : route.page === 'discuss' ? 'term.issue' : 'term.ticket')
+    : route.id ? t(route.page === 'trigger' ? 'term.thread' : route.page === 'requirements' ? 'term.issue' : 'term.ticket')
     : t(`tab.${route.page}`)
 
 const pick = <V extends string>(values: readonly V[], value: unknown): V | undefined => values.find(item => item === value)
@@ -42,8 +43,11 @@ export function parseRoute(value: unknown): Route | undefined {
   const record = typeof id === 'string' && id ? id : undefined
   switch (page) {
     case 'overview': case 'source': return { page }
-    case 'discuss': return record ? { page, id: record }
-      : typeof edit === 'string' && edit ? { page, edit } : create === true ? { page, create: true } : { page }
+    case 'newRequirement': return { page }
+    // The legacy Discuss tab stays readable: its detail, create page and list map onto the requirement pages.
+    case 'requirements': case 'discuss': return record ? { page: 'requirements', id: record }
+      : typeof edit === 'string' && edit ? { page: 'requirements', edit }
+      : create === true ? { page: 'requirements', create: true } : { page: 'requirements' }
     case 'trigger': return record ? { page, id: record, query: compact({ trigger: text('trigger') }) }
       : { page, query: compact({ filter: pick(THREAD_FILTERS, query?.filter) }) }
     case 'eval': return { page, query: compact({ filter: pick(DECISION_FILTERS, query?.filter),

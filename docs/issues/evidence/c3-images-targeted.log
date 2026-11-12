@@ -1,0 +1,46 @@
+(node:997940) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:997977) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-fd4370f4967a
+
+(node:998048) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:998049) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:998041) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:998042) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:998061) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:998067) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:998055) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:998070) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (11 tests) 36ms
+ ✓ tests/styles.spec.ts (2 tests) 104ms
+ ✓ tests/locales.spec.ts (6 tests) 12ms
+(node:998048) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:998041) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/controls.spec.tsx (6 tests) 139ms
+ ✓ tests/http.spec.ts (4 tests) 39ms
+ ✓ tests/local.spec.ts (10 tests) 505ms
+ ✓ tests/panel-discuss.spec.tsx (20 tests) 2069ms
+ ✓ tests/local-align.spec.ts (17 tests) 4948ms
+     ✓ keeps the executor directory or the default work root when a project sets no worktree root  312ms
+     ✓ fails a launch whose explicit worktree root cannot take a write, as a read-only mount does  301ms
+     ✓ retries a failed explicit-root launch once the root exists and prepares there  323ms
+     ✓ relaunches a failed explicit-root launch from a human message on the ticket thread  340ms
+     ✓ keeps an accepted ticket's directory when the project root or executor directory changes; a new ticket uses the new root  495ms
+   ✓ refuses an invalid image upload without creating the requirement or writing files  333ms
+   ✓ lets only the create-requirement route carry a body above the management limit  536ms
+
+ Test Files  8 passed (8)
+      Tests  76 passed (76)
+   Start at  17:33:15
+   Duration  7.09s (transform 5.30s, setup 0ms, import 7.77s, tests 7.85s, environment 2.37s)
+

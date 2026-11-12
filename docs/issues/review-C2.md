@@ -1,85 +1,72 @@
-# C2 双轴评审 · 本地项目拥有并隔离自己的仓库链路
+# C2 双轴评审与测试证据 · 需求图片的存储与读取（服务端）
 
-- Run: `run-mwd9wu8f-3`（execute，policy A1），issue `q-141a6a1e:C2`
-- Ticket: `4e2a92d2a5b4c1485e70aa07b8adfd99`
-- 分支：`agent/slice-4e2a92d2a5b4`，基线 deployment `main` @ `afab266e`（含 C1 / PR #11）
+- Run: `run-mwdadn1u-5`（execute，policy A1），issue `q-612052e8:C2`
+- Ticket: `7d197b3b2d9b27eb816cac184ca71255`
+- 分支：`agent/slice-7d197b3b2d9b`，基线 deployment `main` @ `afab266e`
 - 评审日期：2026-11-12
 
 ## 变更范围
 
-16 个已跟踪文件 + 3 个新增文件（产品/测试/文档）：
-
 | 文件 | 变更 |
 | --- | --- |
-| `src/app/projects.ts`（新） | `Projects`：项目 ↔ GitHub 链路协调层。`create` 校验后先写项目记录、再经 `Settings.save('source:github', …, 'panel')` 追加 `id=项目 id` 的链路，保存失败删除记录；`update` 只替换目标行；`bindLegacy` 只写项目记录 |
-| `src/app/local.ts` | `LocalProjectFields`、`projectNameTaken`、`validateProject`（格式/重名/绝对根）、`draftProject`、`putProject`、`patchProject`；旧 `createProject` 行为逐字保留 |
-| `src/app/runtime.ts` | 组合 `Projects`；`initialize` 在 setup 前调用一次 `bindLegacy()`；`ticketDeployment` 优先解析项目链路（启动已解析 → 已存配置兜底 → 旧 repository 回退）；`httpHost` 暴露 `projects` |
-| `src/app/http.ts`、`src/app/api.ts` | `POST local/projects` 改为 `name/intakeRepository/codeRepository/worktreeRoot?`；新增 `PUT local/projects/:id`（字段全可选，空 body 400） |
-| `src/sources/local-format.ts` | `LocalProject` 增加 `chain/intakeRepository/codeRepository`，`repository` 降为旧记录回退；`projectRepositories` 显示 “intake → code” |
-| `src/client/projects.tsx` | 创建页两个仓库输入 + 链路提示；More 菜单显示链路 |
-| `src/client/discuss.tsx` | 页头与需求详情项目行显示链路 |
-| `src/client/locales.ts` | zh/en 成对新增 `discuss.projectIntakeRepository`/`projectCodeRepository`/`projectRepositories` |
-| `tests/*`（6 个文件） | 新增 5 个项目链路用例；既有 HTTP/面板用例改两仓库；fixture 增仓库探测应答、PUT 分支与新 `localProjects` 形状 |
-| `docs/005-panel.md`、`docs/007-architecture.md`、`tests/docs.spec.ts` | 项目拥有链路、旧记录启动绑定与回退；模块表新增 `src/app/projects.ts`，模块/测试行同步 |
-| `docs/evidence/c2-project-chains/` | 同场景、同视口 1440×1100、浅色、zh-CN 的真实面板 Before/After |
+| `src/app/local-images.ts`（新增） | 需求图片的数量/名称/媒体类型/大小/内容签名校验，base64 解码，`<stateDir>/local-images/<issueId>/` 落盘与失败清理，路径与格式嗅探 |
+| `src/app/local.ts` | `LocalIssues.create` 接受 `images`，先校验落盘再写需求记录；记录带 `{id,name,mediaType,bytes}`；触发文本追加每张图绝对路径；新增 `image()` 读取字节 |
+| `src/app/http.ts` | `POST local/issues` 使用 32 MiB 专用请求体上限并解析 `images`；`GET local/issues/:id/images/:imageId` 原始字节响应（same-origin、404、no-store、nosniff） |
+| `src/app/api.ts` | 创建请求体新增可选 `images`，导出 `localImageUrl` |
+| `src/app/runtime.ts` | `LocalIssues` 注入 `stateDir` |
+| `src/sources/local-format.ts` | 新增 `LocalImage` / `LocalImageInput`，`LocalIssue.images?` |
+| `src/limits.ts` | 新增 `REQUIREMENT_IMAGES` 与 `REQUIREMENT_BODY_BYTES` |
+| `src/core/errors.ts`、`src/client/locales.ts` | 5 个可本地化错误码与中英文案 |
+| `tests/local.spec.ts`、`tests/local-align.spec.ts`、`tests/fixtures/host.ts` | 单元与 HTTP 覆盖；host fixture 增加原始字节请求 helper |
+| `docs/007-architecture.md`、`docs/006-deployment.md` | 模块/测试表、持久化文件与 stateDir 内容 |
 
-## 双轴评审
+## Standards 轴
 
-### Standards 轴
+结论：**通过（approve）**。
 
-结论：**通过**，无 must-fix。
+- **模块边界**：图片的校验与文件存储集中在新的 `src/app/local-images.ts`，`LocalIssues` 只负责把校验结果写进需求记录和触发文本；HTTP 层只负责请求体上限、schema 与原始字节响应，没有把文件系统细节扩散到路由。
+- **单一写入者**：`<stateDir>/local-images` 只由 `LocalIssues`（经 `local-images.ts`）写入和读取；HTTP 不直接碰路径。
+- **数据形状**：图片元数据随 `LocalIssue` 记录持久化（KV JSON），不新增数据库 schema；旧记录没有 `images` 字段仍合法。
+- **错误语义**：所有图片规则都用 `UserError` 固定错误码（`issueImageCount/Name/Type/Size/Data`），管理 API 返回 400 + `code` + `values`，面板按 code 本地化；不是泛化的字符串错误。
+- **请求体边界**：只有 `POST local/issues` 调 `body(REQUIREMENT_BODY_BYTES)`；`readBody` 默认值仍是 128 KiB，其它路由不受影响。
+- **测试质量**：断言行为（状态码、错误码、文件字节、响应头），不绑定实现细节；新增 `raw` helper 只补齐二进制响应读取，不改变既有 `api` 行为。
+- **差异卫生**：`git diff --check` 无输出；无无关重构、无新依赖。
 
-- **模块边界。** `LocalIssues` 只做项目记录的校验/读写（`src/app/local.ts:47-108`）；项目与 GitHub Source 配置的关联集中在新的 `Projects`（`src/app/projects.ts:18-136`）；HTTP 路由只做 schema 解析并调用协调层（`src/app/http.ts:206-217`）。没有把 settings 写入塞进 Source 或 Store。
-- **原子性与失败语义。** `Projects.create` 在写链路前先完成格式/重名校验（`validateProject`），链路保存由 `Settings.save` 在 `store.atomic` 之前跑账号/仓库探测（`src/app/settings.ts:207` 附近），不可读/不可推送抛 `SetupError` → HTTP 400；保存失败删除刚写的项目记录（`projects.ts:56-64`）。`update` 在写记录失败时尽力回滚链路（`projects.ts:99-106`）。验收用例断言失败后项目与 chains 均无变化。
-- **只改自己的链路。** `update` 用 `config.chains.map(row => row.id === target ? row : chain)` 替换目标行（`projects.ts:88-91`）；未命中的其他行为原引用，`toEqual` 深度相等成立。
-- **兼容旧记录。** `LocalProject.repository` 变为可选回退字段；`ticketDeployment` 对无 `chain` 的项目仍用 `repository` 覆盖两仓库（`runtime.ts:211-226`）；`bindLegacy` 只写项目记录，不写 settings（`projects.ts:111-121`）。旧 `createProject` 未改，`tests/local.spec.ts` 未改仍通过。
-- **测试质量。** 断言走 HTTP/运行时行为与存储值，不绑实现：链路追加与既有行逐字段相等、失败无产物、PUT 只动目标行、工单 `execution.chain` 与两个环境变量、启动幂等绑定与未匹配回退。新增 PUT 相对根 400 断言。
-- **文档与一致性。** `docs/005` 的 Discuss 页头/项目小节/Sources 小节、`docs/007` 的 Runtime、模块表（新增 `src/app/projects.ts`）、模块/测试行均更新；`tests/docs.spec.ts` 的两条行文断言同步，其余 worktree-root 文档断言保持。
-- **范围。** 未改 `GithubConfigSchema`/`normalizeGithubConfig`（C1 已验收）、未改 `DshExecutor`、未新增依赖、未做数据库迁移；`git diff --check` 干净。
-
-### Spec 轴（按冻结验收标准逐条）
+## Spec 轴（逐条对照冻结验收标准）
 
 | # | 验收标准 | 结果 | 证据 |
 | --- | --- | --- | --- |
-| 1 | POST 两仓库 + 可选 worktreeRoot 只新增一条 `id=项目 id` 的链路，已有行逐字段不变，项目视图含两仓库 | PASS | `projects.ts:50-64`、`local.ts:83-96`、`http.ts:206-210`；测试「adds only the new project's chain and returns both repositories」：`chains.length + 1`、每个旧行 `toEqual` 快照、新行 `{id, intake, code}`、GET 视图两仓库 |
-| 2 | 仓库不可读/不可推送、重名、仓库格式非法 → 400，设置与项目记录都没有失败产物 | PASS | 重名/格式在 `validateProject` 写前抛出（`local.ts:56-70`）；不可读/不可推由 `Settings.save → setup.checkAccounts → resolveDeployment` 在写入前抛 `SetupError`（`settings.ts:207-210`、`deployment.ts:151-170`），HTTP 映射 400（`http.ts:95`）；测试「refuses bad, duplicate, unreadable and unpushable repositories…」四种 400 后项目名列表与 chains 均等于快照 |
-| 3 | PUT 只更新该项目链路与元数据；另一项目链路行更新前后深度相等 | PASS | `projects.ts:66-109`、`http.ts:211-217`；测试「updates only the edited project's chain…」：B 行 `toEqual` PUT 前快照且无新增行，A 行进项目名/两仓库；PUT 相对根 400 且链路不变 |
-| 4 | 项目工单 `execution.chain` = 项目链路 id，两个 GitHub 仓库环境变量等于该链路的 code/intake | PASS | `runtime.ts:211-226` 返回项目链路部署（`chain` 字段），`executor/dsh.ts:145-153` 写入 Execution；`ticketEnvironment` 走同一部署；测试「executes a project ticket through the project's own chain」断言 `chain === project.id`、`repository/intakeRepository`、`DSH_SUPERAGENT_GITHUB_REPOSITORY`/`..._INTAKE_REPOSITORY` |
-| 5 | 只有 repository 的旧项目启动时幂等绑定到 code repository 相同的既有链路；无匹配仍按原 repository 执行，且不改其他链路 | PASS | `projects.ts:111-121`、`runtime.ts:253`；测试「binds a legacy project to the chain its code repository names at startup…」：匹配项目 `chain='default'` 且两仓库来自链路、二次 `bindLegacy` 记录不变、未匹配项目无 chain/两仓库且工单执行原 repository、存储 chains 等于绑定前快照 |
-| 6 | `pnpm check` 全绿；`docs/005` 与 `docs/007` 描述项目拥有链路、旧记录回退与启动绑定 | PASS | `docs/issues/evidence/c2-check.log`：63 files / 1257 tests passed，Build complete，exit 0；`docs/005-panel.md` 项目小节/Sources 小节、`docs/007-architecture.md` Runtime 段与模块表已更新；`tests/docs.spec.ts` 11/11 |
+| 1 | `POST local/issues` 接受图片数组（PNG/JPEG/WebP/GIF，每张 ≤5 MiB，最多 4 张），与需求同一次请求创建；任一张不合法则整单拒绝、不创建需求，并返回可本地化的错误 | PASS | `src/app/local-images.ts:prepare/storeRequirementImages` 先全部校验后写盘；`src/app/http.ts` 路由同请求解析；`tests/local.spec.ts`「stores every type…」「refuses a requirement…」；`tests/local-align.spec.ts`「refuses an invalid image upload…」断言 `issueImageType/issueImageCount/issueImageSize` 与 `local.list()`/目录不变 |
+| 2 | 图片落盘到 `<stateDir>/local-images/<issueId>/`，需求记录含每张图的 id、原名、媒体类型、字节数；`GET local/issues/:id` 返回这些元数据 | PASS | `requirementImagesDir`/`requirementImagePath`；`LocalIssues.create` 记录 `images`；`tests/local.spec.ts` 断言 4 种扩展名文件存在且字节相等、元数据匹配；`tests/local-align.spec.ts` 断言 GET 详情 `images` 与 POST 响应一致 |
+| 3 | `GET local/issues/:id/images/:imageId` 以存储的媒体类型返回原始字节（no-store）；未知 id 404；不符合 same-origin 的请求 403 | PASS | `src/app/http.ts` `imageRequest`/`imageResponse`；`tests/local-align.spec.ts` 断言 200、`content-type: image/png`、`cache-control: no-store`、字节相等、未知 image/issue 404、缺少 `x-orchestrator-request` 403 |
+| 4 | 需求触发文本包含每张图片的绝对路径，测试证明这些路径存在且是有效图片 | PASS | `LocalIssues.requirementText` 追加 `Images:` 与绝对路径；`tests/local.spec.ts` 与 `tests/local-align.spec.ts` 从触发文本取路径、断言 `existsSync` 且 `readFileSync(...).equals(PNG/GIF/WEBP/JPEG)` |
+| 5 | 只有创建需求的路由允许更大的请求体（容纳图片），其他管理路由保持 128 KB 上限 | PASS | `REQUIREMENT_BODY_BYTES = 32 MiB` 只用于 `POST local/issues`；`tests/local-align.spec.ts`「lets only the create-requirement route carry a body above the management limit」：200 KiB 图片创建成功、评论路由 200 KiB 返回 `Request exceeds 131072 bytes`、创建路由超 32 MiB 返回 `Request exceeds 33554432 bytes` |
+| 6 | `pnpm check` 通过，测试覆盖接受、拒绝（类型/大小/数量）、读取与超限请求 | PASS | `pnpm check`（typecheck + 63 files / 1257 tests + build）exit 0；`docs/issues/evidence/c2-*.log` |
 
 ## 测试证据
 
-- 定向：`pnpm vitest run tests/local.spec.ts tests/local-align.spec.ts tests/panel-projects.spec.tsx tests/panel-discuss.spec.tsx tests/deployment.spec.ts tests/panel-source.spec.tsx tests/docs.spec.ts` → `docs/issues/evidence/c2-targeted.log`（7 files / 73 tests passed）。
-- 全量：`env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check` → `docs/issues/evidence/c2-check.log`（63 files / 1257 tests passed，Build complete，exit 0）。
-- `pnpm typecheck`：exit 0（含在 check 内）。
-- `git diff --check`：干净。
-- 说明：首轮 check 与定向套件并发运行时 `tests/tools.spec.ts` 超时一次（5000 ms 上限，正常约 1.1 s）；单独复跑全量通过。属测试资源竞争抖动，与本次改动无关。
-
-## 视觉证据（UI 变更）
-
-同一场景（项目 `Widgets`、worktree root `/srv/worktrees`）、同一视口 1440×1100、浅色、zh-CN；Before = `afab266e` 构建（deployment `main` 基线），After = 本分支 head 构建：
-
-| 场景 | Before | After |
-| --- | --- | --- |
-| 新建项目页 | `docs/evidence/c2-project-chains/before-project-form.png`（单字段「执行仓库（owner/name）」） | `docs/evidence/c2-project-chains/after-project-form.png`（「接收 Issue 的仓库」「执行代码的仓库」+ 仓库链路提示） |
-| Discuss 页头 | `docs/evidence/c2-project-chains/before-discuss-head.png`（`acme/widgets`） | `docs/evidence/c2-project-chains/after-discuss-head.png`（`acme/intake → acme/widgets`） |
-
-两个 profile 使用同一份 SQLite（同一 GitHub chains 与项目 `Widgets`；Before 记录为旧形状 `repository`，After 记录为 `chain` + 两仓库），仅数据形状随版本变化。
+- `pnpm typecheck`：exit 0（`docs/issues/evidence/c2-typecheck.log`）。
+- 定向：`pnpm vitest run tests/local.spec.ts tests/local-align.spec.ts tests/http.spec.ts tests/locales.spec.ts tests/docs.spec.ts tests/class-docs.spec.ts` → 6 files / 47 tests passed（`docs/issues/evidence/c2-targeted.log`）。
+- 全量：`env -u GIT_CONFIG_GLOBAL … LC_ALL=C pnpm test` → 63 files / 1257 tests passed，exit 0（`docs/issues/evidence/c2-full-test.log`）。
+- `pnpm build`：Build complete，exit 0（`docs/issues/evidence/c2-build.log`）。
+- `git diff --check`：无输出。
 
 ## 架构影响
 
-- 本仓库无 `docs/architecture` / `arch_impact.py`；按 `docs/007-architecture.md` 人工复核：新增一个应用层协调模块 `src/app/projects.ts`，依赖方向仍为 app → deployment/sources；无新依赖、无数据库 schema 变更、无迁移；运行时启动多一次幂等的项目记录绑定。
-- `Architecture impact: local`。管理 API 新增 `PUT local/projects/:id` 并改变 `POST local/projects` body（本 slice 冻结标准的一部分），面板与测试同步。
+- `arch_impact: local`。新增一个 app 模块（`src/app/local-images.ts`）、一个原始字节 HTTP 路由与 `<stateDir>/local-images` 文件目录；`LocalIssue` 记录新增可选字段；`POST local/issues` 请求体新增可选 `images`。没有公共类型/函数签名破坏（均为可选新增），没有数据库 schema 变更，没有跨模块职责重划。
+- `docs/007-architecture.md` 的 Modules/Tests 表和 Persistence 节、`docs/006-deployment.md` 的 `stateDir` 说明已同步更新。
 
 ## 尝试记录
 
-- 实现 lane `lane-T1-1`（subagent `b47020fc-4e41-4f4b-8235-11881b67b4a3`）：完成模型/API/运行时/面板/测试/文档骨架与自测（6 files / 62 tests；全量仅 docs 模块表 1 失败，原因是新模块未列入 docs/007）。
-- Worker 复核后：补 `docs/005`、`docs/007`（Runtime 段、模块表、模块/测试行）与 `tests/docs.spec.ts` 行文断言；修复旧项目 PUT 时未校验新 worktreeRoot 的缺陷（`projects.ts:69-76`）；`chains()` 改为 `safeParse`，避免损坏的已存配置阻断启动；补 PUT 相对根 400 断言；复跑全量与定向。
-- 视觉证据：隔离 profile `c2-before`（基线 `afab266e` 构建）与 `c2-after`（本分支构建）各起一个真实 DSH web 服务，同一 SQLite 形状下截取。
+- 实现 lane `lane-C2-1`（subagent `2e66b179-2048-43ee-9ec3-1b3522c52292`）在运行时未产出编辑或结束消息即失败；由 worker 按同一 `docs/issues/task-contract-C2.md` 直接完成实现、测试与验证，并记录该运行时限制。
+- 全量测试在干净环境一次通过；无基线失败。
+
+## 测试环境前置
+
+不适用（纯应用逻辑与单元/集成测试；无真机、GUI、截图、旋转或物理设备要求；本切片无 UI 变更，故无需 Before/After 截图）。
 
 ## 结论
 
-- Standards：通过；无 must-fix。
-- Spec：6/6 条冻结验收标准有可复核证据。
+- Standards：通过。
+- Spec：6/6 条冻结验收标准均有可复核证据。
 - 建议进入 PR 提交；`Architecture impact: local`，PR 由人复核合并，不启用 auto-merge。
