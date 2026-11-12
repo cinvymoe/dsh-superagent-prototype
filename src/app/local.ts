@@ -40,7 +40,7 @@ export class LocalIssues {
   list(project?: string): LocalIssue[] {
     return this.host.store.keys(KV.local.issue.prefix).flatMap(entry => {
       const issue = this.host.store.get(KV.local.issue(entry.slice(KV.local.issue.prefix.length)))
-      return issue && (!project || issue.project === project) ? [this.view(issue)] : []
+      return issue && (!project || issue.project === project) ? [this.withRounds(issue)] : []
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
@@ -142,11 +142,11 @@ export class LocalIssues {
   /** The requirement with its alignment rounds read back; a record written before rounds existed reads as one round. */
   get(id: string): LocalIssue | undefined {
     const issue = this.host.store.get(KV.local.issue(id))
-    return issue ? this.view(issue) : undefined
+    return issue ? this.withRounds(issue) : undefined
   }
 
   /** A stored record as readers see it: rounds materialized and the single-slot mirror pointing at the current round. */
-  private view(issue: LocalIssue): LocalIssue {
+  private withRounds(issue: LocalIssue): LocalIssue {
     const rounds = alignmentRounds(issue)
     if (!rounds.length) return issue
     return { ...issue, alignments: rounds, alignment: rounds[rounds.length - 1]! }
@@ -162,10 +162,11 @@ export class LocalIssues {
    * Both an Executor's end and a person's stop count, because the Ticket record only has to carry `ended`.
    */
   view(issue: LocalIssue): LocalIssueView {
-    const slices = issue.alignment?.status === 'confirmed' ? issue.alignment.slices : []
+    const materialized = this.withRounds(issue)
+    const slices = materialized.alignment?.status === 'confirmed' ? materialized.alignment.slices : []
     const slicesFinished = slices.length > 0
       && slices.every(slice => !!this.host.store.tickets.get(planTicketId(issue.id, slice.id))?.ended)
-    return { ...issue, slicesFinished }
+    return { ...materialized, slicesFinished }
   }
 
   thread(id: string): string { return localThreadKey(id) }

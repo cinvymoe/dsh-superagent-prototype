@@ -143,6 +143,7 @@ export function alignmentRounds(issue: Pick<LocalIssue, 'alignment' | 'alignment
 /** The round a decision applies to: the last one, or undefined when the requirement has no alignment yet. */
 export function currentAlignment(issue: Pick<LocalIssue, 'alignment' | 'alignments'>): LocalAlignment | undefined {
   return alignmentRounds(issue).at(-1)
+}
 
 /**
  * A requirement as an HTTP response carries it: the stored record plus whether every slice Ticket of its confirmed
