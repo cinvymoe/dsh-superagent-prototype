@@ -45,8 +45,8 @@ const TICKET = {
 } satisfies TicketFields
 export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketStage = { stage: 'working' }): TicketRow =>
   ({ ...TICKET, ...fields, ...stage })
-export const localIssue = (title: string, body = ''): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
-  project: 'p-fixture', createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+export const localIssue = (title: string, body = '', project = 'p-fixture'): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
+  project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
 const localThread = (issue: LocalIssue): ThreadPageView => ({ key: `local:${issue.id}`, source: 'local', title: issue.title,
   stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
   evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
@@ -343,15 +343,18 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
       return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
     }
-    const project = { id: 'p-fixture', name: body.name, repository: body.repository,
+    let id = 'p-fixture', index = 2
+    while (server.localProjects.some(item => item.id === id)) id = `p-fixture-${index++}`
+    const project = { id, name: body.name, repository: body.repository,
       ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}),
       createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
     server.localProjects = [project, ...server.localProjects]
     return { project }
   } },
-  'GET local/issues': { answer: () => ({ issues: server.localIssues }) },
+  'GET local/issues': { query: ['project'], answer: ({ query }) =>
+    ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project) }) },
   'POST local/issues': { body: true, answer: ({ body }) => {
-    const issue = localIssue(body.title, body.body)
+    const issue = localIssue(body.title, body.body, body.project)
     server.localIssues = [issue, ...server.localIssues]
     return { issue }
   } },

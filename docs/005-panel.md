@@ -14,10 +14,12 @@ Opening the panel answers three questions, in this order:
 
 The tabs follow the workflow: **Overview**, **Discuss**, **Source**, **Trigger**, **Eval**, **Execution**, and **Settings**. Until repository and account setup succeeds, Overview shows what is missing and links to the relevant setting.
 
+Above the page tabs, the project bar shows one tab per local project and marks the current one. When the project tabs overflow, **More** at the end of the strip lists every project. **New project** at the top right opens a separate page; Cancel or Back there creates nothing, and creating a project makes it current and returns to its requirement list.
+
 | Tab | Shows |
 | --- | --- |
 | Overview | Tickets needing action, system problems, activity counts for the last 24 hours, and Executor load. Each block links to its detailed page |
-| Discuss | Local projects and requirements: create a project with its project name, execution repository (`owner/name`), and an optional absolute `worktreeRoot` (empty keeps the Execution ticket directory root), submit requirements into it, follow the discussion, review the alignment proposal, and confirm or send it back. Confirming dispatches one Ticket per slice |
+| Discuss | Requirements of the current local project. The page head shows its name, execution repository (`owner/name`) and an optional absolute `worktreeRoot` (empty keeps the Execution ticket directory root); submit requirements into it, follow the discussion, review the alignment proposal, and confirm or send it back. Confirming dispatches one Ticket per slice. With no projects it shows a hint to create one first; project creation and switching live in the project bar |
 | Source | Source state, setup problems and non-zero counts. Filtered Triggers and dropped messages cover the same 24-hour window as Overview |
 | Trigger | Threads filtered by Subscribed, Evaluating, New Triggers in 24 h, or All Threads. Each Thread shows its Triggers newest first, Decisions and Subscriptions |
 | Eval | Decisions with their reason and matched rules |
@@ -26,9 +28,9 @@ The tabs follow the workflow: **Overview**, **Discuss**, **Source**, **Trigger**
 
 ### Projects
 
-Each Discuss project has a project name, an execution repository and an optional worktree root. **Project name** labels the project in the Projects list and on its requirements. **Execution repository** is the `owner/name` repository that executes the project's requirements, and it is their only execution target. **Worktree root** is an optional absolute directory root for the project's Tickets; empty keeps the Execution ticket directory root.
+Each local project has a project name, an execution repository and an optional worktree root. **Project name** labels the project in the project bar and on its requirements. **Execution repository** is the `owner/name` repository that executes the project's requirements, and it is their only execution target. **Worktree root** is an optional absolute directory root for the project's Tickets; empty keeps the Execution ticket directory root.
 
-The project's row offers **Only this project**, which filters the Requirements list to that project, and **All projects**, which clears the filter.
+The project bar above the page tabs selects the current project; the requirements, their page head and a new requirement all follow it. **New project** on the bar opens its own page, where Cancel or Back creates nothing. Creating a project makes it current and returns to its requirements.
 
 A configured worktree root must already exist and accept writes; otherwise the Ticket fails to launch instead of falling back to the Execution ticket directory root.
 

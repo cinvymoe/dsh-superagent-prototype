@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { caller, usePoll, type ApiMessages, type Call, type SetupView, type StateView } from './api.ts'
 import type { Route } from './route.ts'
 import STYLES from './client.css?raw'
+import type { LocalProject } from '../sources/local-format.ts'
 import { errorText, setupText, valueLabel, type T } from './text.ts'
 
 export interface PanelContext {
@@ -15,6 +16,8 @@ export interface PanelContext {
   openSession: (sessionId: string) => Promise<void>
   notify: (text: string) => void
   restart: () => void
+  project: string | undefined
+  setProject: (id: string | undefined) => void
 }
 export interface PanelData {
   state: StateView | undefined
@@ -25,6 +28,8 @@ export interface PanelData {
   running: number
   /** Incremented each time dsh-superagent recovers from a restart so dependent views refetch. */
   restarts: number
+  projects: LocalProject[]
+  reloadProjects: () => Promise<void>
 }
 const Panel = createContext<PanelContext | undefined>(undefined)
 const PanelState = createContext<PanelData | undefined>(undefined)
@@ -70,10 +75,14 @@ function Toast({ text, onDone, holdMs = 3000 }: { text: string; onDone: () => vo
     document.body)
 }
 const stay = () => {}
+const stayProject = () => {}
 const noSession = async () => {}
-export function PanelProvider({ t, interval = 5000, openSession = noSession, navigate = stay, back = stay, backLabel = '', children }: {
+export function PanelProvider({ t, interval = 5000, openSession = noSession, navigate = stay, back = stay, backLabel = '',
+  project, setProject = stayProject, children }: {
   t: T; interval?: number; openSession?: (sessionId: string) => Promise<void>; navigate?: PanelContext['navigate']; back?: () => void
   backLabel?: string
+  project?: string | undefined
+  setProject?: (id: string | undefined) => void
   children: ReactNode
 }) {
   // Read the current translator via ref so locale changes do not recreate `call` and restart polling.
@@ -87,6 +96,7 @@ export function PanelProvider({ t, interval = 5000, openSession = noSession, nav
   const [restarts, setRestarts] = useState(0)
   const restart = useCallback(() => setRestarting({ down: false }), [])
   const { data: state, error, reload } = usePoll(() => call('GET state'), [call], restarting ? 1000 : interval)
+  const { data: projectData, reload: reloadProjects } = usePoll(() => call('GET local/projects'), [call])
   if (restarting && !!error !== restarting.down) {
     setRestarting(error ? { down: true } : undefined)
     if (!error) setRestarts(restarts + 1)
@@ -96,10 +106,10 @@ export function PanelProvider({ t, interval = 5000, openSession = noSession, nav
     const timer = setTimeout(() => setRestarting(undefined), 30_000)
     return () => clearTimeout(timer)
   }, [restarting])
-  const context = useMemo(() => ({ t, call, navigate, back, backLabel, openSession, notify, restart }), [t, call, navigate, back, backLabel,
-    openSession, notify, restart])
-  const data = useMemo(() => ({ state, error, reload, setup: state?.setup, running: state?.load.running ?? 0, restarts }), [state, error,
-    reload, restarts])
+  const context = useMemo(() => ({ t, call, navigate, back, backLabel, openSession, notify, restart, project, setProject }), [t, call, navigate,
+    back, backLabel, openSession, notify, restart, project, setProject])
+  const data = useMemo(() => ({ state, error, reload, setup: state?.setup, running: state?.load.running ?? 0, restarts,
+    projects: projectData?.projects ?? [], reloadProjects }), [state, error, reload, restarts, projectData, reloadProjects])
   return <Panel.Provider value={context}><PanelState.Provider value={data}>
     <style>{STYLES}</style>
     {children}

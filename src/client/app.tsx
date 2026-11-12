@@ -10,6 +10,7 @@ import { ticketMark } from './marks.ts'
 import { GLOSSARY, GLOSSARY_VALUES, en, zh, type DshSuperagentKey } from './locales.ts'
 import { OverviewPage } from './overview.tsx'
 import { PanelProvider, usePanel, usePanelData } from './provider.tsx'
+import { NewProjectPage, ProjectBar } from './projects.tsx'
 import { HOME, TABS, initialLocation, lastSettingsGroup, remember, routeLabel, settingsRoute, type Location, type Route,
   type Tab } from './route.ts'
 import { SettingsPage } from './settings.tsx'
@@ -148,7 +149,8 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
   const page = (() => {
     switch (route.page) {
       case 'overview': return <OverviewPage />
-      case 'discuss': return route.id !== undefined ? <DiscussIssue key={route.id} id={route.id} /> : <DiscussBoard />
+      case 'discuss': return route.id !== undefined ? <DiscussIssue key={route.id} id={route.id} />
+        : route.create ? <NewProjectPage /> : <DiscussBoard />
       case 'source': return <SourceStatus />
       case 'trigger': return route.id !== undefined ? <ThreadPage key={route.id} id={route.id} target={route.query?.trigger} />
         : <TriggerStatus filter={route.query?.filter ?? 'subscribed'} />
@@ -164,6 +166,7 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
     <div className="dt-column">
       <Header masterId={state?.masterId} />
       {error && state && <p className="dt-error" role="status">{error.message}</p>}
+      <ProjectBar route={route} />
       <SegmentedTabs className="dt-tabs" label={t('pagesLabel')} value={route.page} onChange={openTab}
         items={TABS.map(value => ({ value, label: t(`tab.${value}`), id: `dt-tab-${value}`, panelId: 'dt-page' }))} />
       <main id="dt-page" role="tabpanel" aria-labelledby={`dt-tab-${route.page}`} className="dt-main">{page}</main>
@@ -175,16 +178,18 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
 export function App({ t, openSession, deploymentForm }: AppProps) {
   const [location, setLocation] = useState(initialLocation)
   useEffect(() => { remember(location) }, [location])
-  // Preserve the last opened settings group across navigation so the Settings tab reopens at it.
+  // Preserve the last opened settings group and the current project across navigation.
   const move = useCallback((next: (current: Location) => Pick<Location, 'route' | 'stack'>) =>
-    setLocation(current => ({ ...next(current), group: lastSettingsGroup(current) })), [])
-  /** Navigates to `route`; `replace` swaps the current entry (filters, paging) instead of pushing a back step. */
+    setLocation(current => ({ ...current, ...next(current), group: lastSettingsGroup(current) })), [])
+  /** Navigates to `route`; `replace` swaps the current entry (filters, paging, project switches) instead of pushing a back step. */
   const navigate = useCallback((route: Route, replace = false) => move(current => ({ route,
     stack: replace ? current.stack : [...current.stack, current.route].slice(-20) })), [move])
   const back = useCallback(() => move(current => ({ route: current.stack.at(-1) ?? HOME, stack: current.stack.slice(0, -1) })), [move])
   const openTab = useCallback((tab: Tab) => move(current => ({ stack: [], route: tab === 'settings'
     ? settingsRoute(lastSettingsGroup(current)) : { page: tab, id: undefined } })), [move])
-  return <PanelProvider t={t} openSession={openSession} navigate={navigate} back={back} backLabel={routeLabel(t, location.stack.at(-1) ?? HOME)}>
+  const setProject = useCallback((project: string | undefined) => setLocation(current => ({ ...current, project })), [])
+  return <PanelProvider t={t} openSession={openSession} navigate={navigate} back={back} backLabel={routeLabel(t, location.stack.at(-1) ?? HOME)}
+    project={location.project} setProject={setProject}>
     <Pages route={location.route} openTab={openTab} deploymentForm={deploymentForm} />
   </PanelProvider>
 }

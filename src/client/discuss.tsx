@@ -1,11 +1,9 @@
 /** Local issue board: submit a requirement, read its discussion, and review the Aligner's proposal. */
 import { useState, type FormEvent } from 'react'
-import type { ApiResponse } from '../app/api.ts'
 import type { LocalIssue } from '../sources/local-format.ts'
 import { usePoll } from './api.ts'
 import { Button, Icon, Tag } from './controls.tsx'
-import { usePanel } from './provider.tsx'
-import type { Route } from './route.ts'
+import { usePanel, usePanelData } from './provider.tsx'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
 import { MarkdownLite, PageHead, Section, When } from './widgets.tsx'
 
@@ -20,24 +18,18 @@ function statusTag(t: T, issue: LocalIssue) {
   return <Tag tone="danger">{t('discuss.rejected')}</Tag>
 }
 
-/** New-requirement composer; each submission becomes a Thread and enters the Engine as a human Trigger. */
+/** New-requirement composer of the current local project; each submission becomes a Thread and enters the Engine as a human Trigger. */
 export function DiscussBoard() {
-  const { t, call, notify, navigate } = usePanel()
-  const { data, error, reload } = usePoll(async () => {
-    const [issues, projects] = await Promise.all([call('GET local/issues', {}), call('GET local/projects', {})])
-    return { issues: issues.issues, projects: projects.projects }
-  }, [])
+  const { t, call, notify, navigate, project } = usePanel()
+  const { projects } = usePanelData()
+  const active = projects.find(item => item.id === project) ?? projects[0]
+  const { data, error, reload } = usePoll(async () => active
+    ? call('GET local/issues', { query: { project: active.id } })
+    : { issues: [] }, [call, active?.id])
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [projectId, setProjectId] = useState('')
-  const [filter, setFilter] = useState('')
-  const [projectName, setProjectName] = useState('')
-  const [repository, setRepository] = useState('')
-  const [worktreeRoot, setWorktreeRoot] = useState('')
-  const [creating, setCreating] = useState(false)
   const [busy, setBusy] = useState(false)
-  const projects = data?.projects ?? []
-  const active = projects.find(project => project.id === projectId) ?? projects[0]
+  const issues = data?.issues ?? []
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const clean = title.trim()
@@ -52,64 +44,18 @@ export function DiscussBoard() {
       navigate({ page: 'discuss', id: issue.id })
     } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
   }
-  const addProject = async (event: FormEvent) => {
-    event.preventDefault()
-    if (busy || !projectName.trim() || !repository.trim()) return
-    setBusy(true)
-    try {
-      const root = worktreeRoot.trim()
-      const { project } = await call('POST local/projects', { body: { name: projectName.trim(), repository: repository.trim(),
-        ...(root ? { worktreeRoot: root } : {}) } })
-      setProjectName('')
-      setRepository('')
-      setWorktreeRoot('')
-      setCreating(false)
-      setProjectId(project.id)
-      await reload()
-    } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
-  }
-  const shown = (data?.issues ?? []).filter(issue => !filter || issue.project === filter)
-  const projectOf = (issue: LocalIssue) => projects.find(project => project.id === issue.project)
   return <>
-    <PageHead title={t('discuss.title')}><span className="dt-hint">{t('discuss.subtitle')}</span></PageHead>
+    <PageHead title={active ? active.name : t('discuss.title')}>
+      <span className="dt-hint">{t('discuss.subtitle')}</span>
+      {active && <span className="dt-mono">{active.repository}</span>}
+      {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
+    </PageHead>
     <div className="dt-column">
-      <Section title={t('discuss.projects')} count={projects.length}>
-        {projects.length === 0 && <p className="dt-hint">{t('discuss.noProjects')}</p>}
-        {projects.length > 0 && <ul className="dt-list">{projects.map(project => <li key={project.id} className="dt-row">
-          <Icon name="hash" size={14} /><div className="dt-row-main">
-            <div className="dt-row-title dt-line">{project.name}</div>
-            <div className="dt-row-meta"><span className="dt-mono">{project.repository}</span>
-              {project.worktreeRoot && <span className="dt-mono">{project.worktreeRoot}</span>}
-              {!filter && <button type="button" className="dt-textlink" onClick={() => setFilter(project.id)}>{t('discuss.useProject')}</button>}
-              {filter === project.id && <button type="button" className="dt-textlink" onClick={() => setFilter('')}>{t('discuss.allProjects')}</button>}
-            </div>
-          </div></li>)}</ul>}
-        {creating
-          ? <form className="dt-card dt-form" onSubmit={event => { void addProject(event) }}>
-            <div className="dt-card-head"><span className="dt-card-title">{t('discuss.newProject')}</span></div>
-            <input className="dt-text-input" value={projectName} maxLength={80} placeholder={t('discuss.projectName')}
-              onChange={event => setProjectName(event.target.value)} />
-            <input className="dt-text-input" value={repository} maxLength={200} placeholder={t('discuss.projectRepository')}
-              onChange={event => setRepository(event.target.value)} />
-            <input className="dt-text-input dt-mono" value={worktreeRoot} maxLength={4096}
-              placeholder={t('discuss.projectWorktreeRoot')} aria-label={t('discuss.projectWorktreeRoot')}
-              spellCheck={false} onChange={event => setWorktreeRoot(event.target.value)} />
-            <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
-            <div className="dt-actions"><Button type="submit" variant="primary" size="sm" disabled={busy || !projectName.trim() || !repository.trim()}>
-              {t('discuss.createProject')}</Button><Button type="button" variant="ghost" size="sm" onClick={() => setCreating(false)}>
-              {t('cancel')}</Button></div>
-          </form>
-          : <div className="dt-actions"><Button variant="outline" size="sm" icon={<Icon name="plus" size={14} />}
-            onClick={() => setCreating(true)}>{t('discuss.newProject')}</Button></div>}
-      </Section>
-      <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
-        <div className="dt-card-head"><span className="dt-card-title">{t('discuss.new')}</span></div>
-        {projects.length === 0
-          ? <p className="dt-hint">{t('discuss.projectRequired')}</p>
-          : <select className="dt-select" value={active?.id ?? ''} aria-label={t('discuss.project')}
-            onChange={event => setProjectId(event.target.value)}>
-            {projects.map(project => <option key={project.id} value={project.id}>{project.name} · {project.repository}</option>)}
-          </select>}
+      {!active && <Section title={t('discuss.issues')}>
+        <p className="dt-hint">{t('discuss.noProjects')}</p>
+      </Section>}
+      {active && <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
+        <div className="dt-card-head"><span className="dt-card-title">{t('discuss.new')}</span><Tag tone="neutral">{active.name}</Tag></div>
         <input className="dt-text-input" value={title} maxLength={200} placeholder={t('discuss.titlePlaceholder')}
           aria-label={t('discuss.titlePlaceholder')} onChange={event => setTitle(event.target.value)} />
         <textarea className="dt-textarea" value={body} maxLength={20000} rows={5}
@@ -119,20 +65,20 @@ export function DiscussBoard() {
           <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />} disabled={busy || !title.trim() || !active}>
             {t('discuss.submit')}</Button>
         </div>
-      </form>
+      </form>}
       {error && <p className="dt-error" role="alert">{error.message}</p>}
-      <Section title={filter ? `${t('discuss.issues')} · ${projects.find(project => project.id === filter)?.name ?? ''}` : t('discuss.issues')} count={shown.length}>
-        {data && shown.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
-        <ul className="dt-list dt-cards">{shown.map(issue => <li key={issue.id} className="dt-row">
+      {active && <Section title={t('discuss.issues')} count={issues.length}>
+        {data && issues.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
+        <ul className="dt-list dt-cards">{issues.map(issue => <li key={issue.id} className="dt-row">
           <Icon name="message" size={14} />
           <div className="dt-row-main">
             <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
               onClick={() => navigate({ page: 'discuss', id: issue.id })}>{issue.title}</button></div>
-            <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}{projectOf(issue) && <Tag tone="neutral">{projectOf(issue)!.name}</Tag>}
+            <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}
               <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span></div>
           </div>
         </li>)}</ul>
-      </Section>
+      </Section>}
     </div>
   </>
 }

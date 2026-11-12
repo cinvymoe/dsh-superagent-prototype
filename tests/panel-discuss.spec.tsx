@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The Discuss board: projects (with an optional worktree root) and requirement submission.
+// The Discuss board scoped to the current local project, and the standalone project creation page.
 import { expect, it } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, remount, all, click, type, text, at } from './fixtures/panel.tsx'
@@ -13,14 +13,23 @@ const input = (label: string): HTMLInputElement => {
   if (!match) throw new Error(`No input ${label}`)
   return match
 }
+/** The top-level New project button of the project bar, which opens its own page. */
+const openCreate = async () => {
+  const button = document.querySelector<HTMLElement>('.dt-project-bar .dt-project-new')
+  if (!button) throw new Error('No New project button')
+  await click(button)
+}
 const PROJECT = { id: 'p-fixture', name: 'Widgets', repository: 'acme/widgets', createdAt: '2026-09-23T00:00:00Z',
   updatedAt: '2026-09-23T00:00:00Z' }
 
-it('creates a project with an optional absolute worktree root and shows it in the list', async () => {
+it('creates a project on its own page with an optional absolute worktree root and makes it current', async () => {
   at({ page: 'discuss' })
   await mount()
   expect(text()).toContain(zh['discuss.noProjects'])
-  await click(zh['discuss.newProject'])
+  expect(all('.dt-select')).toEqual([])
+  await openCreate()
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.newProject'])
+  expect(all('.dt-cards')).toHaveLength(0)
   await type(input(zh['discuss.projectName']), 'Rooted')
   await type(input(zh['discuss.projectRepository']), 'acme/rooted')
   await type(input(zh['discuss.projectWorktreeRoot']), '/srv/worktrees')
@@ -28,13 +37,18 @@ it('creates a project with an optional absolute worktree root and shows it in th
   await click(zh['discuss.createProject'])
   const projectRequest = server.requests.find(request => request.path === 'local/projects' && request.method === 'POST')!
   expect(projectRequest).toMatchObject({ method: 'POST', body: { name: 'Rooted', repository: 'acme/rooted', worktreeRoot: '/srv/worktrees' } })
+  // The new project is the current tab and Discuss returns to its own requirement list.
+  expect(document.querySelector('.dt-project-tab[aria-selected="true"]')?.textContent).toBe('Rooted')
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Rooted')
+  expect(text()).toContain('acme/rooted')
   expect(text()).toContain('/srv/worktrees')
+  expect(server.requests.some(request => request.path === 'local/issues?project=p-fixture')).toBe(true)
 })
 
 it('omits the worktree root from the payload when the field is left empty', async () => {
   at({ page: 'discuss' })
   await mount()
-  await click(zh['discuss.newProject'])
+  await openCreate()
   await type(input(zh['discuss.projectName']), 'Plain')
   await type(input(zh['discuss.projectRepository']), 'acme/plain')
   await click(zh['discuss.createProject'])
@@ -43,12 +57,16 @@ it('omits the worktree root from the payload when the field is left empty', asyn
   expect(request.body).not.toHaveProperty('worktreeRoot')
 })
 
-it('submits a requirement into the selected project and tags the row with it', async () => {
+it('submits a requirement into the current project and tags the row with it', async () => {
   server.localProjects = [PROJECT, { ...PROJECT, id: 'p-other', name: 'Other', repository: 'acme/other' }]
-  server.localIssues = [localIssue('Existing requirement')]
+  server.localIssues = [localIssue('Existing requirement'), { ...localIssue('Other requirement'), id: 'q-other', project: 'p-other' }]
   at({ page: 'discuss' })
   await mount()
-  expect(all('.dt-select option').map(option => option.textContent)).toEqual(['Widgets · acme/widgets', 'Other · acme/other'])
+  // The requirement form targets the current project instead of offering a project select.
+  expect(all('.dt-select')).toEqual([])
+  expect(text()).toContain('Existing requirement')
+  expect(text()).not.toContain('Other requirement')
+  expect(document.querySelector('.dt-card-head .dt-tag')?.textContent).toBe('Widgets')
   await type(input(zh['discuss.titlePlaceholder']), 'New requirement')
   await click(zh['discuss.submit'])
   expect(server.requests.find(request => request.path === 'local/issues' && request.method === 'POST'))
@@ -63,7 +81,7 @@ it('names the project worktree root field and hint in English as well', async ()
   await mount()
   await remount(en)
   expect(text()).toContain(en['discuss.noProjects'])
-  await click(en['discuss.newProject'])
+  await openCreate()
   expect(input(en['discuss.projectWorktreeRoot'])).toBeInstanceOf(HTMLInputElement)
   expect(text()).toContain(en['discuss.projectWorktreeRootHint'])
 })
@@ -71,7 +89,7 @@ it('names the project worktree root field and hint in English as well', async ()
 it('omits a whitespace-only worktree root from the payload', async () => {
   at({ page: 'discuss' })
   await mount()
-  await click(zh['discuss.newProject'])
+  await openCreate()
   await type(input(zh['discuss.projectName']), 'Spaced')
   await type(input(zh['discuss.projectRepository']), 'acme/spaced')
   await type(input(zh['discuss.projectWorktreeRoot']), '   ')
@@ -98,14 +116,15 @@ it('renders a legacy requirement whose project has no worktree root', async () =
   expect(text()).not.toContain('/srv/worktrees')
 })
 
-it('shows the localized refusal when the worktree root is relative', async () => {
+it('shows the localized refusal when the worktree root is relative and stays on the creation page', async () => {
   at({ page: 'discuss' })
   await mount()
-  await click(zh['discuss.newProject'])
+  await openCreate()
   await type(input(zh['discuss.projectName']), 'Relative')
   await type(input(zh['discuss.projectRepository']), 'acme/relative')
   await type(input(zh['discuss.projectWorktreeRoot']), 'relative/root')
   await click(zh['discuss.createProject'])
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.projectWorktreeRoot'])
   expect(server.localProjects).toHaveLength(0)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.newProject'])
 })
