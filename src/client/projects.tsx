@@ -90,44 +90,73 @@ export function ProjectBar({ route }: { route: Route }) {
       </div>}
     </div>}
     <Button variant="primary" size="sm" className="dt-project-new" icon={<Icon name="plus" size={14} />}
-      onClick={() => navigate({ page: 'requirements', create: true },
-        route.page === 'requirements' && 'create' in route && route.create === true)}>{t('discuss.newProject')}</Button>
+      onClick={() => navigate({ page: 'requirements', create: true }, route.page === 'requirements'
+        && (('create' in route && route.create === true) || ('edit' in route && route.edit !== undefined)))}>{t('discuss.newProject')}</Button>
   </div>
 }
 
-/** Standalone page that creates a local project; Cancel or Back creates nothing and the new project becomes current. */
-export function NewProjectPage() {
+/**
+ * Standalone project form shared by creation and editing: the four project fields, the same validation hints, and the
+ * same submit path. Creating sends POST; editing sends PUT for the project named by the route and pre-fills its values.
+ * A refused save keeps the page and the typed values, so the person can correct one field instead of starting over.
+ */
+export function ProjectFormPage({ edit }: { edit?: string }) {
   const { t, call, notify, navigate, setProject } = usePanel()
-  const { reloadProjects } = usePanelData()
+  const { projects, reloadProjects } = usePanelData()
+  const editing = edit !== undefined
+  const current = editing ? projects.find(item => item.id === edit) : undefined
   const [name, setName] = useState('')
   const [intakeRepository, setIntakeRepository] = useState('')
   const [codeRepository, setCodeRepository] = useState('')
   const [worktreeRoot, setWorktreeRoot] = useState('')
+  const [loaded, setLoaded] = useState(!editing)
   const [busy, setBusy] = useState(false)
+  // Pre-fill once the project list arrives; later list polls must not overwrite what the person is typing.
+  useEffect(() => {
+    if (!editing || loaded || !current) return
+    setName(current.name)
+    setIntakeRepository(current.intakeRepository ?? current.codeRepository ?? current.repository ?? '')
+    setCodeRepository(current.codeRepository ?? current.repository ?? '')
+    setWorktreeRoot(current.worktreeRoot ?? '')
+    setLoaded(true)
+  }, [editing, loaded, current])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const cleanName = name.trim(), cleanIntake = intakeRepository.trim(), cleanCode = codeRepository.trim(), root = worktreeRoot.trim()
     if (busy || !cleanName || !cleanIntake || !cleanCode) return
     setBusy(true)
     try {
-      const { project } = await call('POST local/projects', { body: { name: cleanName, intakeRepository: cleanIntake,
-        codeRepository: cleanCode, ...(root ? { worktreeRoot: root } : {}) } })
+      // An empty root means "keep the Execution root" when creating and "clear the stored root" when editing, which the
+      // update route expresses by sending the empty string; creation omits the key instead.
+      const project = editing
+        ? (await call('PUT local/projects/:id', { id: edit, body: { name: cleanName, intakeRepository: cleanIntake,
+          codeRepository: cleanCode, worktreeRoot: root } })).project
+        : (await call('POST local/projects', { body: { name: cleanName, intakeRepository: cleanIntake, codeRepository: cleanCode,
+          ...(root ? { worktreeRoot: root } : {}) } })).project
       await reloadProjects()
       setProject(project.id)
-      navigate({ page: 'requirements' }, true)
+      // Creation opens the new project's requirement list; editing returns to the New requirement page that opened
+      // the form, so its page head keeps offering the edit entry for the project just saved.
+      navigate(editing ? { page: 'newRequirement' } : { page: 'requirements' }, true)
     } catch (failure) {
       notify(errorText(failure))
     } finally {
       setBusy(false)
     }
   }
+  const title = editing ? t('discuss.editProject') : t('discuss.newProject')
+  if (editing && !loaded) return <>
+    <PageHead title={title} />
+    <div className="dt-column"><p className="dt-hint">{t('loading')}</p></div>
+  </>
   return <>
-    <PageHead title={t('discuss.newProject')} back={{ label: t('discuss.requirements'), onClick: () => navigate({ page: 'requirements' }, true) }} />
+    <PageHead title={title} back={{ label: editing ? t('discuss.new') : t('discuss.requirements'),
+      onClick: () => navigate(editing ? { page: 'newRequirement' } : { page: 'requirements' }, true) }} />
     <div className="dt-column">
       <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
-        <div className="dt-card-head"><span className="dt-card-title">{t('discuss.newProject')}</span></div>
+        <div className="dt-card-head"><span className="dt-card-title">{title}</span></div>
         <input className="dt-text-input" value={name} maxLength={80} placeholder={t('discuss.projectName')}
-          onChange={event => setName(event.target.value)} />
+          aria-label={t('discuss.projectName')} onChange={event => setName(event.target.value)} />
         <input className="dt-text-input" value={intakeRepository} maxLength={200} placeholder={t('discuss.projectIntakeRepository')}
           aria-label={t('discuss.projectIntakeRepository')} onChange={event => setIntakeRepository(event.target.value)} />
         <input className="dt-text-input" value={codeRepository} maxLength={200} placeholder={t('discuss.projectCodeRepository')}
@@ -139,8 +168,9 @@ export function NewProjectPage() {
         <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
         <div className="dt-actions">
           <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim() || !intakeRepository.trim() || !codeRepository.trim()}>
-            {t('discuss.createProject')}</Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => navigate({ page: 'requirements' }, true)}>{t('cancel')}</Button>
+            {editing ? t('discuss.saveProject') : t('discuss.createProject')}</Button>
+          <Button type="button" variant="ghost" size="sm"
+            onClick={() => navigate(editing ? { page: 'newRequirement' } : { page: 'requirements' }, true)}>{t('cancel')}</Button>
         </div>
       </form>
     </div>

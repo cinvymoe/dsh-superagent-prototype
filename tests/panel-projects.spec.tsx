@@ -106,6 +106,8 @@ it('offers every project from More only when the project strip overflows', async
     await click(document.querySelector<HTMLElement>('.dt-project-more')!)
     const items = all('[role="menuitemradio"]')
     expect(items.map(item => item.querySelector('span')?.textContent)).toEqual(['Widgets', 'Other'])
+    // Each menu row shows the project's two repositories, not only its name.
+    expect(items.map(item => item.querySelector('.dt-mono')?.textContent)).toEqual(['acme/intake → acme/widgets', 'acme/intake → acme/other'])
     expect(items.map(item => item.getAttribute('aria-checked'))).toEqual(['false', 'true'])
     await click(items[0]!)
     expect(document.querySelector('.dt-project-menu')).toBeNull()
@@ -162,4 +164,97 @@ it('creates a project on its own page, cancels without a request, and returns to
   expect(posts()[1]!.body).not.toHaveProperty('worktreeRoot')
   expect(document.querySelector('.dt-project-tab[aria-selected="true"]')?.textContent).toBe('Plain')
   expect(server.requests.some(request => request.path === 'local/issues?project=p-fixture-2')).toBe(true)
+})
+
+const putRequests = () => server.requests.filter(request => request.method === 'PUT' && request.path.startsWith('local/projects/'))
+/** The project form's inputs, found by their labels; editing pre-fills them from the stored project. */
+const editButton = () => {
+  const button = document.querySelector<HTMLElement>('.dt-page-head .dt-project-edit')
+  if (!button) throw new Error('No Edit project button')
+  return button
+}
+const values = () => [zh['discuss.projectName'], zh['discuss.projectIntakeRepository'], zh['discuss.projectCodeRepository'],
+  zh['discuss.projectWorktreeRoot']].map(label => field(label).value)
+
+it('edits one project from the New requirement page head and leaves the other project\'s repositories alone', async () => {
+  server.localProjects = [WIDGETS, OTHER]
+  server.localIssues = [issue('q-widgets', 'p-widgets', 'Widgets requirement'), issue('q-other', 'p-other', 'Other requirement')]
+  at({ page: 'newRequirement' })
+  await mount()
+  // The New requirement page head shows the current project's two repositories and offers its edit entry.
+  expect(text()).toContain('acme/intake → acme/widgets')
+  expect(text()).toContain('/srv/worktrees')
+  await click(editButton())
+  // The edit page is its own route with the current project's values already filled in.
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
+  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees'])
+  expect(all('textarea')).toHaveLength(0)
+  await type(field(zh['discuss.projectName']), 'Widgets renamed')
+  await type(field(zh['discuss.projectCodeRepository']), 'acme/gadgets')
+  await click(zh['discuss.saveProject'])
+  // Only the edited project is written, and the update carries every field of its form.
+  expect(putRequests()).toHaveLength(1)
+  expect(putRequests()[0]).toMatchObject({ method: 'PUT', path: 'local/projects/p-widgets',
+    body: { name: 'Widgets renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/gadgets', worktreeRoot: '/srv/worktrees' } })
+  // Saving returns to Discuss with the renamed project current and its new chain in the page head.
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets renamed')
+  expect(text()).toContain('acme/intake → acme/gadgets')
+  expect(text()).toContain('acme/intake → acme/gadgets')
+  // The other project kept its own two repositories, in its page head and in the More menu alike.
+  await click(tab('Other'))
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Other')
+  expect(text()).toContain('acme/intake → acme/other')
+  expect(text()).not.toContain('acme/intake → acme/gadgets')
+  expect(server.localProjects.find(item => item.id === 'p-other'))
+    .toMatchObject({ name: 'Other', intakeRepository: 'acme/intake', codeRepository: 'acme/other' })
+  // Editing the other project later writes only that project.
+  await click(editButton())
+  expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', ''])
+  await type(field(zh['discuss.projectName']), 'Other renamed')
+  await click(zh['discuss.saveProject'])
+  expect(putRequests()).toHaveLength(2)
+  expect(putRequests()[1]).toMatchObject({ path: 'local/projects/p-other', body: { name: 'Other renamed', intakeRepository: 'acme/intake',
+    codeRepository: 'acme/other', worktreeRoot: '' } })
+  expect(server.localProjects.find(item => item.id === 'p-widgets'))
+    .toMatchObject({ name: 'Widgets renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/gadgets', worktreeRoot: '/srv/worktrees' })
+  expect(text()).toContain('acme/intake → acme/other')
+})
+
+it('keeps the edit page and its values when the update is refused, then clears an emptied worktree root', async () => {
+  server.localProjects = [{ ...WIDGETS }, OTHER]
+  at({ page: 'newRequirement' })
+  await mount()
+  await click(editButton())
+  await type(field(zh['discuss.projectName']), 'Widgets kept')
+  await type(field(zh['discuss.projectWorktreeRoot']), 'relative/root')
+  await click(zh['discuss.saveProject'])
+  // A refused save shows the existing localized refusal and leaves the person on the form with their edits intact.
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.projectWorktreeRoot'])
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
+  expect(values()).toEqual(['Widgets kept', 'acme/intake', 'acme/widgets', 'relative/root'])
+  expect(server.localProjects.find(item => item.id === 'p-widgets')).toMatchObject({ name: 'Widgets', worktreeRoot: '/srv/worktrees' })
+  // An emptied root is sent as an empty string, which clears the stored root.
+  await type(field(zh['discuss.projectWorktreeRoot']), '')
+  await click(zh['discuss.saveProject'])
+  expect(putRequests().at(-1)).toMatchObject({ path: 'local/projects/p-widgets',
+    body: { name: 'Widgets kept', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets', worktreeRoot: '' } })
+  expect(server.localProjects.find(item => item.id === 'p-widgets')).not.toHaveProperty('worktreeRoot')
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets kept')
+  expect(text()).not.toContain('/srv/worktrees')
+})
+
+it('leaves the edit page without a request from Cancel or Back', async () => {
+  server.localProjects = [WIDGETS, OTHER]
+  at({ page: 'newRequirement' })
+  await mount()
+  await click(editButton())
+  await type(field(zh['discuss.projectName']), 'Discarded')
+  await click(zh['cancel'])
+  expect(putRequests()).toHaveLength(0)
+  expect(server.localProjects.find(item => item.id === 'p-widgets')).toMatchObject({ name: 'Widgets' })
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
+  await click(editButton())
+  await click(document.querySelector<HTMLElement>('.dt-page-head button')!)
+  expect(putRequests()).toHaveLength(0)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
 })

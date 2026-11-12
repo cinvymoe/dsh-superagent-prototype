@@ -142,6 +142,8 @@ const TEXT = {
   'discuss.projectWorktreeRoot': ['worktree 根目录（可选，绝对路径）', 'Worktree root (optional, absolute path)'],
   'discuss.projectWorktreeRootHint': ['留空沿用执行目录的根目录。填写时必须已存在且可写，否则工单启动失败，不会回退到默认目录。', 'Empty keeps the Execution ticket directory root. A value must already exist and be writable, or the Ticket fails to launch instead of falling back to the default root.'],
   'discuss.createProject': ['创建项目', 'Create project'],
+  'discuss.editProject': ['编辑项目', 'Edit project'],
+  'discuss.saveProject': ['保存项目', 'Save project'],
   'discuss.noProjects': ['还没有项目。先创建一个项目并绑定执行仓库。', 'No projects yet. Create one and bind an execution repository.'],
   'discuss.project': ['项目', 'Project'],
   'discuss.requirements': ['需求列表', 'Requirements'],

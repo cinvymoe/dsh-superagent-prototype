@@ -92,10 +92,10 @@ it('shows only the current project and one description field on New requirement'
   expect(text()).toContain(zh['discuss.newSubtitle'])
   expect(text()).toContain('acme/widgets')
   // The page has no title text input (only the hidden image file picker), no requirement list and no back button, in
-  // particular none labelled Overview.
+  // particular none labelled Overview; its head carries only the entry that opens the current project's edit form.
   expect(all('#dt-page input').filter(element => (element as HTMLInputElement).type !== 'file')).toHaveLength(0)
   expect(all('.dt-cards')).toHaveLength(0)
-  expect(document.querySelector('.dt-page-head button')).toBeNull()
+  expect(all('.dt-page-head button').map(button => button.textContent?.trim())).toEqual([zh['discuss.editProject']])
   expect(all('#dt-page button').some(button => button.textContent?.trim() === zh['tab.overview'])).toBe(false)
   expect(text()).not.toContain('Existing requirement')
 })

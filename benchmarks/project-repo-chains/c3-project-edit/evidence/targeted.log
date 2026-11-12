@@ -1,0 +1,38 @@
+(node:1002755) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1002768) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-7da08cb013a1
+
+(node:1002821) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1002829) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1002822) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1002828) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1002835) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1002841) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1002847) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (14 tests) 45ms
+ ✓ tests/navigation.spec.ts (7 tests) 16ms
+(node:1002835) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1002821) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (6 tests) 212ms
+ ✓ tests/panel-discuss.spec.tsx (8 tests) 652ms
+ ✓ tests/panel-projects.spec.tsx (6 tests) 791ms
+ ✓ tests/panel-source.spec.tsx (18 tests) 2190ms
+   ✓ shows each Source's state on the Source status and opens its settings from a setup problem  313ms
+ ✓ tests/local-align.spec.ts (19 tests) 2688ms
+
+ Test Files  7 passed (7)
+      Tests  78 passed (78)
+   Start at  17:35:17
+   Duration  5.59s (transform 7.30s, setup 0ms, import 10.00s, tests 6.59s, environment 4.82s)
+
+exit=0

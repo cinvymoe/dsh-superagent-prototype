@@ -10,8 +10,9 @@ export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'prompts', 'deplo
 export type SettingsGroup = typeof SETTINGS_GROUPS[number]
 export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undefined }
   | { page: 'newRequirement'; id?: undefined; query?: undefined }
-  | { page: 'requirements'; id?: undefined; create?: true; query?: undefined }
-  | { page: 'requirements'; id: string; query?: undefined }
+  | { page: 'requirements'; id?: undefined; create?: true; edit?: undefined; query?: undefined }
+  | { page: 'requirements'; id?: undefined; create?: undefined; edit: string; query?: undefined }
+  | { page: 'requirements'; id: string; create?: undefined; edit?: undefined; query?: undefined }
   | { page: 'trigger'; id?: undefined; query?: { filter?: ThreadFilter } }
   | { page: 'trigger'; id: string; query?: { trigger?: string } }
   | { page: 'eval'; id?: undefined; query?: { filter?: DecisionFilter; window?: '24h' } }
@@ -25,6 +26,7 @@ export const setupPage = (place: SetupPlace): Route =>
   place === 'deployment' ? settingsRoute('deployment') : settingsRoute('source', { source: place })
 export const routeLabel = (t: T, route: Route): string =>
   'create' in route && route.create ? t('discuss.newProject')
+    : 'edit' in route && route.edit ? t('discuss.editProject')
     : route.id ? t(route.page === 'trigger' ? 'term.thread' : route.page === 'requirements' ? 'term.issue' : 'term.ticket')
     : t(`tab.${route.page}`)
 
@@ -35,8 +37,8 @@ function compact<Q extends object>(query: Q): Q | undefined {
 }
 /** Validate and normalize a stored route, dropping unrecognized query filters or removed tabs (such as the legacy `policy` tab). */
 export function parseRoute(value: unknown): Route | undefined {
-  const { page, id, query, create } = (value ?? {}) as { page?: unknown; id?: unknown; create?: unknown;
-    query?: Record<string, unknown> }
+  const { page, id, query, create, edit } = (value ?? {}) as { page?: unknown; id?: unknown; create?: unknown;
+    edit?: unknown; query?: Record<string, unknown> }
   const text = (name: string) => typeof query?.[name] === 'string' ? query[name] as string : undefined
   const record = typeof id === 'string' && id ? id : undefined
   switch (page) {
@@ -44,6 +46,7 @@ export function parseRoute(value: unknown): Route | undefined {
     case 'newRequirement': return { page }
     // The legacy Discuss tab stays readable: its detail, create page and list map onto the requirement pages.
     case 'requirements': case 'discuss': return record ? { page: 'requirements', id: record }
+      : typeof edit === 'string' && edit ? { page: 'requirements', edit }
       : create === true ? { page: 'requirements', create: true } : { page: 'requirements' }
     case 'trigger': return record ? { page, id: record, query: compact({ trigger: text('trigger') }) }
       : { page, query: compact({ filter: pick(THREAD_FILTERS, query?.filter) }) }

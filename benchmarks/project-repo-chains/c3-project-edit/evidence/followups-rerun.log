@@ -1,0 +1,25 @@
+(node:1000259) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1000301) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-7da08cb013a1
+
+(node:1000405) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1000405) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/followups.spec.ts (16 tests) 8626ms
+   ✓ delivers a follow-up to the worker and tells the main Session with a card, without an Eval  378ms
+   ✓ leaves a delivered follow-up to its ticket's worker: the main Session may stop the ticket on it, and route it only once handed back  506ms
+   ✓ costs the main Session one model call for a burst of follow-ups while it works, and two while it idles  468ms
+   ✓ lets a worker follow a related thread for context, which the main Session hears of without waking, and notes a ticket  1809ms
+   ✓ takes the message a follow-up answers from its Source kind, whichever kind it is  733ms
+   ✓ tells the main Session of a follow-up to an ended ticket once the ticket resumes, and not when it cannot  2823ms
+   ✓ tells the main Session nothing of a message it attached to an ended ticket, which resumes for it  337ms
+
+ Test Files  1 passed (1)
+      Tests  16 passed (16)
+   Start at  17:34:08
+   Duration  11.98s (transform 2.43s, setup 0ms, import 3.03s, tests 8.63s, environment 0ms)
+
+exit=0
