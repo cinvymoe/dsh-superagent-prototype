@@ -5,6 +5,7 @@
 - 分支：`agent/slice-9e69570faa5d`，基线 `40191e32`（含 PR #20/#21 的 `main`）
 - 实现：e2 派 `lane-T1-1`（subagent spawn，childId `089d05d5-c3bc-4864-8449-ddd6e973fedd`）在 ticket worktree 完成实现与定向自测；主会话负责复验、评审与证据落盘。
 - 评审日期：2026-11-12
+- 分支已 merge deployment `main` @ `32262807`（含 PR #24/#25/#26 的面板过滤、执行模式开关与消息倒序）；仅 `docs/005`、`docs/007` 冲突手工合并，merge 后按 main 的新夹具补 `roundId` 并重跑定向与全量。
 
 ## 变更范围
 
@@ -67,6 +68,9 @@
 | `pnpm vitest run tests/local.spec.ts tests/local-align.spec.ts tests/locales.spec.ts` | 3 files / 50 tests passed | `docs/issues/evidence/c1-align-rounds-targeted.log` |
 | `pnpm vitest run tests/panel-discuss.spec.tsx tests/http.spec.ts tests/docs.spec.ts` | 3 files / 38 tests passed（lane 实跑） | lane 报告；全量 check 覆盖 |
 | `env -u GIT_CONFIG_GLOBAL ... LC_ALL=C pnpm check` | 首轮 1300 passed / 2 个与本次改动无关的 5s 超时（`prompts`、`sources`，单跑 95 tests 全绿）；复跑 63 files / 1302 tests passed，build 成功，exit 0 | `docs/issues/evidence/c1-align-rounds-check.log`、`c1-align-rounds-check-retry.log` |
+| merge deployment `main` @ `32262807` 后 `pnpm typecheck` | exit 0 | `docs/issues/evidence/c1-align-rounds-merge-typecheck.log` |
+| merge 后定向 6 files（local/local-align/locales/panel-discuss/http/docs） | 99 tests passed | `docs/issues/evidence/c1-align-rounds-merge-targeted.log` |
+| merge 后全量 `pnpm check` | 64 files / 1327 tests passed，build 成功，exit 0 | `docs/issues/evidence/c1-align-rounds-check-postmerge.log` |
 | `git diff --check` | 无输出 | 提交前复核 |
 
 ## 架构影响
