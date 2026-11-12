@@ -2,7 +2,7 @@
 
 - Ticket: `7d197b3b2d9b27eb816cac184ca71255` (slice C2 of alignment `q-612052e8`)
 - Branch: `agent/slice-7d197b3b2d9b`
-- Base: `afab266e` (deployment `main`)
+- Base: `afab266e` (deployment `main`); deployment `main` @ `7a3c4401` merged before the merge request (conflicts resolved in api/http/local/locales/errors/docs, `pnpm check` 63 files / 1268 tests passing)
 - PR: https://github.com/cinvymoe/dsh-superagent-prototype/pull/14 (state OPEN, not merged by the agent)
 - Scope: `POST local/issues` carries up to four PNG/JPEG/WebP/GIF images (≤5 MiB each, base64 JSON), validates the whole set before creating anything, stores bytes under `<stateDir>/local-images/<issueId>/`, records `{id,name,mediaType,bytes}` on the issue, appends absolute paths to the requirement trigger text, serves stored bytes at `GET local/issues/:id/images/:imageId`, and keeps 128 KiB on every other route.
 
@@ -28,7 +28,7 @@ env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER
 git diff --check
 ```
 
-Expected: typecheck clean; targeted 6 files / 47 tests; full `pnpm check` passes (63 files / 1257 tests + build).
+Expected: typecheck clean; targeted 6 files / 49 tests; full `pnpm check` passes (63 files / 1268 tests + build) on the post-merge base.
 
 ## Visual evidence
 

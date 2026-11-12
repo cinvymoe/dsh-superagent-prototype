@@ -41,8 +41,8 @@ const openCreate = async () => {
   if (!button) throw new Error('No New project button')
   await click(button)
 }
-const PROJECT = { id: 'p-fixture', name: 'Widgets', repository: 'acme/widgets', createdAt: '2026-09-23T00:00:00Z',
-  updatedAt: '2026-09-23T00:00:00Z' }
+const PROJECT = { id: 'p-fixture', name: 'Widgets', chain: 'p-fixture', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets',
+  createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
 
 it('creates a project on its own page with an optional absolute worktree root and makes it current', async () => {
   at({ page: 'requirements' })
@@ -53,16 +53,18 @@ it('creates a project on its own page with an optional absolute worktree root an
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.newProject'])
   expect(all('.dt-cards')).toHaveLength(0)
   await type(input(zh['discuss.projectName']), 'Rooted')
-  await type(input(zh['discuss.projectRepository']), 'acme/rooted')
+  await type(input(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(input(zh['discuss.projectCodeRepository']), 'acme/rooted')
   await type(input(zh['discuss.projectWorktreeRoot']), '/srv/worktrees')
   expect(text()).toContain(zh['discuss.projectWorktreeRootHint'])
   await click(zh['discuss.createProject'])
   const projectRequest = server.requests.find(request => request.path === 'local/projects' && request.method === 'POST')!
-  expect(projectRequest).toMatchObject({ method: 'POST', body: { name: 'Rooted', repository: 'acme/rooted', worktreeRoot: '/srv/worktrees' } })
+  expect(projectRequest).toMatchObject({ method: 'POST', body: { name: 'Rooted', intakeRepository: 'acme/intake', codeRepository: 'acme/rooted',
+    worktreeRoot: '/srv/worktrees' } })
   // The new project is the current tab and its requirement list opens.
   expect(document.querySelector('.dt-project-tab[aria-selected="true"]')?.textContent).toBe('Rooted')
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Rooted')
-  expect(text()).toContain('acme/rooted')
+  expect(text()).toContain('acme/intake → acme/rooted')
   expect(text()).toContain('/srv/worktrees')
   expect(tab(zh['tab.requirements']).getAttribute('aria-selected')).toBe('true')
   expect(server.requests.some(request => request.path === 'local/issues?project=p-fixture')).toBe(true)
@@ -73,10 +75,11 @@ it('omits the worktree root from the payload when the field is left empty', asyn
   await mount()
   await openCreate()
   await type(input(zh['discuss.projectName']), 'Plain')
-  await type(input(zh['discuss.projectRepository']), 'acme/plain')
+  await type(input(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(input(zh['discuss.projectCodeRepository']), 'acme/plain')
   await click(zh['discuss.createProject'])
   const request = server.requests.find(entry => entry.path === 'local/projects' && entry.method === 'POST')!
-  expect(request.body).toEqual({ name: 'Plain', repository: 'acme/plain' })
+  expect(request.body).toEqual({ name: 'Plain', intakeRepository: 'acme/intake', codeRepository: 'acme/plain' })
   expect(request.body).not.toHaveProperty('worktreeRoot')
 })
 
@@ -205,11 +208,12 @@ it('omits a whitespace-only worktree root from the payload', async () => {
   await mount()
   await openCreate()
   await type(input(zh['discuss.projectName']), 'Spaced')
-  await type(input(zh['discuss.projectRepository']), 'acme/spaced')
+  await type(input(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(input(zh['discuss.projectCodeRepository']), 'acme/spaced')
   await type(input(zh['discuss.projectWorktreeRoot']), '   ')
   await click(zh['discuss.createProject'])
   const request = server.requests.find(entry => entry.path === 'local/projects' && entry.method === 'POST')!
-  expect(request.body).toEqual({ name: 'Spaced', repository: 'acme/spaced' })
+  expect(request.body).toEqual({ name: 'Spaced', intakeRepository: 'acme/intake', codeRepository: 'acme/spaced' })
   expect(request.body).not.toHaveProperty('worktreeRoot')
 })
 
@@ -218,7 +222,7 @@ it('shows the project worktree root on a requirement detail', async () => {
   server.localIssues = [localIssue('Rooted requirement')]
   at({ page: 'requirements', id: 'q-fixture' })
   await mount()
-  expect(text()).toContain('项目：Widgets · acme/widgets · /srv/worktrees')
+  expect(text()).toContain('项目：Widgets · acme/intake → acme/widgets · /srv/worktrees')
 })
 
 it('renders a legacy requirement whose project has no worktree root', async () => {
@@ -226,7 +230,7 @@ it('renders a legacy requirement whose project has no worktree root', async () =
   server.localIssues = [localIssue('Legacy requirement')]
   at({ page: 'requirements', id: 'q-fixture' })
   await mount()
-  expect(text()).toContain('项目：Widgets · acme/widgets')
+  expect(text()).toContain('项目：Widgets · acme/intake → acme/widgets')
   expect(text()).not.toContain('/srv/worktrees')
 })
 
@@ -235,7 +239,8 @@ it('shows the localized refusal when the worktree root is relative and stays on 
   await mount()
   await openCreate()
   await type(input(zh['discuss.projectName']), 'Relative')
-  await type(input(zh['discuss.projectRepository']), 'acme/relative')
+  await type(input(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(input(zh['discuss.projectCodeRepository']), 'acme/relative')
   await type(input(zh['discuss.projectWorktreeRoot']), 'relative/root')
   await click(zh['discuss.createProject'])
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.projectWorktreeRoot'])

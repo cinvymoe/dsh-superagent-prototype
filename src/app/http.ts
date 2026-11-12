@@ -28,6 +28,7 @@ import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import type { LocalIssues } from './local.ts'
+import type { Projects } from './projects.ts'
 import { REQUIREMENT_BODY_BYTES } from '../limits.ts'
 
 export interface HttpHost {
@@ -44,6 +45,7 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly local: LocalIssues
+  readonly projects: Projects
   dispatchPlan(issueId: string): Ticket[]
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
@@ -203,9 +205,16 @@ function routes(runtime: HttpHost): Routes {
     'GET tickets/:id': ({ params }) => ticketPage(runtime, params.id),
     'GET local/projects': () => ({ projects: runtime.local.projects() }),
     'POST local/projects': async ({ body }) => {
-      const input = z.object({ name: z.string().trim().min(1).max(80), repository: z.string().trim().min(3).max(200),
+      const input = z.object({ name: z.string().trim().min(1).max(80), intakeRepository: z.string().trim().min(3).max(200),
+        codeRepository: z.string().trim().min(3).max(200), worktreeRoot: z.string().trim().max(4096).optional() }).parse(await body())
+      return { project: await runtime.projects.create(input) }
+    },
+    'PUT local/projects/:id': async ({ params, body }) => {
+      const input = z.object({ name: z.string().trim().min(1).max(80).optional(),
+        intakeRepository: z.string().trim().min(3).max(200).optional(), codeRepository: z.string().trim().min(3).max(200).optional(),
         worktreeRoot: z.string().trim().max(4096).optional() }).parse(await body())
-      return { project: runtime.local.createProject(input) }
+      if (Object.keys(input).length === 0) throw new RouteError(400, 'No project field to update')
+      return { project: await runtime.projects.update(params.id, input) }
     },
     'GET local/issues': ({ query }) => {
       const project = typeof query?.project === 'string' && query.project ? query.project : undefined
