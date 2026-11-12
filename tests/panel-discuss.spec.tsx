@@ -689,6 +689,23 @@ it('offers Confirm and Send back only on the current proposed round and names th
   expect(posted).toMatchObject({ method: 'POST', body: { decision: 'confirm', roundId: 'al-2' } })
   // The fixture dispatches the current round only, so the decision above confirmed the round this page named.
   expect(server.dispatchedIssues.has('q-fixture')).toBe(true)
+  // A decided current round offers no further decision.
+  expect(all('.dt-actions button').filter(button => button.textContent?.trim() === zh['discuss.confirm'])).toHaveLength(0)
+  expect(all('.dt-actions button').filter(button => button.textContent?.trim() === zh['discuss.reject'])).toHaveLength(0)
+})
+
+it('shows the localized refusal when the page decides a round the host already replaced', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Stale round'), alignment: second, alignments: [first, second] }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  // A newer proposal lands after the page rendered round two, so the decision travels with the round it named.
+  const newer = { ...second, roundId: 'al-3', summary: '第三轮摘要' }
+  server.localIssues = [{ ...localIssue('Stale round'), alignment: newer, alignments: [first, second, newer] }]
+  await click(find(zh['discuss.confirm']))
+  expect(document.querySelector('.dt-toast')?.textContent)
+    .toBe(zh['userError.alignmentRoundStale'].replace('{round}', 'al-2'))
 })
 
 it('shows 待关闭 once every slice ticket of a confirmed alignment ended, 开放 while one is live and 已关闭 when closed', async () => {

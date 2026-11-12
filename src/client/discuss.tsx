@@ -102,8 +102,7 @@ function EarlierAlignmentRound({ round, ordinal }: { round: LocalAlignment; ordi
   const [open, setOpen] = useState(false)
   return <DisclosureRow open={open} onToggle={() => setOpen(!open)} icon={<Icon name="history" size={14} />}
     title={<span className="dt-round-label">{t('discuss.roundLabel', { round: ordinal })}</span>}
-    collapsedContent={<span className="dt-round-note">{statusTag(t, round)}<When at={round.proposedAt} />
-      {round.decidedAt && <When at={round.decidedAt} />}
+    collapsedContent={<span className="dt-round-note">{statusTag(t, round)}<When at={round.decidedAt ?? round.proposedAt} />
       {round.reason && <span>{t('discuss.reason')}：{round.reason}</span>}</span>}>
     <div className="dt-disclosure-body"><AlignmentBody round={round} /><AlignmentRoundMeta round={round} tag /></div>
   </DisclosureRow>

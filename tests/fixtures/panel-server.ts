@@ -448,7 +448,11 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (!issue) return refuse(404, 'Local issue not found')
     // Each proposal appends a round and supersedes an earlier undecided one, as the host keeps its round history.
     const rounds = issue.alignments ?? (issue.alignment ? [issue.alignment] : [])
-    const round: NonNullable<LocalIssue['alignment']> = { roundId: `al-${rounds.length + 1}`, status: 'proposed',
+    if (rounds.at(-1)?.status === 'confirmed') return refuse(400, 'Alignment is already confirmed', { code: 'alignmentConfirmed' })
+    const taken = new Set(rounds.map(item => item.roundId))
+    let ordinal = rounds.length + 1
+    while (taken.has(`al-${ordinal}`)) ordinal += 1
+    const round: NonNullable<LocalIssue['alignment']> = { roundId: `al-${ordinal}`, status: 'proposed',
       summary: body.summary ?? '', slices: body.slices ?? [], acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' }
     const alignments = [...rounds.map(item => item.status === 'proposed' ? { ...item, status: 'superseded' as const } : item), round]
     const next: LocalIssue = { ...issue, alignments, alignment: round }
@@ -462,7 +466,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (!issue || !current) return refuse(404, 'Local issue or alignment not found')
     // A decision names the round the page rendered; one left on an older round is refused, as the host does.
     if (body.roundId !== undefined && body.roundId !== current.roundId) {
-      return refuse(400, 'Alignment round is stale', { code: 'alignmentRoundStale' })
+      return refuse(400, 'Alignment round is stale', { code: 'alignmentRoundStale', values: { round: body.roundId } })
     }
     const decided = { ...current, status: body.decision === 'confirm' ? 'confirmed' as const : 'rejected' as const,
       decidedAt: '2026-09-23T00:00:00Z', ...(body.decision === 'reject' && body.reason ? { reason: body.reason } : {}) }
