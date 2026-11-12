@@ -2,7 +2,7 @@
 
 - Run: `run-mwdo34je-5`（execute，policy A1），issue `q-ebb66317:C1`
 - Ticket: `8e433136ac138a0e8a62fa57cb94a6b4`
-- 分支：`agent/slice-8e433136ac13`；实现基线 `c68e6e44`（ticket 起点），截图前已合入 `main` 至 `6ed5fde`（PR #18 合并后的 main head）
+- 分支：`agent/slice-8e433136ac13`；实现基线 `c68e6e44`（ticket 起点），截图前依次合入 `main` `6ed5fde`（PR #18）与 `40191e32`（PR #20/#21），Before = 合并目标 main `40191e32`
 - 实现 lane：`lane-C1-filter-1`（subagent `c0f2f3f7-5c7e-42f4-8615-8628150de545`，T2 / high），一次完成实现与定向验证；worker 复核后补英文文案断言、合并 main、跑全量与截图
 - 评审日期：2026-11-12
 
@@ -46,16 +46,16 @@
 | AC2 | 筛选行顺序与中英文正确；点击后 replace 更新路由（待处理不写 filter query）；只显示该桶且新到旧；全部显示当前项目所有需求 | 同一用例断言 pill 顺序与点击 `全部`/`已关闭`/`待处理` 后的行集合、顺序与 `sessionStorage` 路由（`query.filter` 与 stack 不增长，pending 无 query）；英文用例断言 en 四枚 pill 标签；`navigation.spec` 断言 `parseRoute` 的合法/未知/`pending` 规整 | PASS |
 | AC3 | 非默认筛选打开详情再返回保持筛选；在列表页切换项目保持筛选并按新项目重新取数 | `panel-discuss`：“keeps a non-default filter when a requirement detail returns to the list” 断言详情路由带 `query.filter`、返回后 pill 与行不变、路由仍为 `{page:'requirements',query:{filter:'confirmed'}}`；`panel-projects`：“keeps the requirement list when switching projects there…” 断言切换后 `已确认` pill 保持、请求 `local/issues?project=p-other`、只显示新项目行；截图 `after-closed.png` / `after-closed-back.png`、`after-switched-project.png` | PASS |
 | AC4 | 有需求但当前筛选为空显示新空态；完全没有需求保留原空态；详情页与新建需求页行为不变 | `panel-discuss`：“shows the filtered empty copy…”（仅已关闭时默认桶显示 `emptyFilter` 且不含 `empty`；清空后显示 `empty` 且不含 `emptyFilter`）；既有“returns from a requirement detail…”“opens a saved Discuss route…”“New requirement…”用例全部通过；详情仅新增返回目标，新建页未改 | PASS |
-| AC5 | `pnpm typecheck`、`pnpm test`（含更新后的 panel-discuss/panel-projects/navigation 与 locales 文案校验）、`pnpm build` 通过；`pnpm check` exit 0 | 定向 6 files / 61 tests（`evidence/c1-requirement-filter-targeted.log`）；全量 `pnpm check` = typecheck + 63 files / 1290 tests + Build complete，exit 0（`evidence/c1-requirement-filter-check.log`） | PASS |
+| AC5 | `pnpm typecheck`、`pnpm test`（含更新后的 panel-discuss/panel-projects/navigation 与 locales 文案校验）、`pnpm build` 通过；`pnpm check` exit 0 | 定向 6 files / 61 tests（`evidence/c1-requirement-filter-targeted.log`）；全量 `pnpm check` = typecheck + 63 files / 1298 tests + Build complete，exit 0（合入 main `40191e32` 后复跑）（`evidence/c1-requirement-filter-check.log`） | PASS |
 | AC6 | `docs/005-panel.md` Requirements 行写明四种筛选与默认待处理；未新增模块或测试文件；007 架构表不变 | `docs/005-panel.md` diff；`git status` 只有既有文件修改 + 新增证据/评审/基准文档；`docs.spec.ts` 的模块/测试表校验在未改 007 的前提下通过 | PASS |
-| AC7 | PR 描述含同视口、同主题、同一份种子数据的 Before/After 截图并标注基线与被改 head：默认列表、非默认筛选、详情返回后筛选保留 | `docs/evidence/c1-requirement-filter/`：`before-default.png`/`after-default.png`、`before-default.png`（基线无筛选行）/`after-closed.png`、`before-detail-back.png`/`after-closed-back.png`；Before = main `6ed5fde` 真实面板，After = 本分支 head 真实面板；1440×1100、浅色、zh-CN、同一份 SQLite 种子（2 项目 / 7 需求）；PR 描述逐对标注 | PASS |
+| AC7 | PR 描述含同视口、同主题、同一份种子数据的 Before/After 截图并标注基线与被改 head：默认列表、非默认筛选、详情返回后筛选保留 | `docs/evidence/c1-requirement-filter/`：`before-default.png`/`after-default.png`、`before-default.png`（基线无筛选行）/`after-closed.png`、`before-detail-back.png`/`after-closed-back.png`；Before = main `40191e32` 真实面板，After = 本分支 head 真实面板；1440×1100、浅色、zh-CN、同一份 SQLite 种子（2 项目 / 7 需求）；PR 描述逐对标注 | PASS |
 
 ### 评审发现与处置
 
 | # | 发现 | 处置 |
 | --- | --- | --- |
 | F-1 | 实现 lane 的定向用例只断言了中文 pill 文案，冻结标准要求中英文正确 | worker 在 `tests/panel-discuss.spec.tsx` 补 “names the requirement filters and the filtered empty copy in English as well”，并重跑定向与全量 |
-| F-2 | 实现分支基于旧 main（`c68e6e44`），截图前 main 已前进到 `6ed5fde` | 先提交切片，再 `git merge --no-edit FETCH_HEAD` 合入 main（无冲突），重跑 `pnpm check` 后再构建/截图，使 Before/After 只差本切片 |
+| F-2 | 实现分支基于旧 main（`c68e6e44`），交付时 main 已前进到 `6ed5fde`，随后又到 `40191e32`（PR #20/#21） | 先提交切片，再依次 `git merge --no-edit FETCH_HEAD` 合入 main（第二次仅 `docs/issues/benchmark` 符号链接冲突，保留本切片目标；其余自动合并），在最终合并树上重跑 `pnpm check`、重建并重截 Before/After，使两侧只差本切片 |
 | F-3 | 默认桶在首屏取数完成前会短暂显示 0 条与“还没有需求”以外的状态（既有 `data`-gated 空态逻辑） | 不改既有取数/空态时序；截图脚本改为等待列表/筛选行渲染后再截取，证据日志中最终状态一致（`after-default` 计数 3） |
 
 无未处置的评审意见；无范围蔓延。
@@ -70,8 +70,8 @@
 
 | 命令 | 结果 | 证据 |
 | --- | --- | --- |
-| `pnpm vitest run tests/panel-discuss.spec.tsx tests/panel-projects.spec.tsx tests/navigation.spec.ts tests/locales.spec.ts tests/docs.spec.ts tests/styles.spec.ts` | 6 files / 61 tests passed，exit 0 | `evidence/c1-requirement-filter-targeted.log` |
-| `env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check` | typecheck + 63 files / 1290 tests passed + Build complete，exit 0 | `evidence/c1-requirement-filter-check.log` |
+| `pnpm vitest run tests/panel-discuss.spec.tsx tests/panel-projects.spec.tsx tests/navigation.spec.ts tests/locales.spec.ts tests/docs.spec.ts tests/styles.spec.ts`（合入 main `40191e32` 后） | 6 files / 61 tests passed，exit 0 | `evidence/c1-requirement-filter-targeted.log` |
+| `env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check`（合入 main `40191e32` 后） | typecheck + 63 files / 1298 tests passed + Build complete，exit 0 | `evidence/c1-requirement-filter-check.log` |
 | `git diff --check` | 干净 | 本记录 |
 
 **已知环境限制**：宿主 worker 环境导出 `GIT_CONFIG_GLOBAL` 与 git 本地化错误信息，会让 `tests/environment.spec.ts` / `tests/runtime.spec.ts` 的少数断言失败（与既有回归案例 `benchmarks/project-repo-chains/c2-project-chains/environment.md` 记录一致）；按上面的 `env -u ... LC_ALL=C` 清理后全量全绿，与本切片无关。实现 lane 报告的三例失败即属此类，最终全量证据即清理后的运行。
@@ -80,7 +80,7 @@
 
 同一场景（项目 `Widgets` + `Billing`；`Widgets` 下 5 条需求：无对齐/已提议/已打回/已确认/已关闭，`Billing` 下 2 条），同一视口 1440×1100、浅色、zh-CN、同一份 SQLite 种子数据，真实 DSH 面板构建（系统 chromium headless / Playwright）。
 
-- **Before** = `cinvymoe/dsh-superagent-prototype` main `6ed5fdedd9fe4402ace61d26b042e608cfe973d7`
+- **Before** = `cinvymoe/dsh-superagent-prototype` main `40191e3261aa003c790032548c60f0597f57d228`（PR 的合并目标）
 - **After** = 本分支 head（见 PR 记录）
 
 | 场景 | 文件 |

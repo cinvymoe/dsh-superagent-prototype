@@ -1,14 +1,14 @@
 # C1 requirement filter · Before captures (baseline main)
-# Baseline: cinvymoe/dsh-superagent-prototype main @ 6ed5fdedd9fe4402ace61d26b042e608cfe973d7 (clone /tmp/c1-filter-baseline, pnpm install --frozen-lockfile && pnpm build)
+# Baseline: cinvymoe/dsh-superagent-prototype main @ 40191e3261aa003c790032548c60f0597f57d228 (the PR's merge target; clone /tmp/c1-filter-baseline, pnpm install --frozen-lockfile && pnpm build)
 # Profile: DSH profile c1req-before, stateDir /root/.dsh/state/c1req-before -> isolated SQLite seed (2 projects, 7 requirements)
 # URL: http://10.126.126.6:3121/ (token omitted)
 # Viewport 1440x1100, light, zh-CN, system /usr/bin/chromium headless via Playwright
 # Command: python3 /tmp/c1-capture.py <before url> /tmp/c1-shots before
 MODE before
-DEFAULT TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 需求列表 | 5 | 给需求列表加复制链接按钮 | 开放 | 待对齐 | 5小时前 | 0 个切片 | 为需求详情增加图片放大 | 开放 | 待审阅 | 5小时前 | 2 个切片 | 把工单结束原因写进列表 | 开放 | 已打回 | 5小时前 | 1 个切片 | 导出需求列表为 CSV | 开放 | 已确认 | 5小时前 | 1 个切片 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 5小时前 | 0 个切片
+DEFAULT TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 需求列表 | 5 | 给需求列表加复制链接按钮 | 开放 | 待对齐 | 6小时前 | 0 个切片 | 为需求详情增加图片放大 | 开放 | 待审阅 | 6小时前 | 2 个切片 | 把工单结束原因写进列表 | 开放 | 已打回 | 6小时前 | 1 个切片 | 导出需求列表为 CSV | 开放 | 已确认 | 6小时前 | 1 个切片 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 6小时前 | 0 个切片
 PILLS: []
-ROWS: [('给需求列表加复制链接按钮', '开放\n待对齐\n5小时前\n0 个切片'), ('为需求详情增加图片放大', '开放\n待审阅\n5小时前\n2 个切片'), ('把工单结束原因写进列表', '开放\n已打回\n5小时前\n1 个切片'), ('导出需求列表为 CSV', '开放\n已确认\n5小时前\n1 个切片'), ('旧版列表的三列布局', '已关闭\n待对齐\n5小时前\n0 个切片')]
-DETAIL TEXT: 返回需求列表 | 导出需求列表为 CSV | 需求详情与对齐审阅 | 开放 | 已确认 | 需求原文 | 提交人：local | 5小时前 | q-filter-a4 | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 导出需求列表为 CSV |  | 导出当前项目的全部需求，含状态与对齐结果。 |  | 对齐结果 | 已确认 |  | 只导出当前项目，默认按创建时间倒序。 |  | C1 | 导出当前项目需求 | full | 1 条验收标准 | 验收标准 | 1 | 空项目导出只有表头 | 5小时前 | 5小时前 | 消息记录 | 0 | 发表评论 | 关联工单 | 0 |  | 还没有派发工单。 |  | 关闭需求
-BACK TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 需求列表 | 5 | 给需求列表加复制链接按钮 | 开放 | 待对齐 | 5小时前 | 0 个切片 | 为需求详情增加图片放大 | 开放 | 待审阅 | 5小时前 | 2 个切片 | 把工单结束原因写进列表 | 开放 | 已打回 | 5小时前 | 1 个切片 | 导出需求列表为 CSV | 开放 | 已确认 | 5小时前 | 1 个切片 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 5小时前 | 0 个切片
+ROWS: [('给需求列表加复制链接按钮', '开放\n待对齐\n6小时前\n0 个切片'), ('为需求详情增加图片放大', '开放\n待审阅\n6小时前\n2 个切片'), ('把工单结束原因写进列表', '开放\n已打回\n6小时前\n1 个切片'), ('导出需求列表为 CSV', '开放\n已确认\n6小时前\n1 个切片'), ('旧版列表的三列布局', '已关闭\n待对齐\n6小时前\n0 个切片')]
+DETAIL TEXT: 返回需求列表 | 导出需求列表为 CSV | 需求详情与对齐审阅 | 开放 | 已确认 | 需求原文 | 提交人：local | 6小时前 | q-filter-a4 | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 导出需求列表为 CSV |  | 导出当前项目的全部需求，含状态与对齐结果。 |  | 对齐结果 | 已确认 |  | 只导出当前项目，默认按创建时间倒序。 |  | C1 | 导出当前项目需求 | full | 1 条验收标准 | 验收标准 | 1 | 空项目导出只有表头 | 6小时前 | 6小时前 | 消息记录 | 0 | 发表评论 | 关联工单 | 0 |  | 还没有派发工单。 |  | 关闭需求
+BACK TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 需求列表 | 5 | 给需求列表加复制链接按钮 | 开放 | 待对齐 | 6小时前 | 0 个切片 | 为需求详情增加图片放大 | 开放 | 待审阅 | 6小时前 | 2 个切片 | 把工单结束原因写进列表 | 开放 | 已打回 | 6小时前 | 1 个切片 | 导出需求列表为 CSV | 开放 | 已确认 | 6小时前 | 1 个切片 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 6小时前 | 0 个切片
 
 # Command exit status: 0

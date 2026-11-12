@@ -1,33 +1,34 @@
-(node:1377716) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+# Targeted run after merging main 40191e32
+(node:1410035) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:1377728) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1410049) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
  RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-8e433136ac13
 
-(node:1377782) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1410103) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:1377801) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1410102) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:1377783) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1410108) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:1377784) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1410110) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:1377802) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1410116) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:1377790) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1410122) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/styles.spec.ts (2 tests) 75ms
  ✓ tests/docs.spec.ts (14 tests) 48ms
- ✓ tests/styles.spec.ts (2 tests) 76ms
- ✓ tests/locales.spec.ts (6 tests) 10ms
+ ✓ tests/locales.spec.ts (6 tests) 14ms
  ✓ tests/navigation.spec.ts (8 tests) 16ms
- ✓ tests/panel-projects.spec.tsx (8 tests) 628ms
- ✓ tests/panel-discuss.spec.tsx (23 tests) 914ms
+ ✓ tests/panel-projects.spec.tsx (8 tests) 760ms
+ ✓ tests/panel-discuss.spec.tsx (23 tests) 1039ms
 
  Test Files  6 passed (6)
       Tests  61 passed (61)
-   Start at  23:27:01
-   Duration  3.16s (transform 2.00s, setup 0ms, import 2.92s, tests 1.69s, environment 2.67s)
+   Start at  23:48:21
+   Duration  3.55s (transform 2.31s, setup 0ms, import 3.40s, tests 1.95s, environment 2.71s)
 
 
 # Command exit status: 0

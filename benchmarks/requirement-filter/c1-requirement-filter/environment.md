@@ -13,7 +13,7 @@ env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_AUTHOR_NAME -u GIT_AUTHOR
 
 ## Panel captures
 
-- Baseline: `git clone` of `cinvymoe/dsh-superagent-prototype` main `6ed5fde` at `/tmp/c1-filter-baseline`, then `pnpm install --frozen-lockfile && pnpm build`.
+- Baseline: a `git clone` of `cinvymoe/dsh-superagent-prototype` main `40191e32` at `/tmp/c1-filter-baseline` (fetched to the PR merge target), then `pnpm install --frozen-lockfile && pnpm build`.
 - Two isolated DSH profiles copied from an existing web-profile skeleton: `c1req-before` links the baseline checkout, `c1req-after` links the ticket worktree after `pnpm check` (which rebuilds). Ports 3121/3122, one-shot state dirs `/root/.dsh/state/c1req-before|c1req-after`.
 - Both state dirs were seeded from one script (`/tmp/c1-seed.mjs`) that writes the same SQLite rows into a fresh database: `kv` (`schema`, `master-id`, `local-project:*`, `local-issue:*` with proposed/confirmed/rejected/closed alignments), plus matching `thread`, `trigger`, `trigger_thread` rows. Two projects (`Widgets`, `Billing`) and seven requirements; thread `pending` stays empty so no eval runs.
 - Servers: `node /root/.bun/bin/dsh --profile <name> --no-open`, printing the token URL; the panel opens at the sidebar entry `Superagent`.

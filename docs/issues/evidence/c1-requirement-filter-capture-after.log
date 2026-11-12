@@ -1,25 +1,25 @@
 # C1 requirement filter · After captures (branch head)
-# After: agent/slice-8e433136ac13 (merged main 6ed5fde + slice changes), pnpm check (rebuild) before capture
+# After: agent/slice-8e433136ac13 at the built merge of main 40191e32 + the slice changes (pnpm check rebuilds lib/ before capture)
 # Profile: DSH profile c1req-after, stateDir /root/.dsh/state/c1req-after -> identical SQLite seed (same 2 projects, 7 requirements as the baseline)
 # URL: http://10.126.126.6:3122/ (token omitted)
 # Viewport 1440x1100, light, zh-CN, system /usr/bin/chromium headless via Playwright
 # Command: python3 /tmp/c1-capture.py <after url> /tmp/c1-shots after
 MODE after
-DEFAULT TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 3 | 给需求列表加复制链接按钮 | 开放 | 待对齐 | 5小时前 | 0 个切片 | 为需求详情增加图片放大 | 开放 | 待审阅 | 5小时前 | 2 个切片 | 把工单结束原因写进列表 | 开放 | 已打回 | 5小时前 | 1 个切片
+DEFAULT TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 3 | 给需求列表加复制链接按钮 | 开放 | 待对齐 | 6小时前 | 0 个切片 | 为需求详情增加图片放大 | 开放 | 待审阅 | 6小时前 | 2 个切片 | 把工单结束原因写进列表 | 开放 | 已打回 | 6小时前 | 1 个切片
 PILLS: [('待处理', 'true'), ('已确认', 'false'), ('已关闭', 'false'), ('全部', 'false')]
-ROWS: [('给需求列表加复制链接按钮', '开放\n待对齐\n5小时前\n0 个切片'), ('为需求详情增加图片放大', '开放\n待审阅\n5小时前\n2 个切片'), ('把工单结束原因写进列表', '开放\n已打回\n5小时前\n1 个切片')]
-CLOSED TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 1 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 5小时前 | 0 个切片
+ROWS: [('给需求列表加复制链接按钮', '开放\n待对齐\n6小时前\n0 个切片'), ('为需求详情增加图片放大', '开放\n待审阅\n6小时前\n2 个切片'), ('把工单结束原因写进列表', '开放\n已打回\n6小时前\n1 个切片')]
+CLOSED TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 1 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 6小时前 | 0 个切片
 CLOSED PILLS: [('待处理', 'false'), ('已确认', 'false'), ('已关闭', 'true'), ('全部', 'false')]
-CLOSED ROWS: [('旧版列表的三列布局', '已关闭\n待对齐\n5小时前\n0 个切片')]
-DETAIL TEXT: 返回需求列表 | 旧版列表的三列布局 | 需求详情与对齐审阅 | 已关闭 | 待对齐 | 需求原文 | 提交人：local | 5小时前 | q-filter-a5 | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 旧版列表的三列布局 |  | 已被新的列表替换，关闭。 |  | 对齐结果 | 待对齐 |  | 还没有对齐结果。等待 Aligner 分析这条需求。 |  | 消息记录 | 0 | 发表评论 | 关联工单 | 0 |  | 还没有派发工单。
-BACK TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 1 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 5小时前 | 0 个切片
+CLOSED ROWS: [('旧版列表的三列布局', '已关闭\n待对齐\n6小时前\n0 个切片')]
+DETAIL TEXT: 返回需求列表 | 旧版列表的三列布局 | 需求详情与对齐审阅 | 已关闭 | 待对齐 | 需求原文 | 提交人：local | 6小时前 | q-filter-a5 | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 旧版列表的三列布局 |  | 已被新的列表替换，关闭。 |  | 对齐结果 | 待对齐 |  | 还没有对齐结果。等待 Aligner 分析这条需求。 |  | 消息记录 | 0 | 发表评论 | 关联工单 | 0 |  | 还没有派发工单。
+BACK TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 1 | 旧版列表的三列布局 | 已关闭 | 待对齐 | 6小时前 | 0 个切片
 BACK PILLS: [('待处理', 'false'), ('已确认', 'false'), ('已关闭', 'true'), ('全部', 'false')]
-BACK ROWS: [('旧版列表的三列布局', '已关闭\n待对齐\n5小时前\n0 个切片')]
+BACK ROWS: [('旧版列表的三列布局', '已关闭\n待对齐\n6小时前\n0 个切片')]
 SWITCH TEXT: Billing | 审阅对齐结果，确认或打回。 | acme/intake → acme/billing | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 1 | 旧账单表格 | 已关闭 | 待对齐 | 6小时前 | 0 个切片
 SWITCH PILLS: [('待处理', 'false'), ('已确认', 'false'), ('已关闭', 'true'), ('全部', 'false')]
 SWITCH ROWS: [('旧账单表格', '已关闭\n待对齐\n6小时前\n0 个切片')]
 ALL TEXT: Billing | 审阅对齐结果，确认或打回。 | acme/intake → acme/billing | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 2 | 账单页支持按月筛选 | 开放 | 待对齐 | 6小时前 | 0 个切片 | 旧账单表格 | 已关闭 | 待对齐 | 6小时前 | 0 个切片
 ALL ROWS: [('账单页支持按月筛选', '开放\n待对齐\n6小时前\n0 个切片'), ('旧账单表格', '已关闭\n待对齐\n6小时前\n0 个切片')]
-WIDGETS ALL ROWS: [('给需求列表加复制链接按钮', '开放\n待对齐\n5小时前\n0 个切片'), ('为需求详情增加图片放大', '开放\n待审阅\n5小时前\n2 个切片'), ('把工单结束原因写进列表', '开放\n已打回\n5小时前\n1 个切片'), ('导出需求列表为 CSV', '开放\n已确认\n5小时前\n1 个切片'), ('旧版列表的三列布局', '已关闭\n待对齐\n5小时前\n0 个切片')]
+WIDGETS ALL ROWS: [('给需求列表加复制链接按钮', '开放\n待对齐\n6小时前\n0 个切片'), ('为需求详情增加图片放大', '开放\n待审阅\n6小时前\n2 个切片'), ('把工单结束原因写进列表', '开放\n已打回\n6小时前\n1 个切片'), ('导出需求列表为 CSV', '开放\n已确认\n6小时前\n1 个切片'), ('旧版列表的三列布局', '已关闭\n待对齐\n6小时前\n0 个切片')]
 
 # Command exit status: 0
