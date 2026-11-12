@@ -221,6 +221,20 @@ it('shows the filtered empty copy for an empty bucket and the original copy for 
   expect(text()).not.toContain(zh['discuss.emptyFilter'])
 })
 
+it('names the requirement filters and the filtered empty copy in English as well', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Closed only'), state: 'closed' as const }]
+  at({ page: 'requirements' })
+  await mount()
+  await remount(en)
+  expect(all('.dt-filters .dt-pill').map(pill => pill.textContent)).toEqual([en['requirementFilter.pending'],
+    en['requirementFilter.confirmed'], en['requirementFilter.closed'], en['requirementFilter.all']])
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false'])
+  // The default bucket is empty here, so the English filtered copy names the filter rather than an empty project.
+  expect(text()).toContain(en['discuss.emptyFilter'])
+  expect(text()).not.toContain(en['discuss.empty'])
+})
+
 it('returns from a requirement detail to the requirement list rather than the overview', async () => {
   server.localProjects = [PROJECT]
   server.localIssues = [localIssue('Only requirement')]
