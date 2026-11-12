@@ -342,6 +342,9 @@ const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET state': { answer: stateView },
+  // The running checkout is read-only and no panel page polls it yet; the fake answers an available checkout.
+  'GET deployment/checkout': { answer: () => ({ path: '/srv/dsh-superagent', repository: 'acme/widgets', branch: 'main',
+    head: '0123456789abcdef0123456789abcdef01234567', dirty: false, available: true, reasons: [], restartRequired: false }) },
   'GET overview': { answer: overviewView },
   'GET search': { query: ['q'], answer: async ({ query }) => {
     const q = query.q ?? ''

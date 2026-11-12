@@ -1,0 +1,31 @@
+(node:1457085) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1457116) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/get-deployment-checkout-2b9bf67f6fd8
+
+(node:1457169) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/checkout.spec.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/checkout.spec.ts [ tests/checkout.spec.ts ]
+Error: Cannot find module '../src/app/checkout.ts' imported from /data/project/workspace/dsh-worktrees/get-deployment-checkout-2b9bf67f6fd8/tests/checkout.spec.ts
+ ❯ tests/checkout.spec.ts:9:1
+      7| import { promisify } from 'node:util'
+      8| import { afterEach, beforeEach, describe, expect, it, vi } from 'vites…
+      9| import { CHECKOUT_GIT, CHECKOUT_REASONS, Checkout, checkoutReasons, re…
+       | ^
+     10|   from '../src/app/checkout.ts'
+     11| import { registerHttp, type HttpHost } from '../src/app/http.ts'
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  00:28:30
+   Duration  337ms (transform 77ms, setup 0ms, import 0ms, tests 0ms, environment 0ms)
+
