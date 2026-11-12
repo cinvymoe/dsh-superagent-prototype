@@ -1,7 +1,7 @@
 /** The domain Engine: the single entry point of the core, and the role interfaces its callers receive. */
 import { UserError } from './errors.ts'
 import { isoTime, liveTicket, threadKey } from './model.ts'
-import type { ActorRef, ChannelRef, Decision, PlanSlice, PolicyEffect, ThreadRef, Ticket, Trigger } from './model.ts'
+import type { ActorRef, ChannelRef, Decision, ExecutionStrategy, PlanSlice, PolicyEffect, ThreadRef, Ticket, Trigger } from './model.ts'
 import type { Candidate, Repositories } from './ports.ts'
 import type { EngineOptions } from './part.ts'
 import { Assignments, type WorkerReport } from './assignments.ts'
@@ -89,10 +89,13 @@ export class Engine {
   /** The candidate of the Eval that holds a Trigger, as its assessor sees it; undefined while no Eval holds it. */
   candidate(triggerId: string): Candidate | undefined { return this.evals.candidate(triggerId) }
   /**
-   * Dispatch a confirmed requirement plan: create one execution ticket per slice, keyed by issue and slice, and start it. A
-   * repeated call reuses the tickets it made, and a slice's ticket waits for its dependencies to end before it launches.
+   * Dispatch a confirmed requirement plan: create one execution ticket per slice, keyed by issue and slice, and start it. Each
+   * ticket pins the execution strategy it is dispatched under (`input.execution`, or the native default). A repeated call
+   * reuses the tickets it made, keeping the strategy each pinned, and a slice's ticket waits for its dependencies to end
+   * before it launches.
    */
-  acceptPlan(thread: ThreadRef, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[] }): Ticket[] {
+  acceptPlan(thread: ThreadRef, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[];
+    execution?: ExecutionStrategy }): Ticket[] {
     return this.repo.atomic(() => {
       const stored = this.repo.threads.get(threadKey(thread))
       if (!stored) throw new UserError('unknownTrigger')

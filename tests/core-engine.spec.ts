@@ -296,20 +296,39 @@ describe('plan dispatch', () => {
     const tickets = h.engine.acceptPlan({ source: 'chat', id: 't1' }, { issueId: 'q-1', triggerIds: ['1'], actor: member,
       slices: [slice('C1'), slice('C2', ['C1'])] })
     expect(tickets.map(ticket => [ticket.plan, ticket.mode, ticket.dependsOn])).toEqual([
-      [{ issueId: 'q-1', sliceId: 'C1', acceptance: ['test'] }, 'work', undefined],
-      [{ issueId: 'q-1', sliceId: 'C2', acceptance: ['test'] }, 'work', [key('ticket', 'plan', 'q-1', 'C1')]],
+      [{ issueId: 'q-1', sliceId: 'C1', acceptance: ['test'], execution: { mode: 'native', version: 'execution-v1' } }, 'work', undefined],
+      [{ issueId: 'q-1', sliceId: 'C2', acceptance: ['test'], execution: { mode: 'native', version: 'execution-v1' } }, 'work',
+        [key('ticket', 'plan', 'q-1', 'C1')]],
     ])
     expect(tickets.map(ticket => ticket.title)).toEqual(['C1 · Slice C1', 'C2 · Slice C2'])
     expect(h.repo.threads.get('chat:t1')?.subscriptions).toEqual(tickets.map(ticket => ticket.id))
     expect(h.executor.start).toHaveBeenCalledTimes(2)
   })
-  it('reuses the tickets a repeated confirmation would dispatch again', () => {
+  it('pins the execution strategy a confirmation passes to every slice ticket it creates', () => {
+    const h = harness()
+    h.engine.receive(trigger('1')); h.pump()
+    const execution = { mode: 'feature-exec' as const, version: 'execution-v1' }
+    const tickets = h.engine.acceptPlan({ source: 'chat', id: 't1' }, { issueId: 'q-1', triggerIds: ['1'], actor: member, execution,
+      slices: [slice('C1'), slice('C2', ['C1'])] })
+    expect(tickets.map(ticket => ticket.plan?.execution)).toEqual([execution, execution])
+    expect(tickets.map(ticket => h.repo.tickets.get(ticket.id)?.plan?.execution)).toEqual([execution, execution])
+  })
+  it('pins an explicitly passed native strategy instead of relying on the default', () => {
+    const h = harness()
+    h.engine.receive(trigger('1')); h.pump()
+    const tickets = h.engine.acceptPlan({ source: 'chat', id: 't1' }, { issueId: 'q-1', triggerIds: ['1'], actor: member,
+      execution: { mode: 'native', version: 'execution-v1' }, slices: [slice('C1')] })
+    expect(tickets[0]!.plan?.execution).toEqual({ mode: 'native', version: 'execution-v1' })
+  })
+  it('reuses the tickets a repeated confirmation would dispatch again and keeps the strategy each pinned', () => {
     const h = harness()
     h.engine.receive(trigger('1')); h.pump()
     const input = { issueId: 'q-1', triggerIds: ['1'], actor: member, slices: [slice('C1')] }
-    const first = h.engine.acceptPlan({ source: 'chat', id: 't1' }, input)
-    const second = h.engine.acceptPlan({ source: 'chat', id: 't1' }, input)
+    const first = h.engine.acceptPlan({ source: 'chat', id: 't1' }, { ...input, execution: { mode: 'native', version: 'execution-v1' } })
+    const second = h.engine.acceptPlan({ source: 'chat', id: 't1' }, { ...input, execution: { mode: 'feature-exec', version: 'execution-v1' } })
     expect(second.map(ticket => ticket.id)).toEqual(first.map(ticket => ticket.id))
+    expect(second[0]!.plan?.execution).toEqual({ mode: 'native', version: 'execution-v1' })
+    expect(h.repo.tickets.get(first[0]!.id)?.plan?.execution).toEqual({ mode: 'native', version: 'execution-v1' })
     expect(h.repo.tickets.list()).toHaveLength(1)
     expect(h.executor.start).toHaveBeenCalledOnce()
   })
