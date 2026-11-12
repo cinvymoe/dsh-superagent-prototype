@@ -1,0 +1,26 @@
+$ pnpm vitest run tests/local.spec.ts tests/local-align.spec.ts tests/locales.spec.ts
+(node:1478558) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1478606) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-9e69570faa5d
+
+(node:1478674) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1478675) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1478681) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/locales.spec.ts (6 tests) 10ms
+(node:1478675) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1478674) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (16 tests) 566ms
+ ✓ tests/local-align.spec.ts (28 tests) 4041ms
+
+ Test Files  3 passed (3)
+      Tests  50 passed (50)
+   Start at  00:38:02
+   Duration  5.69s (transform 2.06s, setup 0ms, import 3.07s, tests 4.62s, environment 1ms)
+
+exit=0

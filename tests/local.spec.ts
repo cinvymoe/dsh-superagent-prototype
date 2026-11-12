@@ -1,11 +1,13 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LocalIssues, requirementTitle } from '../src/app/local.ts'
+import { LocalQuestions, QUESTION_LIMIT, type TicketAnswers } from '../src/app/local-questions.ts'
 import { Store } from '../src/app/store.ts'
+import { KV } from '../src/kv.ts'
 import type { Ticket, Trigger } from '../src/core/index.ts'
-import { requirementExecutionMode, type LocalImageInput } from '../src/sources/local-format.ts'
+import { alignmentRounds, currentAlignment, requirementExecutionMode, type LocalImageInput } from '../src/sources/local-format.ts'
 
 
 /** A 1x1 transparent PNG, a 1x1 GIF, a WebP signature and a minimal JPEG header; enough to prove each media type. */
@@ -79,12 +81,71 @@ describe('the local issue board', () => {
     expect(issues.decide(issue.id, 'confirm')).toBeUndefined()
     const proposed = issues.propose(issue.id, { summary: 'Two slices', acceptance: ['typecheck'],
       slices: [{ id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' }] })
-    expect(proposed?.alignment).toMatchObject({ status: 'proposed', summary: 'Two slices', acceptance: ['typecheck'] })
+    expect(proposed?.alignment).toMatchObject({ roundId: 'al-1', status: 'proposed', summary: 'Two slices', acceptance: ['typecheck'] })
     const confirmed = issues.decide(issue.id, 'confirm')
     expect(confirmed?.alignment).toMatchObject({ status: 'confirmed' })
     expect(confirmed?.alignment?.decidedAt).toBeTruthy()
     const rejected = issues.decide(issue.id, 'reject', 'Needs a narrower scope')
     expect(rejected?.alignment).toMatchObject({ status: 'rejected', reason: 'Needs a narrower scope' })
+  })
+
+  it('keeps every alignment round, supersedes an undecided one, and posts a rejection back to the thread once', () => {
+    const { issues, triggers, project, store } = setup()
+    const issue = issues.create({ title: 'Rounds', project: project.id })
+    const slice = { id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
+    const first = issues.propose(issue.id, { summary: 'First', slices: [slice] })!
+    expect(alignmentRounds(first).map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:proposed'])
+    // A second proposal supersedes the undecided round and mirrors the newest one in `alignment`.
+    const second = issues.propose(issue.id, { summary: 'Second', slices: [slice] })!
+    expect(second.alignments?.map(round => round.status)).toEqual(['superseded', 'proposed'])
+    expect(second.alignment).toEqual(second.alignments?.at(-1))
+    expect(second.alignment).toMatchObject({ roundId: 'al-2', summary: 'Second' })
+    expect(currentAlignment(second)).toBe(second.alignment)
+    // Rejecting writes the reason and tells the requirement's Thread as a human local message...
+    const rejected = issues.decide(issue.id, 'reject', '缩小范围')!
+    expect(rejected.alignments?.map(round => round.status)).toEqual(['superseded', 'rejected'])
+    expect(rejected.alignment).toMatchObject({ roundId: 'al-2', status: 'rejected', reason: '缩小范围' })
+    expect(triggers.at(-1)).toMatchObject({ source: 'local', human: true })
+    expect(triggers.at(-1)!.text).toContain('缩小范围')
+    const told = triggers.length
+    // ...once per round: a repeated rejection of the same round records the decision but posts no second message.
+    issues.decide(issue.id, 'reject', '缩小范围')
+    expect(triggers).toHaveLength(told)
+    // A third proposal appends to the history instead of replacing it; the rejected round keeps its reason.
+    const third = issues.propose(issue.id, { summary: 'Third', slices: [slice] })!
+    expect(third.alignments?.map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:superseded', 'al-2:rejected', 'al-3:proposed'])
+    expect(third.alignment).toEqual(third.alignments?.at(-1))
+    // `alignment` is the mirror, never the source of truth: the stored record keeps the whole history in step.
+    expect(store.get(KV.local.issue(issue.id))?.alignments).toHaveLength(3)
+  })
+
+  it('reads a record written before rounds existed as one round and proposes the second', () => {
+    const { issues, store, project } = setup()
+    const issue = issues.create({ title: 'Legacy alignment', project: project.id })
+    // A record from before round ids existed holds only the single `alignment` slot.
+    store.set(KV.local.issue(issue.id), { ...issue, alignment: { status: 'proposed', summary: 'Legacy', slices: [],
+      acceptance: [], proposedAt: '2026-09-01T00:00:00Z' } as never })
+    const read = issues.get(issue.id)!
+    expect(alignmentRounds(read)).toHaveLength(1)
+    expect(read.alignments).toHaveLength(1)
+    expect(read.alignment).toMatchObject({ roundId: 'al-1', status: 'proposed' })
+    const next = issues.propose(issue.id, { summary: 'Second', slices: [] })!
+    expect(next.alignments?.map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:superseded', 'al-2:proposed'])
+    expect(next.alignment).toEqual(next.alignments?.at(-1))
+  })
+
+  it('refuses a proposal once the current round is confirmed and leaves the history unchanged', () => {
+    const { issues, project } = setup()
+    const issue = issues.create({ title: 'Frozen alignment', project: project.id })
+    const slice = { id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
+    issues.propose(issue.id, { summary: 'Only', slices: [slice] })
+    const confirmed = issues.decide(issue.id, 'confirm')!
+    // Confirming again is idempotent: the recorded decision time stays.
+    expect(issues.decide(issue.id, 'confirm')?.alignment?.decidedAt).toBe(confirmed.alignment?.decidedAt)
+    let code: unknown
+    try { issues.propose(issue.id, { summary: 'Again', slices: [slice] }) } catch (error) { code = (error as { code?: unknown }).code }
+    expect(code).toBe('alignmentConfirmed')
+    expect(issues.get(issue.id)?.alignments).toHaveLength(1)
   })
 
   it('binds requirements to projects and rejects unknown or malformed projects', () => {
@@ -203,5 +264,108 @@ describe('the local issue board', () => {
     store.tickets.save({ id: 't-lock', plan: { issueId: issue.id, sliceId: 'C1' } } as unknown as Ticket)
     expect(() => issues.setExecution(issue.id, 'native')).toThrow('A requirement that has dispatched tickets keeps its execution mode')
     expect(issues.get(issue.id)?.execution).toBe('feature-exec')
+  })
+})
+
+/** Questions about a requirement's dispatched Tickets: recorded on the requirement, answered through a port, retried. */
+describe('requirement questions', () => {
+  const at = '2026-09-01T00:00:00.000Z'
+  const lifetime = new AbortController().signal
+  const setup = (ask: TicketAnswers['ask']) => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-superagent-local-'))
+    directories.push(directory)
+    const store = new Store(join(directory, 'orchestrator.sqlite'))
+    const issues = new LocalIssues({ store, stateDir: directory, receive: () => ({ kind: 'stored' }) as never })
+    const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
+    const issue = issues.create({ title: 'Ask about a dispatched ticket', project: project.id })
+    const questions = new LocalQuestions({ store, local: issues, answers: { ask }, lifetime, now: () => at })
+    return { issues, questions, store, issue }
+  }
+  /** A dispatched Ticket of `issueId`, whose worker Session started unless `started` is false. */
+  const ticket = (issueId: string, started = true): Ticket => ({ id: 't-x', plan: { issueId },
+    assignments: [{ id: 'a-1', state: 'running', createdAt: at, ...(started ? { startedAt: at } : {}) }] } as unknown as Ticket)
+
+  it('records a question as asked at once and answers it on the requirement in the background', async () => {
+    const ask = vi.fn(async () => ({ ok: true as const, answer: 'The worker retried a flaky check.' }))
+    const { issues, questions, store, issue } = setup(ask)
+    const dispatched = ticket(issue.id)
+    store.tickets.save(dispatched)
+    const asked = questions.ask(issue.id, dispatched.id, '  Why did this fail?  ')!
+    expect(asked.question).toMatchObject({ ticket: dispatched.id, text: 'Why did this fail?', status: 'asked', askedAt: at })
+    expect(asked.question.id).toMatch(/^qn-[0-9a-f]{8}$/)
+    expect(issues.get(issue.id)!.questions).toEqual([asked.question])
+    // The request path never reaches the port: recording `asked` returns first.
+    expect(ask).not.toHaveBeenCalled()
+    await questions.idle()
+    expect(ask).toHaveBeenCalledWith(dispatched, 'Why did this fail?', { signal: lifetime })
+    const stored = issues.get(issue.id)!.questions![0]!
+    expect(stored).toMatchObject({ status: 'answered', answer: 'The worker retried a flaky check.', answeredAt: at })
+    expect(stored.error).toBeUndefined()
+  })
+
+  it('refuses a question about a Ticket that this requirement did not dispatch', () => {
+    const ask = vi.fn()
+    const { issues, questions, store, issue } = setup(ask as unknown as TicketAnswers['ask'])
+    store.tickets.save(ticket('q-other'))
+    store.tickets.save({ id: 't-planless', plan: undefined, assignments: [{ id: 'a-1', state: 'running', createdAt: at, startedAt: at }] } as unknown as Ticket)
+    expect(() => questions.ask(issue.id, 't-x', 'Why?')).toThrow('dispatched Tickets')
+    expect(() => questions.ask(issue.id, 't-planless', 'Why?')).toThrow('dispatched Tickets')
+    expect(ask).not.toHaveBeenCalled()
+    expect(issues.get(issue.id)).toEqual(issue)
+  })
+
+  it('refuses a question about a Ticket whose worker Session never started', () => {
+    const ask = vi.fn()
+    const { issues, questions, store, issue } = setup(ask as unknown as TicketAnswers['ask'])
+    store.tickets.save(ticket(issue.id, false))
+    expect(() => questions.ask(issue.id, 't-x', 'Why?')).toThrow('has not started its worker Session')
+    expect(ask).not.toHaveBeenCalled()
+    expect(issues.get(issue.id)).toEqual(issue)
+  })
+
+  it('records a failed question with its reason, retries it under the same record and refuses retrying an answer', async () => {
+    const ask = vi.fn<TicketAnswers['ask']>(async () => ({ ok: false, reason: 'timeout', message: 'The answer did not end within 120000ms' }))
+    const { issues, questions, store, issue } = setup(ask)
+    store.tickets.save(ticket(issue.id))
+    const asked = questions.ask(issue.id, 't-x', 'Why did this fail?')!
+    await questions.idle()
+    const failed = issues.get(issue.id)!.questions![0]!
+    expect(failed).toMatchObject({ id: asked.question.id, status: 'failed', answeredAt: at })
+    expect(failed.error).toContain('did not end within 120000ms')
+    // A retry re-queues the same record rather than appending a new one, and clears the previous failure.
+    ask.mockResolvedValueOnce({ ok: true as const, answer: 'It was a flaky check.' })
+    const retried = questions.retry(issue.id, asked.question.id)!
+    expect(retried.question).toMatchObject({ id: asked.question.id, status: 'asked', askedAt: at })
+    expect(retried.question.error).toBeUndefined()
+    expect(retried.question.answer).toBeUndefined()
+    expect(issues.get(issue.id)!.questions).toHaveLength(1)
+    await questions.idle()
+    expect(issues.get(issue.id)!.questions![0]).toMatchObject({ status: 'answered', answer: 'It was a flaky check.' })
+    expect(() => questions.retry(issue.id, asked.question.id)).toThrow('Only a failed question can be retried')
+    // Unknown requirements and questions read as absent rather than refused.
+    expect(questions.retry('q-unknown', asked.question.id)).toBeUndefined()
+    expect(questions.retry(issue.id, 'qn-unknown')).toBeUndefined()
+  })
+
+  it('records a port that throws as a failure instead of leaving the question waiting', async () => {
+    const ask = vi.fn(async () => { throw new Error('the forked Session could not be reached') })
+    const { issues, questions, store, issue } = setup(ask)
+    store.tickets.save(ticket(issue.id))
+    questions.ask(issue.id, 't-x', 'Why did this fail?')
+    await questions.idle()
+    expect(issues.get(issue.id)!.questions![0]).toMatchObject({ status: 'failed' })
+    expect(issues.get(issue.id)!.questions![0]!.error).toContain('the forked Session could not be reached')
+  })
+
+  it('refuses a question once the requirement keeps the limit of them', () => {
+    const ask = vi.fn()
+    const { issues, questions, store, issue } = setup(ask as unknown as TicketAnswers['ask'])
+    store.tickets.save(ticket(issue.id))
+    const kept = Array.from({ length: QUESTION_LIMIT }, (_, index) => ({ id: `qn-${String(index).padStart(8, '0')}`, ticket: 't-x',
+      text: `Question ${index}`, status: 'answered' as const, askedAt: at, answeredAt: at, answer: `Answer ${index}` }))
+    issues.putIssue({ ...issue, questions: kept })
+    expect(() => questions.ask(issue.id, 't-x', 'One too many')).toThrow(`at most ${QUESTION_LIMIT} questions`)
+    expect(ask).not.toHaveBeenCalled()
+    expect(issues.get(issue.id)!.questions).toHaveLength(QUESTION_LIMIT)
   })
 })

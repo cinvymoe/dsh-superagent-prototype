@@ -70,6 +70,22 @@ export type Rule = z.infer<typeof RuleSchema>
 export const RoleModelSchema = z.object({ provider: z.string().trim().min(1), model: z.string().trim().min(1), reasoningEffort: z.string().trim().min(1).optional() }).strict()
 export type RoleModel = z.infer<typeof RoleModelSchema>
 
+/** The three Agent roles a person configures; an Executor Session's subagents inherit its tools. */
+export const AGENT_ROLES = ['main', 'aligner', 'executor'] as const
+export type AgentRole = typeof AGENT_ROLES[number]
+/** One role's overrides: its model when set (null inherits the role's default model), and the optional tools it turns off. */
+export const AgentRoleConfigSchema = z.object({
+  model: RoleModelSchema.nullable().default(null),
+  disabledTools: z.array(z.string().trim().min(1).max(LIMITS.toolName)).default([]),
+}).strict()
+/** The three roles' overrides; reading stays lenient, so a tool name the catalog dropped is still accepted here. */
+export const AgentsConfigSchema = z.object({
+  main: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),
+  aligner: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),
+  executor: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),
+}).strict()
+export type AgentsConfig = z.infer<typeof AgentsConfigSchema>
+
 export const AllowedSchema = z.object({ id: z.string().trim().min(1).max(200), name: z.string().trim().max(100).optional() }).strict()
 const Weak = z.enum(['inferred', 'ignore'])
 export const AdmissionRowSchema: z.ZodType<AdmissionRow> = z.object({ listedUnaddressed: Weak.optional(), unlistedAddressed: z.enum(['explicit', 'inferred', 'ignore']).optional(), unlistedUnaddressed: Weak.optional() }).strict()
@@ -102,9 +118,10 @@ export const SettingsSchema = z.object({
   policy: PolicyConfigSchema.default(() => PolicyConfigSchema.parse({})),
   eval: EvalConfigSchema.default(() => EvalConfigSchema.parse({})),
   executor: ExecutorConfigSchema.default(() => ExecutorConfigSchema.parse({})),
+  agents: AgentsConfigSchema.default(() => AgentsConfigSchema.parse({})),
 }).strict()
 export type Settings = z.infer<typeof SettingsSchema>
-export type SettingsBlock = 'policy' | 'eval' | 'executor' | `source:${string}`
+export type SettingsBlock = 'policy' | 'eval' | 'executor' | 'agents' | `source:${string}`
 export type SettingsSave = SettingsBlock | 'pause'
 export type SettingsOrigin = 'panel' | 'tool' | 'sync'
 

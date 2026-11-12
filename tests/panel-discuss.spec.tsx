@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
-import { usePanel, mount, remount, all, click, settle, type, text, at, tab } from './fixtures/panel.tsx'
+import { usePanel, mount, remount, all, click, find, settle, type, text, at, tab } from './fixtures/panel.tsx'
 import { localComment, localIssue, localReply, server, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
 
 usePanel()
@@ -59,6 +59,23 @@ const commentButton = (): HTMLButtonElement => {
 const messages = (): (string | null)[] => all('.dt-timeline .dt-md').map(node => node.textContent)
 /** Whether `first` renders before `second` in the document. */
 const precedes = (first: Element, second: Element) => !!(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
+/** The linked Tickets section of a requirement detail, found by its localized heading. */
+const ticketSection = (dictionary: Record<string, string>): HTMLElement => {
+  const match = all('.dt-section').find(section => section.querySelector('.dt-section-name')?.textContent
+    === dictionary['discuss.tickets'])
+  if (!match) throw new Error('No linked Tickets section')
+  return match
+}
+/** The linked Ticket rows of a requirement detail, in the order the host returns them. */
+const ticketRows = (dictionary: Record<string, string>) => [...ticketSection(dictionary).querySelectorAll<HTMLElement>('.dt-row')]
+/** The button whose text is exactly `label` inside `row`. */
+const rowButton = (row: HTMLElement, label: string): HTMLButtonElement | undefined =>
+  [...row.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.trim() === label)
+/** The question events of the message timeline, in the order they render. */
+const questionEvents = () => all('.dt-timeline .dt-question')
+/** A fixture requirement thread that carries exactly the given linked Tickets and no thread messages. */
+const withTickets = (...tickets: ReturnType<typeof ticketSummary>[]) =>
+  () => ({ ...threadSummary(), correlated: [], decisions: [], earlier: null, context: [], timeline: [], tickets })
 
 it('creates a project on its own page with an optional absolute worktree root and makes it current', async () => {
   at({ page: 'requirements' })
@@ -140,7 +157,7 @@ it('keeps submission disabled while the description is blank and submits the des
 it('lists the current project requirements newest first with their tags, time and slice count', async () => {
   const slice = { id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
   const newer = { ...localIssue('Newer requirement'), id: 'q-newer', createdAt: '2026-09-23T00:00:00Z',
-    alignment: { status: 'proposed' as const, summary: '', slices: [slice, { ...slice, id: 'C2' }], acceptance: [],
+    alignment: { roundId: 'al-1', status: 'proposed' as const, summary: '', slices: [slice, { ...slice, id: 'C2' }], acceptance: [],
       proposedAt: '2026-09-23T00:00:00Z' } }
   const older = { ...localIssue('Older requirement'), id: 'q-older', createdAt: '2026-09-20T00:00:00Z', state: 'closed' as const }
   server.localProjects = [PROJECT, { ...PROJECT, id: 'p-other', name: 'Other', repository: 'acme/other' }]
@@ -199,7 +216,7 @@ it('lists the current project requirements newest first with their tags, time an
 
 it('keeps a non-default filter when a requirement detail returns to the list', async () => {
   server.localProjects = [PROJECT]
-  const confirmed = { ...localIssue('Confirmed requirement'), id: 'q-confirmed', alignment: { status: 'confirmed' as const, summary: '',
+  const confirmed = { ...localIssue('Confirmed requirement'), id: 'q-confirmed', alignment: { roundId: 'al-1', status: 'confirmed' as const, summary: '',
     slices: [], acceptance: [], proposedAt: '2026-09-23T00:00:00Z' } }
   server.localIssues = [confirmed, { ...localIssue('Pending requirement'), id: 'q-pending' }]
   at({ page: 'requirements', query: { filter: 'confirmed' } })
@@ -309,6 +326,148 @@ it('opens each linked Ticket\'s started Executor Session from the requirement de
   const englishRows = [...linked(en).querySelectorAll<HTMLElement>('.dt-row')]
   expect(englishRows.map(row => [...row.querySelectorAll('button')].filter(button => button.textContent?.trim() === en['openSession'])
     .length)).toEqual([1, 0, 1])
+})
+
+it('offers Ask beside Open Session only on a linked Ticket that started a Session', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [localIssue('Askable requirement')]
+  server.threadPages = withTickets(ticketSummary(), ticketSummary({ id: 't2', title: '尚未启动', sessionId: '' }))
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const rows = ticketRows(zh)
+  expect(rows.map(row => row.querySelector('.dt-row-title')?.textContent)).toEqual(['修复回归', '尚未启动'])
+  // Both entries share the action cell of the Ticket that started a Session, and no composer is open yet.
+  expect([...rows[0]!.querySelectorAll('.dt-row-actions button')].map(button => button.textContent?.trim()))
+    .toEqual([zh['openSession'], zh['discuss.ask']])
+  expect(all('.dt-question-form')).toHaveLength(0)
+  // The Ticket that never started a Session offers neither, only its title link.
+  expect([...rows[1]!.querySelectorAll('button')].map(button => button.textContent?.trim())).toEqual(['尚未启动'])
+  // English keeps both labels beside each other on the same row.
+  await remount(en)
+  const englishRows = ticketRows(en)
+  expect([...englishRows[0]!.querySelectorAll('.dt-row-actions button')].map(button => button.textContent?.trim()))
+    .toEqual([en['openSession'], en['discuss.ask']])
+  expect([...englishRows[1]!.querySelectorAll('button')].map(button => button.textContent?.trim())).toEqual(['尚未启动'])
+})
+
+it('asks about one linked Ticket and shows the question waiting in the message timeline', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [localIssue('Questioned requirement', 'The questioned description')]
+  server.threadPages = withTickets(ticketSummary())
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  await click(rowButton(ticketRows(zh)[0]!, zh['discuss.ask'])!)
+  const composer = area(zh['discuss.askPlaceholder'])
+  const send = (): HTMLButtonElement => all('.dt-question-form button')
+    .find(button => button.textContent?.trim() === zh['discuss.askSubmit']) as HTMLButtonElement
+  expect(send().disabled).toBe(true)
+  await type(composer, '   ')
+  expect(send().disabled).toBe(true)
+  await type(composer, 'Why is CI red?')
+  expect(send().disabled).toBe(false)
+  const detailReads = () => server.requests.filter(request => request.method === 'GET'
+    && request.path === 'local/issues/q-fixture').length
+  const readsBefore = detailReads()
+  await click(send())
+  const posted = server.requests.find(request => request.method === 'POST'
+    && request.path === 'local/issues/q-fixture/questions')!
+  expect(posted).toMatchObject({ method: 'POST', body: { ticket: 't1', text: 'Why is CI red?' } })
+  // The detail is read again so the recorded question reaches the timeline, and the composer closes.
+  expect(detailReads()).toBe(readsBefore + 1)
+  expect(all('.dt-question-form')).toHaveLength(0)
+  // The question joins the timeline once, labelled with its Ticket and marked as waiting for the answer.
+  const events = questionEvents()
+  expect(events).toHaveLength(1)
+  expect(events[0]!.querySelector('.dt-question-ticket')?.textContent)
+    .toBe(zh['discuss.questionOf'].replace('{title}', '修复回归'))
+  expect(events[0]!.textContent).toContain('Why is CI red?')
+  expect(events[0]!.textContent).toContain(zh['discuss.questionAsked'])
+  expect(timelineSection().querySelector('.dt-count')?.textContent).toBe('1')
+  expect(timelineSection().textContent).not.toContain('The questioned description')
+})
+
+it('renders an answered question with its Markdown answer and its Ticket label', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Answered requirement'), questions: [{ id: 'qn-1', ticket: 't1',
+    text: 'Why did it fail?', status: 'answered' as const, askedAt: '2026-09-23T01:00:00Z',
+    answeredAt: '2026-09-23T02:00:00Z', answer: '因为 **CI** 失败\n\n- 第一条' }] }]
+  server.threadPages = withTickets(ticketSummary())
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const event = questionEvents()[0]!
+  expect(event.querySelector('.dt-question-ticket')?.textContent)
+    .toBe(zh['discuss.questionOf'].replace('{title}', '修复回归'))
+  expect(event.textContent).toContain(zh['discuss.questionAnswered'])
+  expect(event.textContent).toContain(zh['discuss.questionAnswer'])
+  expect(event.textContent).toContain('Why did it fail?')
+  // The answer actually renders as Markdown, bold and list included, exactly once.
+  expect(event.querySelector('strong')?.textContent).toBe('CI')
+  expect(event.querySelector('ul li')?.textContent).toBe('第一条')
+  expect(text().split('第一条').length - 1).toBe(1)
+  expect(text().split('Why did it fail?').length - 1).toBe(1)
+})
+
+it('shows a failed question with its reason and retries it from the timeline', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Failed question requirement'), questions: [{ id: 'qn-1', ticket: 't1',
+    text: 'Why did the CI fail?', status: 'failed' as const, askedAt: '2026-09-23T01:00:00Z',
+    answeredAt: '2026-09-23T02:00:00Z', error: 'The forked Session ended without an answer' }] }]
+  server.threadPages = withTickets(ticketSummary())
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  let event = questionEvents()[0]!
+  expect(event.textContent).toContain(zh['discuss.questionFailed'])
+  expect(event.textContent).toContain('The forked Session ended without an answer')
+  expect(event.textContent).toContain('Why did the CI fail?')
+  await click(rowButton(event, zh['discuss.questionRetry'])!)
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/questions/qn-1/retry')!
+  expect(posted).toMatchObject({ method: 'POST' })
+  expect(posted.body).toBeUndefined()
+  // The record returns to asked, so the timeline shows the waiting copy and drops the failure entry.
+  expect(server.localIssues[0]?.questions?.[0]?.status).toBe('asked')
+  event = questionEvents()[0]!
+  expect(event.textContent).toContain(zh['discuss.questionAsked'])
+  expect(event.textContent).not.toContain('The forked Session ended without an answer')
+  expect(rowButton(event, zh['discuss.questionRetry'])).toBeUndefined()
+  expect(text().split('Why did the CI fail?').length - 1).toBe(1)
+})
+
+it('shows every message, question and answer once in newest-first timeline order', async () => {
+  server.localProjects = [PROJECT]
+  const issue = localIssue('Talked requirement', 'The original description')
+  server.localIssues = [{ ...issue, questions: [
+    { id: 'qn-1', ticket: 't1', text: 'Why did it fail?', status: 'answered' as const, askedAt: '2026-09-23T03:00:00Z',
+      answeredAt: '2026-09-23T03:30:00Z', answer: '因为 **CI** 失败\n\n- 第一条' },
+    { id: 'qn-2', ticket: 't1', text: 'Is the CI green now?', status: 'asked' as const, askedAt: '2026-09-23T04:00:00Z' },
+  ] }]
+  server.threadPages = () => ({ ...threadSummary(), correlated: [], decisions: [], earlier: null, context: [],
+    tickets: [ticketSummary()], timeline: [localComment(issue, 'Earlier follow-up', '2026-09-23T01:00:00Z')] })
+  server.localReplies = { 'q-fixture': [localReply(issue, 'The agent answered', '2026-09-23T02:00:00Z')] }
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const events = all('.dt-timeline .dt-event')
+  expect(events).toHaveLength(4)
+  expect(timelineSection().querySelector('.dt-count')?.textContent).toBe('4')
+  // Newest first: the asked question, the answered one, the agent reply, then the earlier follow-up.
+  expect(events[0]!.textContent).toContain('Is the CI green now?')
+  expect(events[1]!.textContent).toContain('Why did it fail?')
+  expect(events[2]!.textContent).toContain('The agent answered')
+  expect(events[3]!.textContent).toContain('Earlier follow-up')
+  const rendered = messages().map(node => (node ?? '').replace(/\s+/g, ' ').trim())
+  expect(rendered).toHaveLength(5)
+  expect(rendered[0]).toContain('Is the CI green now?')
+  expect(rendered[1]).toContain('Why did it fail?')
+  expect(rendered[2]).toContain('因为 CI 失败')
+  expect(rendered[3]).toContain('The agent answered')
+  expect(rendered[4]).toContain('Earlier follow-up')
+  // Each message text reads once in the timeline, and the question texts never repeat in the requirement card.
+  for (const message of ['Is the CI green now?', 'Why did it fail?', '因为 CI 失败', '第一条', 'The agent answered', 'Earlier follow-up'])
+    expect(timelineSection().textContent!.split(message).length - 1).toBe(1)
+  expect(text().split('Why did it fail?').length - 1).toBe(1)
+  expect(document.querySelector('.dt-card')?.textContent).not.toContain('Why did it fail?')
+  // Both question events name their owning Ticket.
+  expect(questionEvents().map(event => event.querySelector('.dt-question-ticket')?.textContent))
+    .toEqual([zh['discuss.questionOf'].replace('{title}', '修复回归'), zh['discuss.questionOf'].replace('{title}', '修复回归')])
 })
 
 it('lists the message timeline newest first and keeps the follow-up box above the list', async () => {
@@ -435,7 +594,7 @@ it('renders a legacy requirement whose project has no worktree root', async () =
 })
 
 /** A one-slice alignment proposal, enough for the requirement detail to offer its execution switch. */
-const proposal = (status: 'proposed' | 'confirmed') => ({ status, summary: '', acceptance: [],
+const proposal = (status: 'proposed' | 'confirmed') => ({ roundId: 'al-1', status, summary: '', acceptance: [],
   slices: [{ id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }],
   proposedAt: '2026-09-23T00:00:00Z', ...(status === 'confirmed' ? { decidedAt: '2026-09-23T00:00:00Z' } : {}) })
 
@@ -614,11 +773,105 @@ it('reads each requirement image through the management API with the same-origin
   expect(all('.dt-image-card img')[0]!.getAttribute('src')).toBe('blob:requirement-image')
 })
 
+/** Two alignment rounds of one requirement: the first was sent back with a reason, the second awaits review. */
+const twoRounds = () => {
+  const round = (roundId: string, status: 'rejected' | 'proposed', label: string, at: string, extra: object = {}) => ({ roundId, status,
+    summary: `${label}摘要`, slices: [{ id: `${roundId}-slice`, title: `${label}切片`, outcome: '', inScope: [], outOfScope: [],
+      acceptance: [], dependsOn: [], lane: 'full' as const }], acceptance: [`${label}验收`], proposedAt: at, ...extra })
+  return { first: round('al-1', 'rejected', '第一轮', '2026-09-22T00:00:00Z',
+    { decidedAt: '2026-09-22T01:00:00Z', reason: '范围太大，请拆分' }), second: round('al-2', 'proposed', '第二轮', '2026-09-23T00:00:00Z') }
+}
+
+it('shows the alignment round count on a requirement row only when it has rounds', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Two rounds'), id: 'q-rounds', alignment: second, alignments: [first, second] },
+    { ...localIssue('No rounds'), id: 'q-plain' }]
+  at({ page: 'requirements' })
+  await mount()
+  const metas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
+  expect(metas[0]).toContain(zh['discuss.roundsCount'].replace('{count}', '2'))
+  expect(metas[0]).toContain('1 个切片')
+  expect(metas[1]).not.toContain(zh['discuss.roundsCount'].replace('{count}', '0'))
+  expect(text()).not.toContain(zh['discuss.roundsCount'].replace('{count}', '0'))
+})
+
+it('renders every alignment round, expands only the current one and lets a person open an earlier round', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Two rounds'), alignment: second, alignments: [first, second] }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  // The current round carries its summary, its slice and the acceptance criteria, and names itself current.
+  const current = document.querySelector<HTMLElement>('.dt-round-current')!
+  expect(current.textContent).toContain('第二轮摘要')
+  expect(current.textContent).toContain('第二轮切片')
+  expect(current.textContent).toContain('第二轮验收')
+  expect(current.textContent).toContain(zh['discuss.roundCurrent'])
+  expect(current.textContent).toContain(zh['discuss.roundLabel'].replace('{round}', '2'))
+  // The earlier round is collapsed: its status, time and rejection reason stay visible, its body does not.
+  const earlier = all('[data-disclosure-row]')[0]!
+  expect(earlier.getAttribute('aria-expanded')).toBe('false')
+  expect(earlier.textContent).toContain(zh['discuss.rejected'])
+  expect(earlier.textContent).toContain(`${zh['discuss.reason']}：范围太大，请拆分`)
+  expect(earlier.querySelector('time')).not.toBe(null)
+  expect(document.body.textContent).not.toContain('第一轮摘要')
+  expect(document.body.textContent).not.toContain('第一轮切片')
+  expect(document.body.textContent).not.toContain('第一轮验收')
+  // Expanding it renders that round's summary, slice and acceptance criteria.
+  await click(earlier)
+  const opened = all('[data-disclosure-row]')[0]!
+  expect(opened.getAttribute('aria-expanded')).toBe('true')
+  expect(document.body.textContent).toContain('第一轮摘要')
+  expect(document.body.textContent).toContain('第一轮切片')
+  expect(document.body.textContent).toContain('第一轮验收')
+  // English names the same round history.
+  await remount(en)
+  expect(text()).toContain(en['discuss.roundCurrent'])
+  expect(text()).toContain(en['discuss.roundLabel'].replace('{round}', '2'))
+  expect(all('[data-disclosure-row]')[0]!.textContent).toContain(en['discuss.reason'])
+})
+
+it('offers Confirm and Send back only on the current proposed round and names that round in the decision', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Two rounds'), alignment: second, alignments: [first, second] }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const buttons = all('.dt-actions button').filter(button => button.textContent?.trim() === zh['discuss.confirm']
+    || button.textContent?.trim() === zh['discuss.reject'])
+  expect(buttons.map(button => button.textContent?.trim())).toEqual([zh['discuss.confirm'], zh['discuss.reject']])
+  expect(buttons.every(button => button.closest('.dt-round-current') !== null)).toBe(true)
+  expect(document.querySelector('.dt-rounds-history .dt-actions')).toBe(null)
+  await click(find(zh['discuss.confirm']))
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/alignment/decision')!
+  expect(posted).toMatchObject({ method: 'POST', body: { decision: 'confirm', roundId: 'al-2' } })
+  // The fixture dispatches the current round only, so the decision above confirmed the round this page named.
+  expect(server.dispatchedIssues.has('q-fixture')).toBe(true)
+  // A decided current round offers no further decision.
+  expect(all('.dt-actions button').filter(button => button.textContent?.trim() === zh['discuss.confirm'])).toHaveLength(0)
+  expect(all('.dt-actions button').filter(button => button.textContent?.trim() === zh['discuss.reject'])).toHaveLength(0)
+})
+
+it('shows the localized refusal when the page decides a round the host already replaced', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Stale round'), alignment: second, alignments: [first, second] }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  // A newer proposal lands after the page rendered round two, so the decision travels with the round it named.
+  const newer = { ...second, roundId: 'al-3', summary: '第三轮摘要' }
+  server.localIssues = [{ ...localIssue('Stale round'), alignment: newer, alignments: [first, second, newer] }]
+  await click(find(zh['discuss.confirm']))
+  expect(document.querySelector('.dt-toast')?.textContent)
+    .toBe(zh['userError.alignmentRoundStale'].replace('{round}', 'al-2'))
+})
+
 it('shows 待关闭 once every slice ticket of a confirmed alignment ended, 开放 while one is live and 已关闭 when closed', async () => {
   const slice = { id: 'C1', title: 'Only slice', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
   const confirmed = (id: string, title: string, createdAt: string, state: 'open' | 'closed' = 'open') => ({
     ...localIssue(title), id, createdAt, state,
-    alignment: { status: 'confirmed' as const, summary: 'One slice', slices: [slice], acceptance: [], proposedAt: createdAt,
+    alignment: { roundId: 'al-1', status: 'confirmed' as const, summary: 'One slice', slices: [slice], acceptance: [], proposedAt: createdAt,
       decidedAt: createdAt },
   })
   server.localProjects = [PROJECT]
@@ -656,4 +909,5 @@ it('shows 待关闭 once every slice ticket of a confirmed alignment ended, 开�
   const closedHead = document.querySelector('.dt-page-head')?.textContent ?? ''
   expect(closedHead).toContain(zh['discuss.closed'])
   expect(closedHead).not.toContain(zh['discuss.pendingClose'])
+
 })

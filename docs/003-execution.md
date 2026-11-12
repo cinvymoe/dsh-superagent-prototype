@@ -28,6 +28,14 @@ Executor Sessions run commands without approval as the operator's OS user. Their
 
 The main Session uses `dsh-superagent-router`, with the same 5-second shell and job-wait limits and a smaller tool set for routing. Sessions retain the preset selected at creation. Worker subagents use DeepSeek Harness's `standard` preset.
 
+### The Agent configuration
+
+The `agents` settings block configures the three Agent roles: `main` for the main Session, `aligner` for a Ticket accepted for alignment, and `executor` for every other Ticket's Executor Session, whose subagents inherit its tools. Each role has an optional `model` override and the optional `disabledTools` it turns off; 006 Deployment holds the block's fields. The required tools cannot be turned off, and the panel checks a save against the role's catalog. A stored name the catalog no longer has is ignored at run time, as a pinned slice's execution tools and the host's compression tools never enter the catalog.
+
+The tools apply to every Session of the role. A new Session is decorated with the configured set, and saving the block reinstalls the restriction of each running Session, a worker's subagents included, so it loses or regains the tool at its next step; a step in flight keeps the tools it started with. The main Session always keeps the host's compression tools when it provides them. A slice Ticket whose plan pins an execution strategy still gets that strategy's `feature_exec_*` tools and its pre-run guard, whatever the executor's optional tools are.
+
+A model override reaches only a Session created after it is saved; a running Session keeps the model it started with. An unset override inherits the role's default: the main Session `eval.model`, the executor `executor.model`, and an aligner the executor's effective model, its own `agents.executor.model` when set and `executor.model` otherwise. Without an `agents` block, every Session gets exactly the tools and model it had before the block existed.
+
 ### Background work and worker slots
 
 When a turn ends with shell jobs or subagents still running, the Ticket keeps its worker slot and stays working. It is not reported as waiting, and the main Session receives no waiting report. A completed job or subagent wakes the Executor with its result in the same slot. Once a turn ends with no background work, the Executor reports waiting normally.
@@ -83,6 +91,29 @@ For a multi-chain GitHub Source, `DSH_SUPERAGENT_GITHUB_REPOSITORY` and `DSH_SUP
 Workers reach GitHub through the agent account's `gh` and Feishu through the bot's `lark-cli`. Blocked commands fail when invoked by name.
 
 These wrappers and directories establish defaults, not a security boundary. A worker can still execute a program by absolute path.
+
+## Execution strategy
+
+A requirement chooses one of two execution strategies, and every slice it dispatches uses that choice.
+
+| Mode | What a slice worker does |
+| --- | --- |
+| `native` | Implements the approved slice directly: it reads the repository, makes the change, verifies it and opens a pull request. It gets the work tools only, no `feature_exec_*` tools, no feature-exec pre-run guard, and the native handoff prompt |
+| `feature-exec` | Runs the slice through the execution stage: it keeps the `feature_exec_*` tools (`feature_exec_start`, `feature_exec_plan`, `feature_exec_dispatch`, the stage gates, `feature_exec_close` and `feature_exec_flow`, `feature_exec_status` and `feature_exec_advance`), the pre-run guard that refuses shell, file and search tools until the execution run exists, and the execute handoff. The execute flow starts at execution intake, skips the feature-exec discuss and decomposition stages, and ends at an open pull request (`pr-opened`), not a merge |
+
+`native` is the default. A requirement that made no explicit choice runs `native`, and a stored requirement record without `execution` dispatches `native` too. While the alignment proposal waits for confirmation, its card carries the switch, **Run the execution stage with feature-exec** (执行阶段使用 feature-exec): off is `native`, on is `feature-exec`, and it starts off. The requirement list row shows the mode, **Native** until a person turns the switch on.
+
+A person chooses the mode per requirement, before dispatch; there is no global or per-project default. Every slice of one requirement uses the mode that requirement chose. The switch saves immediately through `POST local/issues/:id/execution`, and a refresh reads the stored mode back.
+
+At dispatch, each slice Ticket pins `plan.execution = { mode, version }`. `plan.execution.version` names the execution contract, and `execution-v1` is the current one. A later change of the default or of the contract never rewrites a dispatched Ticket, and repeated confirmation reuses the Tickets with the strategy already pinned on them.
+
+The execution mode is not part of the Policy version. `policyVersion` covers the rules, the accept mode and each Source's Policy: changing a requirement's mode creates no Policy version change, and a Policy change never moves a Ticket between modes.
+
+The mode is fixed after dispatch. Once the requirement has dispatched slice Tickets, the panel shows the stored mode as a read-only tag with the hint **Tickets are already dispatched, so the mode is fixed.** (已派发工单，执行方式固定。) instead of the switch, and `POST local/issues/:id/execution` refuses with `executionLocked`, leaving the record and its Tickets unchanged.
+
+At launch the worker follows the pinned strategy rather than choosing the mode again. A host that did not register the feature-exec service runs a `feature-exec` Ticket as `native`: no `feature_exec_*` tools, no pre-run guard and the native handoff. An unknown `plan.execution.version` falls back to the current `execution-v1` registry.
+
+A Ticket dispatched before `plan.execution` existed carries no such field and resolves as `feature-exec`, so an upgrade changes neither running nor resumable Tickets. That differs from a requirement record without `execution`, which dispatches `native`.
 
 ## Merging
 

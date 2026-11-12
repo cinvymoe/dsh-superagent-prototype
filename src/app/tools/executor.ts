@@ -4,6 +4,7 @@ import { liveTicket, type EngineForExecutor, type Ticket } from '../../core/inde
 import { IM_WORDS } from '../../infra/text.ts'
 import { claimPull, readPull, reportedPull } from '../../sources/github-pull.ts'
 import type { SourceContext } from '../../sources/host.ts'
+import { currentAlignment } from '../../sources/local-format.ts'
 import { readResource, type ResourceHost } from '../resources.ts'
 import type { LocalIssues } from '../local.ts'
 import type { Store } from '../store.ts'
@@ -96,7 +97,8 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
           slices: args.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome, inScope: slice.in_scope,
             outOfScope: slice.out_of_scope, acceptance: slice.acceptance, dependsOn: slice.depends_on, lane: slice.lane })) })
         if (!updated) throw new Error('This ticket is not a local requirement')
-        return { issue_id: updated.id, status: updated.alignment?.status, slices: updated.alignment?.slices.length ?? 0 }
+        const alignment = currentAlignment(updated)
+        return { issue_id: updated.id, status: alignment?.status, slices: alignment?.slices.length ?? 0 }
       },
     })] : []),
     tool({

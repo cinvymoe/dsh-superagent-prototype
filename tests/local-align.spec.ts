@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { feishu, startRuntime, type Host } from './fixtures/host.ts'
 import { KV } from '../src/kv.ts'
 import { EXECUTION_STRATEGY_REVISION, type ExecutionMode, type Ticket } from '../src/core/index.ts'
@@ -83,6 +83,74 @@ it('dispatches the confirmed slices as tickets, one per slice, and only after th
   const again = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
   expect(again.status).toBe(200)
   expect(h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)).toHaveLength(2)
+})
+
+/** Accept a requirement for alignment and return its Aligner Ticket and worker Session id. */
+async function acceptForAlignment(issueId: string) {
+  await h.runtime.idle()
+  const accepted = await h.route({ kind: 'accept', trigger_id: firstTrigger(h, issueId), title: 'Align the local board',
+    worktree_name: 'align-local-board', acknowledgement: '收到，先做需求对齐。', mode: 'align' }) as { ticket: { ticket_id: string } }
+  await h.runtime.idle()
+  return { ticket: accepted.ticket, sessionId: `worker-${accepted.ticket.ticket_id}` }
+}
+
+it('delivers a rejection to the Aligner Session and accepts a new round', async () => {
+  const issue = h.runtime.local.create({ title: 'Align again', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  expect(await h.runTool(sessionId, 'orchestrator_align', { summary: 'First round.', slices, acceptance: [] }))
+    .toEqual({ issue_id: issue.id, status: 'proposed', slices: 2 })
+  const rejected = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'reject', reason: '缩小范围' })
+  expect(rejected.status).toBe(200)
+  await h.runtime.idle()
+  // The rejection lands on the requirement Thread as a human message, so the Aligner's Session receives its reason.
+  expect(h.relays(sessionId).some(item => JSON.stringify(item).includes('缩小范围'))).toBe(true)
+  const narrowed = [{ id: 'C1', title: 'Read the narrowed module', outcome: 'The narrowed module is read', acceptance: ['typecheck passes'],
+    depends_on: [], lane: 'light' }]
+  expect(await h.runTool(sessionId, 'orchestrator_align', { summary: 'Second round.', slices: narrowed, acceptance: [] }))
+    .toEqual({ issue_id: issue.id, status: 'proposed', slices: 1 })
+  const rounds = h.runtime.local.get(issue.id)!.alignments!
+  expect(rounds.map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:rejected', 'al-2:proposed'])
+  expect(rounds[0]!.reason).toBe('缩小范围')
+})
+
+it('dispatches only the slices of the current round', async () => {
+  const issue = h.runtime.local.create({ title: 'Latest round only', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'First round.', slices, acceptance: [] })
+  const latest = [{ id: 'D1', title: 'Only the latest', outcome: 'The latest round dispatches', acceptance: ['typecheck'],
+    depends_on: [], lane: 'light' }]
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'Second round.', slices: latest, acceptance: [] })
+  const confirmed = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
+  expect(confirmed.status).toBe(200)
+  await h.runtime.idle()
+  const tickets = h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)
+  expect(tickets.map(ticket => ticket.plan!.sliceId)).toEqual(['D1'])
+  expect(h.runtime.local.get(issue.id)!.alignments!.map(round => round.status)).toEqual(['superseded', 'confirmed'])
+})
+
+it('refuses a decision that names an older round and dispatches nothing', async () => {
+  const issue = h.runtime.local.create({ title: 'Stale decision', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'First round.', slices, acceptance: [] })
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'Second round.', slices, acceptance: [] })
+  const firstRound = h.runtime.local.get(issue.id)!.alignments![0]!.roundId
+  const stale = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm', roundId: firstRound })
+  expect(stale.status).toBe(400)
+  expect(stale.body).toMatchObject({ code: 'alignmentRoundStale', values: { round: firstRound } })
+  // The refusal happens before the record is written and before any slice dispatches.
+  expect(h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)).toEqual([])
+  expect(h.runtime.local.get(issue.id)!.alignments!.map(round => round.status)).toEqual(['superseded', 'proposed'])
+})
+
+it('refuses a new alignment proposal once the latest round is confirmed', async () => {
+  const issue = h.runtime.local.create({ title: 'Confirmed alignment', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'Only round.', slices, acceptance: [] })
+  expect((await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })).status).toBe(200)
+  const rounds = h.runtime.local.get(issue.id)!.alignments!
+  await expect(h.runTool(sessionId, 'orchestrator_align', { summary: 'Too late.', slices, acceptance: [] }))
+    .rejects.toThrow(/already confirmed/)
+  expect(h.runtime.local.get(issue.id)!.alignments).toHaveLength(rounds.length)
 })
 
 it('records a requirement\'s execution mode, defaults to native and refuses changes after dispatch', async () => {
@@ -573,7 +641,7 @@ describe('requirement slice completion', () => {
   const slice = (id: string) => ({ id, title: `Slice ${id}`, outcome: `Outcome ${id}`, inScope: [], outOfScope: [], acceptance: [],
     dependsOn: [], lane: 'light' as const })
   const alignment = (status: 'proposed' | 'confirmed' | 'rejected', slices = [slice('C1')]): LocalAlignment =>
-    ({ status, summary: 'One slice', slices, acceptance: [], proposedAt: at })
+    ({ roundId: 'al-1', status, summary: 'One slice', slices, acceptance: [], proposedAt: at })
   /** The fields every directly written requirement shares; `project` is only known once the fixture ran. */
   const fields = () => ({ author: 'local', project: project.id, createdAt: at, updatedAt: at, state: 'open' as const })
   const listView = async (): Promise<{ id: string; slicesFinished: boolean }[]> =>
@@ -646,5 +714,120 @@ describe('requirement slice completion', () => {
       expect(issues.find(issue => issue.id === id)!.slicesFinished).toBe(false)
       expect((await detailView(id)).slicesFinished).toBe(false)
     }
+  })
+})
+
+/**
+ * A requirement's questions about its dispatched Tickets are recorded on the requirement and answered through a Session
+ * forked off the Ticket's worker: the Engine sees nothing of it, and a restart re-queues what was still `asked`.
+ */
+describe('requirement questions', () => {
+  const at = '2026-09-01T00:00:00.000Z'
+  const oneSlice = [{ id: 'C1', title: 'Only slice', outcome: 'The question is answered', acceptance: [], dependsOn: [], lane: 'light' }]
+  /** Ask for one slice, confirm it, run the dispatch, and return the slice's Ticket. */
+  const dispatched = async (): Promise<{ id: string; ticket: Ticket; thread: string }> => {
+    const created = await h.api('POST', 'local/issues', { title: 'Ask about a dispatched ticket', project: project.id })
+    const id = (created.body.issue as { id: string }).id
+    expect((await h.api('POST', `local/issues/${id}/alignment`, { summary: 'One slice', slices: oneSlice })).status).toBe(200)
+    expect((await h.api('POST', `local/issues/${id}/alignment/decision`, { decision: 'confirm' })).status).toBe(200)
+    await h.runtime.idle()
+    const ticket = h.runtime.store.tickets.list().find(entry => entry.plan?.issueId === id)!
+    expect(ticket.assignments.some(assignment => assignment.startedAt !== undefined)).toBe(true)
+    return { id, ticket, thread: h.runtime.local.thread(id) }
+  }
+
+  it('returns asked at once, answers in the background and never touches the Ticket or the Engine', async () => {
+    const { id, ticket, thread } = await dispatched()
+    const snapshot = structuredClone(ticket)
+    const triggers = h.runtime.store.read.recentTriggers(0, 100).length
+    const decisions = h.runtime.store.decisions.byThread(thread).length
+    const response = await h.api('POST', `local/issues/${id}/questions`, { ticket: ticket.id, text: 'Why did this fail?' })
+    expect(response.status).toBe(200)
+    const question = response.body.question as { id: string; status: string; error?: string }
+    expect(question).toMatchObject({ status: 'asked', ticket: ticket.id, text: 'Why did this fail?' })
+    expect((response.body.issue as { questions: { id: string }[] }).questions).toContainEqual(question)
+    // The request path writes only the requirement record: the Ticket keeps its inputs, assignments, end and timestamp.
+    const unchanged = () => {
+      const stored = h.runtime.store.tickets.get(ticket.id)!
+      expect({ inputs: stored.inputs, assignments: stored.assignments, ended: stored.ended, updatedAt: stored.updatedAt })
+        .toEqual({ inputs: snapshot.inputs, assignments: snapshot.assignments, ended: snapshot.ended, updatedAt: snapshot.updatedAt })
+    }
+    unchanged()
+    // The fixture's worker Session has no completed turn, so the real port fails: the answer is recorded as a failure.
+    await h.runtime.localQuestions.idle()
+    expect(h.runtime.local.get(id)!.questions![0]).toMatchObject({ status: 'failed' })
+    expect(h.runtime.local.get(id)!.questions![0]!.error).toBeTruthy()
+    unchanged()
+    expect(h.runtime.store.read.recentTriggers(0, 100)).toHaveLength(triggers)
+    expect(h.runtime.store.decisions.byThread(thread)).toHaveLength(decisions)
+  })
+
+  /** Append one event to a Session's log at the next seq, as DSH's log holds it. */
+  const append = (sessionId: string, value: Record<string, unknown>): void => {
+    const events = h.events.get(sessionId)!
+    events.push({ ...value, seq: events.length } as never)
+  }
+
+  it('answers from a Session forked off the worker and records the answer on the requirement', async () => {
+    const { id, ticket } = await dispatched()
+    const worker = `worker-${ticket.id}`
+    // The worker ran one turn where the question forks from; the worker Session itself is not touched.
+    append(worker, { type: 'turn/start', time: 1, data: { turn: 1 } })
+    append(worker, { type: 'turn/end', time: 2, data: { turn: 1, reason: { kind: 'completed' } } })
+    const asked = await h.api('POST', `local/issues/${id}/questions`, { ticket: ticket.id, text: 'Why did this fail?' })
+    expect(asked.status).toBe(200)
+    expect((asked.body.question as { status: string }).status).toBe('asked')
+    // The background queue hands the question to the fork of the worker Session.
+    await vi.waitFor(() => expect(h.deliveries)
+      .toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-fork-1', mode: 'queue', text: 'Why did this fail?' })))
+    // The fork's model answered after the inherited prefix, and its turn ended.
+    append('session-fork-1', { type: 'assistant/message', time: 3, surfaceOp: 'append',
+      data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: 'The margin reset in src/app/passes.ts.' }] }, stream: [] } })
+    h.agents.get('session-fork-1')!.status = 'idle'
+    await h.runtime.localQuestions.idle()
+    expect(h.runtime.local.get(id)!.questions![0]).toMatchObject({ status: 'answered', answer: 'The margin reset in src/app/passes.ts.' })
+    expect(h.runtime.local.get(id)!.questions![0]!.error).toBeUndefined()
+    // The answer came from a fork of the Ticket's worker, which is archived once it answered.
+    expect(h.controller.fork).toHaveBeenCalledWith({ sessionId: worker })
+    expect(h.archiveSession).toHaveBeenCalledWith('session-fork-1', { stopActivity: true })
+  })
+
+  it('re-queues the questions a restart left asked', async () => {
+    await h.stop()
+    h = await startRuntime(seed => {
+      seed.set(KV.local.issue('q-seeded'), { id: 'q-seeded', title: 'Seeded requirement', body: '', author: 'local', project: 'p-seeded',
+        createdAt: at, updatedAt: at, state: 'open',
+        questions: [{ id: 'qn-00000001', ticket: 't-seeded', text: 'Why did this fail?', status: 'asked', askedAt: at }] })
+      seed.tickets.save({ id: 't-seeded', title: 'Seeded ticket', plan: { issueId: 'q-seeded' }, channels: [], inputs: [], undelivered: [],
+        origin: { triggerId: 'none', triggerIds: [] }, createdAt: at, updatedAt: at,
+        assignments: [{ id: 'a-1', state: 'running', createdAt: at, startedAt: at }] } as unknown as Ticket)
+    })
+    await h.runtime.localQuestions.idle()
+    // The real port reports that the Ticket has no worker Session, so the record settles as a failure with its reason.
+    const question = h.runtime.local.get('q-seeded')!.questions![0]!
+    expect(question.status).not.toBe('asked')
+    expect(question).toMatchObject({ status: 'failed' })
+    expect(question.error).toBeTruthy()
+  })
+
+  it('refuses a Ticket that never started a session and one of another requirement', async () => {
+    const created = await h.api('POST', 'local/issues', { title: 'Ask the right ticket', project: project.id })
+    const id = (created.body.issue as { id: string }).id
+    h.runtime.store.tickets.save({ id: 't-pending', plan: { issueId: id },
+      assignments: [{ id: 'a-1', state: 'pending', createdAt: at }] } as unknown as Ticket)
+    h.runtime.store.tickets.save({ id: 't-elsewhere', plan: { issueId: 'q-elsewhere' },
+      assignments: [{ id: 'a-1', state: 'running', createdAt: at, startedAt: at }] } as unknown as Ticket)
+    const pending = await h.api('POST', `local/issues/${id}/questions`, { ticket: 't-pending', text: 'Why?' })
+    expect(pending.status).toBe(400)
+    expect(pending.body).toMatchObject({ code: 'questionNoSession' })
+    const elsewhere = await h.api('POST', `local/issues/${id}/questions`, { ticket: 't-elsewhere', text: 'Why?' })
+    expect(elsewhere.status).toBe(400)
+    expect(elsewhere.body).toMatchObject({ code: 'questionTicket' })
+    // A Ticket that does not exist at all is a missing record, not a refusal.
+    expect((await h.api('POST', `local/issues/${id}/questions`, { ticket: 't-missing', text: 'Why?' })).status).toBe(404)
+    expect((await h.api('POST', 'local/issues/q-unknown/questions', { ticket: 't-pending', text: 'Why?' })).status).toBe(404)
+    expect((await h.api('POST', `local/issues/${id}/questions`, { ticket: 't-pending', text: '   ' })).status).toBe(400)
+    // Nothing was recorded by any refusal.
+    expect(h.runtime.local.get(id)!.questions).toBeUndefined()
   })
 })

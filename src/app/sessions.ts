@@ -9,12 +9,13 @@ import { z } from 'zod'
 import { key, liveTicket, type Ticket } from '../core/index.ts'
 import { mandateInstructions, ticketOfSession } from '../executor/dsh.ts'
 import type { HealthEntry } from '../infra/health.ts'
+import { COMPRESSION_TOOLS, MAIN_TOOLS, ROUTER_PRESET, roleTools, WORKER_PRESET } from './agent-tools.ts'
 import { AgentDelivery, messageId } from './delivery.ts'
 import type { Effects } from './effects.ts'
 import { resolveExecutionStrategy, type ExecutionServices } from './execution-strategy.ts'
 import type { Variable } from './execution-environment.ts'
 import { RetryHealth } from './retry-health.ts'
-import { initializeRoleModel } from './role-models.ts'
+import { initializeRoleModel, roleModel, workerRole } from './role-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { Store } from './store.ts'
@@ -42,39 +43,24 @@ export interface SessionsHost {
 /**
  * What Sessions registered for an agent it decorated: the releases of its prompt section, tools and skill scope, the scope
  * its skills are registered in, and the skills of one prompt revision; for a worker's subagent, only its tool limits.
+ * `tools` recomputes the Session's tool restriction from the saved `agents` block, so a settings save reaches it.
  */
-interface SessionBinding { disposers: (() => void)[]; scope?: Context; skills?: { revision: number; dispose: () => void }; subagent?: true }
+interface SessionBinding { disposers: (() => void)[]; scope?: Context; skills?: { revision: number; dispose: () => void }; subagent?: true
+  tools?: () => void }
 
-/** The agent presets Executor Sessions and the main Session are created with, which the bundle's patch defines. */
-export const WORKER_PRESET = 'dsh-superagent-worker', ROUTER_PRESET = 'dsh-superagent-router'
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /** DSH's agent preset registry selected `agentPreset` for a Session. */
     'agent-preset/selected'(sessionId: string, agentPreset: string): void
   }
 }
-/**
- * The DSH tools an Executor Session works with: files, search, the shell and its jobs, the web, skills, its todo list and
- * subagents. It gets no other tool the profile has, whenever it was registered: none that asks or shows a person something,
- * changes the profile, schedules work or starts goals outside the worker slots, the pause and a person's hold, starts or
- * messages other Sessions, or edits documents.
- */
 /** Tools a slice worker may not call before its feature-exec run starts, so it cannot spend its turn exploring first. */
 const PRE_RUN_TOOLS = new Set(['bash', 'read', 'read_image', 'write', 'edit', 'glob', 'grep', 'web_search', 'web_fetch'])
-const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
-  'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
 /**
  * The only tools a Ticket's Q&A Session gets, in this order: reading its inherited conversation and the Ticket directory,
  * nothing that writes, runs or messages. The whitelist, not the permission, is what keeps the answer read-only.
  */
 const ANSWER_TOOLS = ['read', 'read_image', 'glob', 'grep']
-/** The DSH tools the main Session works with, in the order it gets them: skills, files, the shell and its jobs. */
-const MAIN_TOOLS = ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill']
-/**
- * billion-context's ACP compression tools, which the main Session may call whenever the host's compression plugin provides
- * them, so its context is compressed; a host without the plugin leaves them out and keeps `MAIN_TOOLS`.
- */
-const COMPRESSION_TOOLS = ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image']
 /** What the main Session is told when it would wait: what it waits for comes to it, and a waiting step holds back the next. */
 const NO_WAIT = 'Reports, follow_up notices, new candidates and a background job\'s end with its output arrive by themselves as messages; '
   + 'end the turn instead of waiting for them.'
@@ -162,7 +148,7 @@ export class Sessions {
     }
     if ('error' in result) throw result.error
     const settings = this.host.store.settings()
-    await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? settings.eval.model : settings.executor.model)
+    await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? roleModel(settings, 'main') : roleModel(settings, workerRole(this.ticketFor(id))))
     await this.decorate(result.agent)
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })
@@ -183,7 +169,7 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     const missing = ANSWER_TOOLS.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the Q&A Session's tools ${missing.join(', ')}, which this host does not provide`)
-    await initializeRoleModel(ctx, agent, this.host.store.settings().executor.model)
+    await initializeRoleModel(ctx, agent, roleModel(this.host.store.settings(), 'executor'))
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-answer', order: 9999, complete: true, text: () => {
@@ -268,7 +254,11 @@ export class Sessions {
       : { state: 'ready', detail: 'No managed Session is waiting on a model budget retry' })
   }
   private ticketOf(agent: Agent): Ticket | undefined {
-    const ticketId = ticketOfSession(agent.id)
+    return this.ticketFor(agent.id)
+  }
+  /** The Ticket a Session id names, `worker-<ticket id>`, or undefined for the main Session and any other Session. */
+  private ticketFor(sessionId: string): Ticket | undefined {
+    const ticketId = ticketOfSession(sessionId)
     return ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
   }
   private async decorate(agent: Agent): Promise<void> {
@@ -307,63 +297,84 @@ export class Sessions {
     const register = this.registerTool(agent, binding)
     for (const tool of host.tools(agent, ticket)) register(tool.name, tool.description, tool.schema, tool.execute)
     if (master) {
-      binding.disposers.push(this.mainTools(agent), agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
+      binding.disposers.push(...this.mainTools(agent, binding), agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
     } else {
       // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
-      binding.disposers.push(...this.workOnly(agent, ticket!))
+      binding.disposers.push(...this.workOnly(agent, ticket!, binding))
     }
   }
   /**
    * The main Session's tools: its seven mandatory built-ins, plus billion-context's compression tools when the host's plugin
-   * provides them, so its context gets compressed. A host missing a built-in fails this decoration, as the restriction always
-   * did; a compression tool is named only while it is visible. The plugin registers them asynchronously, often after the
-   * Session exists, so the allow list is recomputed on DSH's unfiltered `tools/change`. A new filter is installed before the
-   * old one is lifted: filters intersect, so the old one would keep masking the tools the new list admits.
+   * provides them, so its context gets compressed, minus the optional tools the saved `agents` block turns off. A host
+   * missing a built-in fails this decoration, as the restriction always did; a compression tool is named only while it is
+   * visible. The plugin registers them asynchronously, often after the Session exists, so the allow list is recomputed on
+   * DSH's unfiltered `tools/change`; saving `agents` recomputes it through the same binding. A new filter is installed
+   * before the old one is lifted: filters intersect, so the old one would keep masking the tools the new list admits.
    */
-  private mainTools(agent: Agent): () => void {
+  private mainTools(agent: Agent, binding: SessionBinding): (() => void)[] {
     const parent = scopeParentOf(agent)
     // Read through the parent scope like `workOnly` does: it includes the preset's and the host's global tools and bypasses
     // this Session's own restriction.
     const missing = MAIN_TOOLS.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the main Session's tools ${missing.join(', ')}, which this host does not provide`)
-    let current: string[] = []
+    const restrict = this.installTools(agent, binding, () => [...roleTools('main', this.host.store.settings().agents),
+      ...COMPRESSION_TOOLS.filter(name => agent.ctx.tools.get(name, parent))])
+    const off = this.ctx.on('tools/change', () => binding.tools?.())
+    return [restrict, off]
+  }
+  /**
+   * Installs a Session's tool restriction from a computed allow list, and returns its disposer. Installing and lifting both
+   * notify `tools/change`, even re-entrantly: this drains those notifications, so a change made while they run is not lost.
+   * A rebuild that races a tool unregistering keeps the previous filter in force and lets the next change retry; only the
+   * first install, which has no filter to fall back on, fails the decoration.
+   */
+  private installTools(agent: Agent, binding: SessionBinding, allow: () => string[]): () => void {
+    // Undefined until a filter is installed, so an empty allow list still installs one instead of leaving the Session open.
+    let current: string[] | undefined
     let release: (() => void) | undefined
     let applying = false
     let pending = false
-    const allow = () => [...MAIN_TOOLS, ...COMPRESSION_TOOLS.filter(name => agent.ctx.tools.get(name, parent))]
+    let disposed = false
     const refresh = () => {
-      // Installing and lifting both notify `tools/change`, even re-entrantly: drain those notifications in this call, so a
-      // change made while they run is not lost.
+      if (disposed) return
       if (applying) { pending = true; return }
       applying = true
       try {
         do {
           pending = false
           const next = allow()
+          const applied = current
           // The filter just installed notifies again, and that recomputation settles here.
-          if (next.length === current.length && next.every((name, index) => name === current[index])) continue
-          const previous = release
+          if (applied !== undefined && next.length === applied.length && next.every((name, index) => name === applied[index])) continue
           let installed: (() => void) | undefined
           try { installed = agent.ctx.tools.restrict({ allow: next }) } catch (error) {
-            // A rebuild racing an unregistering tool keeps the restriction in force: log it, and let the next change retry.
-            // The first install has no restriction to fall back on, so a failure must not be swallowed.
-            if (!previous) throw error
-            this.ctx.logger.warn('dsh-superagent could not set the main Session\'s tools: %s', String(error))
+            if (!release) throw error
+            this.ctx.logger.warn('dsh-superagent could not set a Session\'s tools: %s', String(error))
             continue
           }
           current = next
+          const previous = release
           release = installed
           // The new filter is in force, so the old one can go now: lifting first would briefly unmask everything the old
           // filter hid.
           try { previous?.() } catch (error) {
-            this.ctx.logger.warn('dsh-superagent could not lift the main Session\'s previous tools restriction: %s', String(error))
+            this.ctx.logger.warn('dsh-superagent could not lift a Session\'s previous tools restriction: %s', String(error))
           }
-        } while (pending)
+        } while (pending && !disposed)
       } finally { applying = false }
     }
     refresh()
-    const off = this.ctx.on('tools/change', refresh)
-    return () => { off(); release?.(); release = undefined }
+    binding.tools = refresh
+    return () => {
+      // A late `tools/change`, or a refresh queued during this release, must not reinstall a filter on a released binding.
+      disposed = true
+      if (binding.tools === refresh) binding.tools = undefined
+      release?.(); release = undefined
+    }
+  }
+  /** Re-applies the saved `agents` block to every decorated Session, a worker's subagents included, from its next step. */
+  agentsChanged(): void {
+    for (const binding of this.bindings.values()) binding.tools?.()
   }
   /**
    * Whether a Session runs the router preset: as DSH's preset registry last selected it, read through the session projection
@@ -380,25 +391,33 @@ export class Sessions {
   }
   /**
    * An Executor Session's tools: only the profile's work tools, which DSH requires to be known, and none once its ticket
-   * ended. A failed or blocked worker keeps its tools, so a person may continue it in its Session; only automated input waits
-   * (see the executor). Read inherited tools through the parent scope, which includes the preset's tools. The global view
-   * misses preset tools; the agent's own view also includes local tools such as subagent, which restrict refuses to name.
+   * ended; the saved `agents` block removes the optional ones a person turned off, at the next step after a save. A failed or
+   * blocked worker keeps its tools, so a person may continue it in its Session; only automated input waits (see the
+   * executor). A slice Ticket adds the execution tools and pre-run guard its pinned strategy runs. Read inherited tools
+   * through the parent scope, which includes the preset's tools. The global view misses preset tools; the agent's own view
+   * also includes local tools such as subagent, which restrict refuses to name.
    */
-  private workOnly(agent: Agent, ticket: Ticket): (() => void)[] {
+  private workOnly(agent: Agent, ticket: Ticket, binding: SessionBinding): (() => void)[] {
     const store = this.host.store
     const parent = scopeParentOf(agent)
-    // A slice ticket gets the execution tools and pre-run guard its pinned strategy runs; every other ticket gets neither.
-    const strategy = ticket.plan ? resolveExecutionStrategy(ticket.plan, this.executionServices()) : undefined
-    const tools = strategy ? [...WORK_TOOLS, ...strategy.tools] : WORK_TOOLS
-    const allow = tools.filter(name => agent.ctx.tools.get(name, parent))
-    const featureExec = strategy?.preRunGuard && allow.includes('feature_exec_start')
+    const current = () => store.tickets.get(ticket.id) ?? ticket
+    const strategyOf = (now: Ticket) => now.plan ? resolveExecutionStrategy(now.plan, this.executionServices()) : undefined
+    // The role follows the Ticket: an aligner Session uses the aligner's optional tools, every other one the executor's.
+    // Execution tools a slice's strategy adds never come from the catalog, so no `agents` save can turn them off.
+    const allow = () => {
+      const now = current()
+      const tools = [...roleTools(workerRole(now), store.settings().agents), ...strategyOf(now)?.tools ?? []]
+      return [...new Set(tools)].filter(name => agent.ctx.tools.get(name, parent))
+    }
+    const strategy = strategyOf(current())
+    const featureExec = strategy?.preRunGuard && agent.ctx.tools.get('feature_exec_start', parent)
       ? this.ctx.get('featureExec') as { list(): readonly { flow: string; status: string; subject?: { issue?: { id?: string } } }[] } | undefined
       : undefined
-    return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard((execution?: { name: string }) => {
-      const current = store.tickets.get(ticket.id)
-      if (!current || !liveTicket(current)) return 'Ticket ended; new work needs a new authorized ticket'
-      if (featureExec && current.plan && execution?.name && PRE_RUN_TOOLS.has(execution.name)) {
-        const issue = `${current.plan.issueId}:${current.plan.sliceId}`
+    return [this.installTools(agent, binding, allow), agent.ctx.tools.guard((execution?: { name: string }) => {
+      const now = store.tickets.get(ticket.id)
+      if (!now || !liveTicket(now)) return 'Ticket ended; new work needs a new authorized ticket'
+      if (featureExec && now.plan && execution?.name && PRE_RUN_TOOLS.has(execution.name)) {
+        const issue = `${now.plan.issueId}:${now.plan.sliceId}`
         const started = featureExec.list().some(run => run.flow === 'execute' && run.status === 'active' && run.subject?.issue?.id === issue)
         if (!started) return 'Start this slice with feature_exec_start({flow:"execute"}) before inspecting or changing files.'
       }
@@ -421,7 +440,10 @@ export class Sessions {
     const ticketId = parent === undefined ? undefined : ticketOfSession(parent)
     const ticket = ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
     if (!ticket) return
-    this.bindings.set(agent, { disposers: this.workOnly(agent, ticket), subagent: true })
+    // A subagent inherits its worker's tools without a role of its own, and follows a save through the same binding.
+    const binding: SessionBinding = { disposers: [], subagent: true }
+    this.bindings.set(agent, binding)
+    binding.disposers.push(...this.workOnly(agent, ticket, binding))
   }
   /** Register the skills of a prompt version in the agent's skill scope, in place of an earlier version's. */
   private bindSkills(binding: SessionBinding, version: PromptVersion): void {

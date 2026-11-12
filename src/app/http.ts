@@ -28,7 +28,10 @@ import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import type { LocalIssues } from './local.ts'
+import { QUESTION_CHARS, type LocalQuestions } from './local-questions.ts'
 import type { Projects } from './projects.ts'
+import type { Checkout } from './checkout.ts'
+import type { Prepare } from './prepare.ts'
 import { REQUIREMENT_BODY_BYTES } from '../limits.ts'
 
 export interface HttpHost {
@@ -45,7 +48,12 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly local: LocalIssues
+  readonly localQuestions: LocalQuestions
   readonly projects: Projects
+  /** The checkout dsh-superagent runs from, read only. */
+  readonly checkout: Pick<Checkout, 'status'>
+  /** Whether that checkout can take a local merge, and the one merge at a time it runs through the service script. */
+  readonly prepare: Pick<Prepare, 'status' | 'merge'>
   dispatchPlan(issueId: string): Ticket[]
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
@@ -158,8 +166,9 @@ const DecisionsQuery = z.object({ kind: z.string().default(''), window: z.litera
 const count = z.coerce.number().int().nonnegative()
 const PromptsQuery = z.object({ revision: count.optional(), offset: count.default(0) })
 const SourceBlock = z.templateLiteral(['source:', z.string().regex(/^[a-z][a-z0-9-]*$/)])
-const SettingsBlockSchema = z.union([z.enum(['policy', 'eval', 'executor']), SourceBlock])
+const SettingsBlockSchema = z.union([z.enum(['policy', 'eval', 'executor', 'agents']), SourceBlock])
 const SaveRequest = z.object({ value: z.unknown(), revision: z.number().int().nonnegative() })
+const QuestionRequest = z.object({ ticket: z.string().trim().min(1), text: z.string().trim().min(1).max(QUESTION_CHARS) })
 
 function routes(runtime: HttpHost): Routes {
   const { store } = runtime
@@ -167,6 +176,9 @@ function routes(runtime: HttpHost): Routes {
   const promptBody = (input: { body: (maxBytes?: number) => Promise<unknown> }) => input.body(4 * runtime.machine.promptMaxChars.get() + 4096)
   return {
     'GET state': () => stateView(runtime),
+    'GET deployment/checkout': () => runtime.checkout.status(),
+    'GET deployment/prepare': () => runtime.prepare.status(),
+    'POST deployment/prepare': () => runtime.prepare.merge(),
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),
@@ -252,8 +264,9 @@ function routes(runtime: HttpHost): Routes {
       return { issue: runtime.local.view(issue) }
     },
     'POST local/issues/:id/alignment/decision': async ({ params, body }) => {
-      const input = z.object({ decision: z.enum(['confirm', 'reject']), reason: z.string().max(4_000).optional() }).parse(await body())
-      const issue = runtime.local.decide(params.id, input.decision, input.reason)
+      const input = z.object({ decision: z.enum(['confirm', 'reject']), reason: z.string().max(4_000).optional(),
+        roundId: z.string().min(1).optional() }).parse(await body())
+      const issue = runtime.local.decide(params.id, input.decision, input.reason, input.roundId)
       if (!issue) throw new RouteError(404, 'Local issue or alignment not found')
       // The person's confirmation is the authorization to dispatch: each slice becomes a worker ticket, dependencies gated by the executor.
       const tickets = input.decision === 'confirm' ? runtime.dispatchPlan(params.id).map(ticket => ({ id: ticket.id, title: ticket.title })) : []
@@ -269,6 +282,18 @@ function routes(runtime: HttpHost): Routes {
       const issue = runtime.local.close(params.id)
       if (!issue) throw new RouteError(404, 'Local issue not found')
       return { issue: runtime.local.view(issue) }
+    },
+    // Asking records `asked` and returns at once; the answer lands on the requirement record in the background.
+    'POST local/issues/:id/questions': async ({ params, body }) => {
+      const input = QuestionRequest.parse(await body())
+      const asked = runtime.localQuestions.ask(params.id, input.ticket, input.text)
+      if (!asked) throw new RouteError(404, 'Local issue not found')
+      return { issue: runtime.local.view(asked.issue), question: asked.question }
+    },
+    'POST local/issues/:id/questions/:questionId/retry': ({ params }) => {
+      const retried = runtime.localQuestions.retry(params.id, params.questionId)
+      if (!retried) throw new RouteError(404, 'Local question not found')
+      return { issue: runtime.local.view(retried.issue), question: retried.question }
     },
     'POST tickets/:id/retry': ({ params }) => { const id = ticket(params.id); runtime.engine.retryTicket(id); return { retried: true } },
     'POST tickets/:id/stop': ({ params }) => { const id = ticket(params.id); runtime.engine.stopTicket(id); return { stopped: true } },

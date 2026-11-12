@@ -8,7 +8,7 @@ export const TABS = ['overview', 'newRequirement', 'requirements', 'source', 'tr
 export type Tab = typeof TABS[number]
 export const REQUIREMENT_FILTERS = ['pending', 'confirmed', 'closed', 'all'] as const
 export type RequirementFilter = typeof REQUIREMENT_FILTERS[number]
-export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'prompts', 'deployment'] as const
+export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'agents', 'prompts', 'deployment'] as const
 export type SettingsGroup = typeof SETTINGS_GROUPS[number]
 export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undefined }
   | { page: 'newRequirement'; id?: undefined; query?: undefined }

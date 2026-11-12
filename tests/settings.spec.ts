@@ -99,3 +99,20 @@ it('records nothing for a pause that changes nothing, refuses a sync while setup
   vi.mocked(Setup.prototype.configured).mockRestore()
   expect(() => settings.block('source:x')).toThrow(new UserError('unknownBlock', { block: 'source:x' }))
 })
+
+it('refuses an agents save outside the panel, saves a changed one once and records no second revision for the same value', async () => {
+  h = await startRuntime()
+  const { settings, store } = h.runtime
+  const value = store.settings().agents, moved = { ...value, executor: { model: null, disabledTools: ['web_search'] } }
+  await expect(settings.save('agents', moved, store.blockRevision('agents'), 'tool')).rejects.toThrow(new UserError('panelOnlyAgents'))
+  expect(store.settings().agents).toEqual(value)
+  expect(store.blockRevision('agents')).toBe(0)
+  await settings.save('agents', moved, store.blockRevision('agents'), 'panel')
+  expect(store.settings().agents).toEqual(moved)
+  expect(store.blockRevision('agents')).toBe(1)
+  // The same value again is a no-op save: no new block revision and no new settings revision.
+  const revision = store.settingsHistory(1)[0]!.revision
+  await settings.save('agents', moved, store.blockRevision('agents'), 'panel')
+  expect(store.blockRevision('agents')).toBe(1)
+  expect(store.settingsHistory(1)[0]!.revision).toBe(revision)
+})

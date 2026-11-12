@@ -1,0 +1,16 @@
+(node:1489656) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1489697) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/get-deployment-checkout-2b9bf67f6fd8
+
+(node:1489798) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/checkout.spec.ts (18 tests) 669ms
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  00:41:09
+   Duration  1.87s (transform 681ms, setup 0ms, import 969ms, tests 669ms, environment 0ms)
+

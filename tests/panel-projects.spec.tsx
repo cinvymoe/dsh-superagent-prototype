@@ -13,8 +13,8 @@ const WIDGETS = { ...project('p-widgets', 'Widgets', 'acme/intake', 'acme/widget
 const OTHER = project('p-other', 'Other', 'acme/intake', 'acme/other')
 const issue = (id: string, projectId: string, title: string) => ({ ...localIssue(title), id, project: projectId })
 /** An open requirement whose alignment was confirmed, so it belongs to the 已确认 bucket rather than 待处理. */
-const confirmed = (row: ReturnType<typeof issue>) => ({ ...row, alignment: { status: 'confirmed' as const, summary: '', slices: [],
-  acceptance: [], proposedAt: '2026-09-23T00:00:00Z' } })
+const confirmed = (row: ReturnType<typeof issue>) => ({ ...row, alignment: { roundId: 'al-1', status: 'confirmed' as const, summary: '',
+  slices: [], acceptance: [], proposedAt: '2026-09-23T00:00:00Z' } })
 const posts = () => server.requests.filter(request => request.path === 'local/projects' && request.method === 'POST')
 const openCreate = async () => {
   const button = document.querySelector<HTMLElement>('.dt-project-bar .dt-project-new')

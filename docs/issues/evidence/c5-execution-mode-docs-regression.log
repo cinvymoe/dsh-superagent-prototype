@@ -1,0 +1,34 @@
+(node:1526654) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1526683) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-8542a15caed3
+
+(node:1526736) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1526737) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1526739) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1526744) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1526756) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1526750) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1526739) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/docs.spec.ts (16 tests) 49ms
+ ✓ tests/locales.spec.ts (6 tests) 15ms
+(node:1526744) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1526736) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (13 tests) 606ms
+ ✓ tests/prompts.spec.ts (19 tests) 717ms
+ ✓ tests/panel-discuss.spec.tsx (30 tests) 1452ms
+ ✓ tests/local-align.spec.ts (24 tests) 3505ms
+
+ Test Files  6 passed (6)
+      Tests  108 passed (108)
+   Start at  00:55:21
+   Duration  4.89s (transform 2.88s, setup 0ms, import 4.70s, tests 6.34s, environment 954ms)
+

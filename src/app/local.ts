@@ -5,8 +5,7 @@ import { key, planTicketId, UserError, EXECUTION_STRATEGY_REVISION, type ActorRe
   type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalImage, type LocalImageInput,
-  type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
+import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
 
@@ -41,7 +40,7 @@ export class LocalIssues {
   list(project?: string): LocalIssue[] {
     return this.host.store.keys(KV.local.issue.prefix).flatMap(entry => {
       const issue = this.host.store.get(KV.local.issue(entry.slice(KV.local.issue.prefix.length)))
-      return issue && (!project || issue.project === project) ? [issue] : []
+      return issue && (!project || issue.project === project) ? [this.withRounds(issue)] : []
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
@@ -140,19 +139,35 @@ export class LocalIssues {
     return project
   }
 
-  get(id: string): LocalIssue | undefined { return this.host.store.get(KV.local.issue(id)) }
+  /** The requirement with its alignment rounds read back; a record written before rounds existed reads as one round. */
+  get(id: string): LocalIssue | undefined {
+    const issue = this.host.store.get(KV.local.issue(id))
+    return issue ? this.withRounds(issue) : undefined
+  }
+
+  /** A stored record as readers see it: rounds materialized and the single-slot mirror pointing at the current round. */
+  private withRounds(issue: LocalIssue): LocalIssue {
+    const rounds = alignmentRounds(issue)
+    if (!rounds.length) return issue
+    return { ...issue, alignments: rounds, alignment: rounds[rounds.length - 1]! }
+  }
+
+  /** Store a requirement record, replacing any earlier one with the same id; the caller owns every field it changes. */
+  putIssue(issue: LocalIssue): void { this.host.store.set(KV.local.issue(issue.id), issue) }
 
   /**
-   * The HTTP view of a requirement: its stored record plus whether every slice Ticket of its confirmed alignment ended.
-   * Derived here, on read, so no migration or extra store field exists. A requirement without a confirmed alignment, one
-   * whose alignment has no slices, or one whose slice has no Ticket reports false rather than guessing that it finished.
-   * Both an Executor's end and a person's stop count, because the Ticket record only has to carry `ended`.
+   * The HTTP view of a requirement: its stored record, its alignment rounds read back, plus whether every slice Ticket of
+   * its confirmed alignment ended. Derived on read, so no migration or extra store field exists. A requirement without a
+   * confirmed alignment, one whose alignment has no slices, or one whose slice has no Ticket reports false rather than
+   * guessing that it finished. Both an Executor's end and a person's stop count, because the Ticket record only carries
+   * `ended`.
    */
   view(issue: LocalIssue): LocalIssueView {
-    const slices = issue.alignment?.status === 'confirmed' ? issue.alignment.slices : []
+    const materialized = this.withRounds(issue)
+    const slices = materialized.alignment?.status === 'confirmed' ? materialized.alignment.slices : []
     const slicesFinished = slices.length > 0
       && slices.every(slice => !!this.host.store.tickets.get(planTicketId(issue.id, slice.id))?.ended)
-    return { ...issue, slicesFinished }
+    return { ...materialized, slicesFinished }
   }
 
   thread(id: string): string { return localThreadKey(id) }
@@ -251,7 +266,7 @@ export class LocalIssues {
   /** The inputs a confirmed plan dispatches with: the issue thread, its human triggers, the author and its execution strategy. */
   planInput(id: string): { thread: Thread; triggerIds: string[]; actor: ActorRef; execution: ExecutionStrategy } | undefined {
     const issue = this.get(id)
-    if (!issue?.alignment || issue.alignment.status !== 'confirmed') return undefined
+    if (!issue || currentAlignment(issue)?.status !== 'confirmed') return undefined
     const thread = this.host.store.threads.get(this.thread(id))
     if (!thread) return undefined
     const triggerIds = this.host.store.read.threadTriggers(thread.key, 200)
@@ -260,33 +275,64 @@ export class LocalIssues {
     return { thread, triggerIds, actor: { source: LOCAL_SOURCE, id: issue.author || LOCAL_ACTOR }, execution: this.executionStrategy(issue) }
   }
 
-  /** Attach the Aligner's proposal; a person later confirms or rejects it in the panel. */
+  /** Attach the Aligner's proposal as a new round; the person later confirms or rejects the latest one in the panel. */
   propose(id: string, input: LocalAlignmentInput): LocalIssue | undefined {
     const issue = this.get(id)
     if (!issue) return undefined
+    // A confirmed requirement is frozen: its slices already dispatched, so a later proposal would silently bypass the decision.
+    const rounds = alignmentRounds(issue)
+    if (rounds.at(-1)?.status === 'confirmed') throw new UserError('alignmentConfirmed')
     const at = this.clock()
+    const used = new Set(rounds.map(round => round.roundId))
+    let round = rounds.length + 1
+    while (used.has(`al-${round}`)) round++
     const alignment: LocalAlignment = {
-      status: 'proposed', summary: (input.summary ?? '').trim(), slices: input.slices ?? [], acceptance: input.acceptance ?? [],
-      proposedAt: at,
+      roundId: `al-${round}`, status: 'proposed', summary: (input.summary ?? '').trim(), slices: input.slices ?? [],
+      acceptance: input.acceptance ?? [], proposedAt: at,
     }
-    const updated = { ...issue, alignment, updatedAt: at }
+    // A new proposal supersedes the previous undecided one; confirmed and rejected rounds keep their recorded outcome.
+    const alignments = [...rounds.map(previous => previous.status === 'proposed'
+      ? { ...previous, status: 'superseded' as const } : previous), alignment]
+    const updated = { ...issue, alignments, alignment, updatedAt: at }
     this.host.store.set(KV.local.issue(id), updated)
     return updated
   }
 
-  /** Record the person's review of the alignment proposal without letting the panel edit its content. */
-  decide(id: string, decision: 'confirm' | 'reject', reason?: string): LocalIssue | undefined {
+  /**
+   * Record the person's review of the current alignment round without letting the panel edit its content. A decision naming
+   * another round is refused before anything is written; only the reject of a round that was not already rejected tells the
+   * requirement's Thread, so its Aligner hears the feedback once and can propose again.
+   */
+  decide(id: string, decision: 'confirm' | 'reject', reason?: string, roundId?: string): LocalIssue | undefined {
     const issue = this.get(id)
-    if (!issue?.alignment) return undefined
-    if (decision === 'confirm' && !issue.alignment.slices.length) throw new UserError('planEmpty')
-    const at = this.clock()
-    const alignment: LocalAlignment = {
-      ...issue.alignment, status: decision === 'confirm' ? 'confirmed' : 'rejected', decidedAt: at,
-      ...(decision === 'reject' && reason?.trim() ? { reason: reason.trim() } : {}),
+    if (!issue) return undefined
+    const rounds = alignmentRounds(issue)
+    const current = rounds.at(-1)
+    if (!current) return undefined
+    if (roundId !== undefined && roundId !== current.roundId) throw new UserError('alignmentRoundStale', { round: roundId })
+    if (decision === 'confirm') {
+      if (!current.slices.length) throw new UserError('planEmpty')
+      // A repeated confirmation changes nothing, decidedAt included, and dispatches no new work.
+      if (current.status === 'confirmed') return issue
     }
-    const updated = { ...issue, alignment, updatedAt: at }
+    const at = this.clock()
+    const text = reason?.trim()
+    const decided: LocalAlignment = {
+      ...current, status: decision === 'confirm' ? 'confirmed' : 'rejected', decidedAt: at,
+      ...(decision === 'reject' && text ? { reason: text } : {}),
+    }
+    const updated = { ...issue, alignments: [...rounds.slice(0, -1), decided], alignment: decided, updatedAt: at }
     this.host.store.set(KV.local.issue(id), updated)
+    if (decision === 'reject' && current.status !== 'rejected') {
+      const feedback = this.rejectionFeedback(rounds.length, text)
+      this.host.receive(localTrigger({ issue: updated, text: feedback, at, id: key('local-trigger', updated.id, at, feedback) }))
+    }
     return updated
+  }
+
+  /** The human message a rejection posts on the requirement's Thread so the Aligner receives the reason it was sent back for. */
+  private rejectionFeedback(round: number, reason?: string): string {
+    return reason ? `对齐第 ${round} 轮已打回：${reason}` : `对齐第 ${round} 轮已打回，请调整后重新对齐。`
   }
 
   close(id: string): LocalIssue | undefined {
