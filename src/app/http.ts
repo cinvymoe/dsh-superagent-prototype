@@ -211,7 +211,7 @@ function routes(runtime: HttpHost): Routes {
       return { issues: runtime.local.list(project) }
     },
     'POST local/issues': async ({ body }) => {
-      const input = z.object({ title: z.string().trim().min(1).max(200), body: z.string().max(20_000).optional(),
+      const input = z.object({ title: z.string().trim().min(1).max(200).optional(), body: z.string().trim().max(20_000).optional(),
         project: z.string().min(1) }).parse(await body())
       return { issue: runtime.local.create(input) }
     },
