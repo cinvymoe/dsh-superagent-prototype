@@ -72,7 +72,7 @@ describe('documentation', () => {
 describe('worktree root documentation', () => {
   it('states the directory root priority and that the prepare command runs in the chosen root', () => {
     const execution = prose('docs/003-execution.md')
-    expect(execution).toContain('chosen in this order: the local project\'s `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`')
+    expect(execution).toContain('chosen by priority: the local project\'s `worktreeRoot` > `executor.directory` > `<stateDir>/work`')
     expect(execution).toContain('the prepare command runs once with `sh` and the chosen root as its working directory')
   })
   it('states that an explicit root failure does not fall back and can be retried after it is fixed', () => {

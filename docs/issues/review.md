@@ -19,6 +19,8 @@
 
 无 `src/**`、`prompts/**`、locale 或生成物变更。
 
+集成分支对齐：PR 目标为 operator fork `cinvymoe/dsh-superagent-prototype` 的 `main`（部署仓库 `deepseek-ai/dsh-superagent-prototype` 拒绝 App push，403）。该 `main`（`310ae2e`）已携带上一轮同一 C3 slice 的文档提交（`4b2d3d0`），因此本分支合并了 `deployment/main`，在 `docs/003-execution.md` 的冲突处保留本分支版本（含 `5556291` 新增的 execute-flow 句子），并按本 slice 把优先级改写为显式 `>` 记法；相对 `deployment/main` 的净变更因此是：`docs/003` 的执行流句子与显式优先级记法、`tests/docs.spec.ts` 对应断言，以及本 ticket 的交付记录与证据。
+
 ## 双轴评审
 
 执行说明：实现由 `feature_exec_dispatch` lane `lane-T1-1`（spawn）完成；评审由 worker 在完整读取 diff 与实现后自审（文档类改动、范围 5 个文件，按 worker 评审职责执行），结论如下。
@@ -37,7 +39,7 @@
 
 | 验收标准 | 结论 | 证据 |
 | --- | --- | --- |
-| AC-1：`docs/003` 写出优先级、prepare cwd、显式根目录失败/不回退/修正后可重试 | PASS | `docs/003-execution.md` 第 25 行（优先级、`execution.worktreeRoot` 记录）、第 51 行（prepare 以选定根为 cwd、不自行选路径）、第 53 行（存在/目录/可写校验、失败不创建不回退、修正后 retry 或线程消息重跑）；`tests/docs.spec.ts` 对应断言通过 |
+| AC-1：`docs/003` 写出优先级、prepare cwd、显式根目录失败/不回退/修正后可重试 | PASS | `docs/003-execution.md` 第 25 行（目录根优先级写作 `项目 worktreeRoot` > `executor.directory` > `<stateDir>/work`，并记录 `execution.worktreeRoot`）、第 51 行（prepare 以选定根为 cwd、不自行选路径）、第 53 行（存在/目录/可写校验、失败不创建不回退、修正后 retry 或线程消息重跑）；`tests/docs.spec.ts` 对应断言通过 |
 | AC-2：`docs/005` 的 Discuss 与 Execution 描述与面板实际字段一致 | PASS | `docs/005-panel.md` 第 20 行（项目 name/repository/可选绝对 `worktreeRoot`，空值未配置）、第 37 行（`worktreeRoot` 语义）、第 39 行（Execution 设置字段与优先级/校验/prepare cwd）；对照 `src/client/discuss.tsx`、`src/client/execution.tsx`、`src/client/locales.ts` 的 `executionDirectory`、`executionDirectoryHint`、`discuss.projectWorktreeRoot`、`discuss.projectWorktreeRootHint` |
 | AC-3：`docs/006` 的 Execution 步骤与 executor 配置键覆盖语义，不再暗示 prepare 决定路径 | PASS | `docs/006-deployment.md` 第 149 行（优先级、prepare cwd、`$DSH_SUPERAGENT_DIR` 检出但不选根目录、显式根校验、失败不回退、修正后重试）、第 205 行（`executor.directory`/`prepare` 键说明）、排查表新增根目录失败行；对照 `src/executor/dsh.ts` `prepareDirectory`/`verifyWorktreeRoot` |
 | AC-4：`docs/007` 模块表与实现一致；`tests/docs.spec.ts` 通过 | PASS | `docs/007-architecture.md` 第 201–203 行（`DshExecutor`/`prepareDirectory`/prepare cwd）、第 303/339/342/357/375/387 行附近模块行、第 415–416 行测试行；`pnpm vitest run tests/docs.spec.ts` 11 tests passed |
