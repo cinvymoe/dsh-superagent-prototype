@@ -6,7 +6,7 @@ import { requirementImage, usePoll } from './api.ts'
 import { Button, Icon, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
-import { MarkdownLite, PageHead, Section, When } from './widgets.tsx'
+import { MarkdownLite, PageHead, Section, SessionButton, When } from './widgets.tsx'
 
 /** One image chosen in the New requirement form: the FileReader data URL doubles as the thumbnail and the payload. */
 interface ChosenImage { name: string; mediaType: string; data: string; bytes: number; preview: string }
@@ -296,6 +296,7 @@ export function RequirementDetail({ id }: { id: string }) {
             <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
               onClick={() => navigate({ page: 'execution', id: ticket.id })}>{ticket.title}</button></div>
           </div>
+          {ticket.sessionId && <div className="dt-row-actions"><SessionButton variant="outline" sessionId={ticket.sessionId} /></div>}
         </li>)}</ul>
       </Section>
 
