@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // The Discuss board: projects (with an optional worktree root) and requirement submission.
 import { expect, it } from 'vitest'
-import { zh } from '../src/client/locales.ts'
-import { usePanel, mount, all, click, type, text, at } from './fixtures/panel.tsx'
+import { en, zh } from '../src/client/locales.ts'
+import { usePanel, mount, remount, all, click, type, text, at } from './fixtures/panel.tsx'
 import { localIssue, server } from './fixtures/panel-server.ts'
 
 usePanel()
@@ -24,6 +24,7 @@ it('creates a project with an optional absolute worktree root and shows it in th
   await type(input(zh['discuss.projectName']), 'Rooted')
   await type(input(zh['discuss.projectRepository']), 'acme/rooted')
   await type(input(zh['discuss.projectWorktreeRoot']), '/srv/worktrees')
+  expect(text()).toContain(zh['discuss.projectWorktreeRootHint'])
   await click(zh['discuss.createProject'])
   const projectRequest = server.requests.find(request => request.path === 'local/projects' && request.method === 'POST')!
   expect(projectRequest).toMatchObject({ method: 'POST', body: { name: 'Rooted', repository: 'acme/rooted', worktreeRoot: '/srv/worktrees' } })
@@ -55,4 +56,14 @@ it('submits a requirement into the selected project and tags the row with it', a
   // Submitting opens the new issue, whose detail names the requirement and its project.
   expect(text()).toContain('New requirement')
   expect(text()).toContain('项目：Widgets · acme/widgets')
+})
+
+it('names the project worktree root field and hint in English as well', async () => {
+  at({ page: 'discuss' })
+  await mount()
+  await remount(en)
+  expect(text()).toContain(en['discuss.noProjects'])
+  await click(en['discuss.newProject'])
+  expect(input(en['discuss.projectWorktreeRoot'])).toBeInstanceOf(HTMLInputElement)
+  expect(text()).toContain(en['discuss.projectWorktreeRootHint'])
 })
