@@ -1,0 +1,47 @@
+== base 310ae2ef45ffa7a97fcaddc82e33bf4a4fe298f6 (deployment main)
+== diff against base
+ src/app/local.ts          | 8 +++++---
+ tests/local-align.spec.ts | 4 ++++
+ tests/local.spec.ts       | 9 ++++++---
+ 3 files changed, 15 insertions(+), 6 deletions(-)
+== pnpm typecheck
+(node:586509) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ tsc --noEmit
+EXIT:0
+== targeted vitest
+   ✓ runs prepare commands in the background, side by side, while accepts, intake and passes go on  807ms
+   ✓ keeps a launch that a pause cut short queued, and finishes it once processing resumes  533ms
+     ✓ leaves the jobs a worker left to a person out of a later turn's background work, and does not kill them at the limit  321ms
+     ✓ holds a delivery that reached a worker while a hand-off stopped its subagents until the stop ended  4089ms
+     ✓ collects the end of a job left to a person until dsh-superagent stopped its workers  326ms
+   ✓ wakes an idle worker for a status request in the slot kept for a person, while every other slot is taken  415ms
+
+ Test Files  4 passed (4)
+      Tests  82 passed (82)
+   Start at  11:12:58
+   Duration  19.05s (transform 2.12s, setup 0ms, import 3.38s, tests 23.86s, environment 1ms)
+
+EXIT:0
+== full vitest (clean env)
+   ✓ counts a launch under way against maxWorkers, so a bot's Input for an idle worker waits for the slot  353ms
+     ✓ stays busy while its shell job runs, holding its slot, and reports waiting once the job ended and its turn ends  330ms
+     ✓ leaves the jobs a worker left to a person out of a later turn's background work, and does not kill them at the limit  335ms
+     ✓ holds a delivery that reached a worker while a hand-off stopped its subagents until the stop ended  4102ms
+     ✓ collects the end of a job left to a person until dsh-superagent stopped its workers  302ms
+     ✓ sends to Eval a message that woke a ticket and that a retry delivered after a progress report, at a dropped report  303ms
+
+ Test Files  62 passed (62)
+      Tests  1240 passed (1240)
+   Start at  11:13:18
+   Duration  20.09s (transform 23.27s, setup 0ms, import 48.12s, tests 101.79s, environment 13.51s)
+
+EXIT:0
+== build
+  - rolldown-plugin-dts:fake-js transform (45 calls)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✔ Build complete in 3489ms
+EXIT:0
+== git diff --check
+EXIT:0
