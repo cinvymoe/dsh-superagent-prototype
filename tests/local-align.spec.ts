@@ -101,11 +101,25 @@ it('accepts an optional absolute worktree root over HTTP and refuses a relative 
   expect(project.worktreeRoot).toBe('/srv/worktrees')
   const listed = await h.api('GET', 'local/projects')
   expect((listed.body.projects as { id: string; worktreeRoot?: string }[]).find(entry => entry.id === project.id)?.worktreeRoot).toBe('/srv/worktrees')
+  // The requirement detail names its project, so the field is visible where a requirement is discussed.
+  const submitted = await h.api('POST', 'local/issues', { title: 'Rooted requirement', project: project.id })
+  const detail = await h.api('GET', `local/issues/${(submitted.body.issue as { id: string }).id}`)
+  expect(detail.body.project).toMatchObject({ id: project.id, worktreeRoot: '/srv/worktrees' })
+  // A relative root is a structured refusal that explains the rule, and nothing is stored.
+  const relative = await h.api('POST', 'local/projects', { name: 'Relative', repository: 'acme/relative', worktreeRoot: 'relative/root' })
+  expect(relative.status).toBe(400)
+  expect(relative.body).toMatchObject({ code: 'projectWorktreeRoot', error: expect.stringContaining('absolute path') })
+  expect((await h.api('GET', 'local/projects')).body.projects).not.toContainEqual(expect.objectContaining({ name: 'Relative' }))
+  // An empty string means unconfigured; a legacy record without the field still answers.
   const plain = await h.api('POST', 'local/projects', { name: 'Plain', repository: 'acme/plain', worktreeRoot: '' })
   expect(plain.status).toBe(200)
   expect(plain.body.project).not.toHaveProperty('worktreeRoot')
-  const relative = await h.api('POST', 'local/projects', { name: 'Relative', repository: 'acme/relative', worktreeRoot: 'relative/root' })
-  expect(relative.status).toBe(400)
+  const legacy = h.runtime.local.createProject({ name: 'Legacy', repository: 'acme/legacy' })
+  const oldIssue = h.runtime.local.create({ title: 'Legacy requirement', project: legacy.id })
+  const old = await h.api('GET', `local/issues/${oldIssue.id}`)
+  expect(old.status).toBe(200)
+  expect(old.body.project).toMatchObject({ id: legacy.id })
+  expect(old.body.project).not.toHaveProperty('worktreeRoot')
 })
 
 /** A local project's worktree root replaces the Execution root for new tickets, and is validated before any worker Session starts. */
