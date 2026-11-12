@@ -114,12 +114,25 @@ it('accepts an optional absolute worktree root over HTTP and refuses a relative 
   const plain = await h.api('POST', 'local/projects', { name: 'Plain', repository: 'acme/plain', worktreeRoot: '' })
   expect(plain.status).toBe(200)
   expect(plain.body.project).not.toHaveProperty('worktreeRoot')
+  // Omitted and whitespace-only mean unconfigured too: the route trims, and the retry alignment froze blank = no root.
+  const omitted = await h.api('POST', 'local/projects', { name: 'Omitted', repository: 'acme/omitted' })
+  expect(omitted.status).toBe(200)
+  expect(omitted.body.project).not.toHaveProperty('worktreeRoot')
+  const blank = await h.api('POST', 'local/projects', { name: 'Blank', repository: 'acme/blank', worktreeRoot: '   ' })
+  expect(blank.status).toBe(200)
+  expect(blank.body.project).not.toHaveProperty('worktreeRoot')
   const legacy = h.runtime.local.createProject({ name: 'Legacy', repository: 'acme/legacy' })
   const oldIssue = h.runtime.local.create({ title: 'Legacy requirement', project: legacy.id })
   const old = await h.api('GET', `local/issues/${oldIssue.id}`)
   expect(old.status).toBe(200)
   expect(old.body.project).toMatchObject({ id: legacy.id })
   expect(old.body.project).not.toHaveProperty('worktreeRoot')
+  // The list returns a record without the field as-is, so old projects stay readable.
+  const legacyListed = await h.api('GET', 'local/projects')
+  expect(legacyListed.status).toBe(200)
+  expect((legacyListed.body.projects as { id: string; worktreeRoot?: string }[]).find(entry => entry.id === legacy.id))
+    .toMatchObject({ id: legacy.id })
+  expect((legacyListed.body.projects as { id: string }[]).find(entry => entry.id === legacy.id)).not.toHaveProperty('worktreeRoot')
 })
 
 /** A local project's worktree root replaces the Execution root for new tickets, and is validated before any worker Session starts. */
