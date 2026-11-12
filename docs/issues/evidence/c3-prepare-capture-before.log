@@ -1,0 +1,13 @@
+# C3 · Before capture (deployment main before this slice)
+# Baseline: cinvymoe/dsh-superagent-prototype main 422a21a400c72a390a8d5ef469a1080036e98c9d
+#   clone /tmp/c3-before-src; pnpm install --frozen-lockfile && pnpm build (exit 0)
+# Profile: DSH profile c3local-before, stateDir /root/.dsh/state/c3local-before,
+#   webserver 10.126.126.6:3141, dsh-superagent linked to /tmp/c3-before-src
+# State: seeded SQLite with one GitHub chain cinvymoe/dsh-superagent-prototype (setup stub CLI);
+#   no live GitHub/Feishu state, no credentials in the capture.
+# Command: python3 /tmp/c3-capture.py <url> /tmp/c3-shots before
+MODE before
+TEXT: 来源 | 评估 | 执行 | 提示词 | 部署 | 部署 |  | 这台机器上的 dsh-superagent 设置，存放在 DSH 配置文件的 dsh-superagent 条目里；保存后立即生效，不会重启 dsh-superagent。 |  | 本机设置 | 状态目录 | /root/.dsh/state/c3local-before | 上限 | 提示词配置的最大字符数 | 一次研判可读的线程页数 | 一次上下文读取的时限 / 毫秒
+SHOT docs/evidence/c3-deployment-checkout/before-deployment.png
+# Viewport 1440x1100, light, zh-CN, /usr/bin/chromium headless via Playwright; route sessionStorage['dsh-superagent/route'] = settings/deployment
+# Command exit status: 0
