@@ -52,7 +52,7 @@
 
 - 定向：`npx vitest run tests/panel-projects.spec.tsx tests/panel-discuss.spec.tsx tests/navigation.spec.ts tests/docs.spec.ts tests/local-align.spec.ts tests/local.spec.ts tests/panel-source.spec.tsx` → `docs/issues/evidence/c3-targeted.log`（7 files / 78 tests passed，exit 0）。
 - 全量：`env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check` → `docs/issues/evidence/c3-check.log`（63 files / 1263 tests passed，Build complete，exit 0）。
-- 说明：首轮全量在另一个 worktree 并发跑 check 时 `tests/followups.spec.ts` 以 5000 ms 超时失败一次；单独复跑 16/16 通过，随后独占重跑全量全绿（`benchmarks/project-repo-chains/c3-project-edit/evidence/followups-rerun.log`）。
+- 说明：宿主同时有其他 worktree 的 check 与 rust_crane C++ 构建时，5000 ms 单测上限的用例（`tests/followups.spec.ts`、`tests/migration.spec.ts`）会偶发超时；两者单独复跑分别 16/16、19/19 通过。已提交的 `docs/issues/evidence/c3-check.log` 是 17:43 的独占全绿运行（63 files / 1263 tests，Build complete，exit 0），对应交付代码（之后的 docs 提交只加文档）。
 - `git diff --check`：干净。
 
 ## 视觉证据（UI 变更）
