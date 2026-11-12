@@ -1,8 +1,9 @@
 /** Manages versioned role prompts, behavioral policies, and operational skills independently of access settings. */
 import { z } from 'zod'
-import { UserError, key } from '../core/index.ts'
+import { UserError, key, type ExecutionMode } from '../core/index.ts'
 import { policyVersion, type Settings, type SettingsOrigin } from '../policy.ts'
-import { alignPrompt, executePrompt, masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults, sourceSkills, cliNotes } from './context.ts'
+import { alignPrompt, executePrompt, nativeExecutePrompt, masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults,
+  sourceSkills, cliNotes } from './context.ts'
 import { environmentLines, type Variable } from './execution-environment.ts'
 import { promptsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -153,11 +154,11 @@ export class Prompts {
     return [...parts, alignPrompt].join('\n\n')
   }
   /**
-   * A slice worker's prompt: the worker rules and guides, followed by the execution handoff guide. The slice was already
-   * aligned and approved, so the worker starts a feature-exec execution run instead of re-planning the requirement.
+   * A slice worker's prompt: the worker rules and guides, followed by the handoff of the execution strategy its Ticket
+   * pinned. A native slice implements the approved plan directly; a feature-exec one starts its execution run first.
    */
-  composeExecute(config: PromptConfig, variables = this.environment()): string {
-    return `${this.compose(config, 'worker', variables)}\n\n${executePrompt}`
+  composeExecute(config: PromptConfig, mode: ExecutionMode = 'feature-exec', variables = this.environment()): string {
+    return `${this.compose(config, 'worker', variables)}\n\n${mode === 'native' ? nativeExecutePrompt : executePrompt}`
   }
   /** Returns skills to register in every Session: built-in Source skills (`feishu` only when a Feishu bot is configured) followed by team skills. */
   skills(config: PromptConfig): [string, string][] {
