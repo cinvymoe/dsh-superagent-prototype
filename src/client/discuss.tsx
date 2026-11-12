@@ -49,6 +49,8 @@ export function DiscussBoard() {
       <span className="dt-hint">{t('discuss.subtitle')}</span>
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
+      {active && <Button variant="outline" size="sm" className="dt-project-edit" icon={<Icon name="settings" size={14} />}
+        onClick={() => navigate({ page: 'discuss', edit: active.id })}>{t('discuss.editProject')}</Button>}
     </PageHead>
     <div className="dt-column">
       {!active && <Section title={t('discuss.issues')}>

@@ -10,7 +10,7 @@ import { ticketMark } from './marks.ts'
 import { GLOSSARY, GLOSSARY_VALUES, en, zh, type DshSuperagentKey } from './locales.ts'
 import { OverviewPage } from './overview.tsx'
 import { PanelProvider, usePanel, usePanelData } from './provider.tsx'
-import { NewProjectPage, ProjectBar } from './projects.tsx'
+import { ProjectBar, ProjectFormPage } from './projects.tsx'
 import { HOME, TABS, initialLocation, lastSettingsGroup, remember, routeLabel, settingsRoute, type Location, type Route,
   type Tab } from './route.ts'
 import { SettingsPage } from './settings.tsx'
@@ -150,7 +150,8 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
     switch (route.page) {
       case 'overview': return <OverviewPage />
       case 'discuss': return route.id !== undefined ? <DiscussIssue key={route.id} id={route.id} />
-        : route.create ? <NewProjectPage /> : <DiscussBoard />
+        : route.edit ? <ProjectFormPage key={route.edit} edit={route.edit} />
+        : route.create ? <ProjectFormPage /> : <DiscussBoard />
       case 'source': return <SourceStatus />
       case 'trigger': return route.id !== undefined ? <ThreadPage key={route.id} id={route.id} target={route.query?.trigger} />
         : <TriggerStatus filter={route.query?.filter ?? 'subscribed'} />
@@ -185,8 +186,18 @@ export function App({ t, openSession, deploymentForm }: AppProps) {
   const navigate = useCallback((route: Route, replace = false) => move(current => ({ route,
     stack: replace ? current.stack : [...current.stack, current.route].slice(-20) })), [move])
   const back = useCallback(() => move(current => ({ route: current.stack.at(-1) ?? HOME, stack: current.stack.slice(0, -1) })), [move])
-  const openTab = useCallback((tab: Tab) => move(current => ({ stack: [], route: tab === 'settings'
-    ? settingsRoute(lastSettingsGroup(current)) : { page: tab, id: undefined } })), [move])
+  // Each page tab opens its own fresh route; Discuss and Overview carry no record, the others carry no query.
+  const openTab = useCallback((tab: Tab) => move(current => ({ stack: [], route: (() => {
+    switch (tab) {
+      case 'settings': return settingsRoute(lastSettingsGroup(current))
+      case 'discuss': return { page: 'discuss' as const }
+      case 'overview': return { page: 'overview' as const }
+      case 'source': return { page: 'source' as const }
+      case 'trigger': return { page: 'trigger' as const }
+      case 'eval': return { page: 'eval' as const }
+      case 'execution': return { page: 'execution' as const }
+    }
+  })() })), [move])
   const setProject = useCallback((project: string | undefined) => setLocation(current => ({ ...current, project })), [])
   return <PanelProvider t={t} openSession={openSession} navigate={navigate} back={back} backLabel={routeLabel(t, location.stack.at(-1) ?? HOME)}
     project={location.project} setProject={setProject}>

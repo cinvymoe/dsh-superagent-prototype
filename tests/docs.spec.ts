@@ -101,8 +101,28 @@ describe('worktree root documentation', () => {
   it('describes the worktree root in the module and test table entries this feature touches', () => {
     const architecture = prose('docs/007-architecture.md')
     expect(architecture).toContain('its `prepareDirectory` validation of an explicit worktree root and the prepare command\'s working directory')
-    expect(architecture).toContain('create a project with its name, intake and code repositories and optional worktree root')
+    expect(architecture).toContain('creates a project or edits the current one, with its name, intake and code repositories and optional worktree root')
     expect(architecture).toContain('`Execution` with its optional explicit `worktreeRoot`')
     expect(architecture).toContain('the worktree-root sections state the root priority, the prepare working directory and the no-fallback failure')
+  })
+})
+
+describe('project edit documentation', () => {
+  it('states that the same form edits the current project, pre-filled, and that Cancel or Back writes nothing', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('**Edit project** in the Discuss page head opens the same form for the current project with its four fields already filled in')
+    expect(panel).toContain('Cancel or Back on either page writes nothing')
+  })
+  it('states that saving reloads and returns, an edit changes only that project, and a refusal keeps the page', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('Saving the form reloads the projects, makes the saved project current and returns to its requirements')
+    expect(panel).toContain('editing one project changes only that project\'s chain and leaves every other project\'s two repositories as they were')
+    expect(panel).toContain('A refused save shows the localized reason and keeps the page and the typed values')
+  })
+  it('names the edit page in the route and project form module rows and the isolation test row', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('the Discuss create and edit pages')
+    expect(architecture).toContain('the standalone form that creates a project or edits the current one')
+    expect(architecture).toContain('editing one project without changing another project\'s repositories')
   })
 })

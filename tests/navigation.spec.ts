@@ -56,6 +56,10 @@ it('reads each page a tab remembered with the parameters it takes, and leaves ou
     .toEqual({ page: 'trigger', id: 'github:1', query: { trigger: 'e1' } })
   expect(parseRoute({ page: 'eval', query: { filter: 'stop', window: '7d' } })).toEqual({ page: 'eval', query: { filter: 'stop' } })
   expect(parseRoute({ page: 'execution', id: 5, query: { filter: 'idle' } })).toEqual({ page: 'execution', query: { filter: 'idle' } })
+  // The Discuss page remembers its project form: the standalone create page, and the edit page of one project.
+  expect(parseRoute({ page: 'discuss', create: true })).toEqual({ page: 'discuss', create: true })
+  expect(parseRoute({ page: 'discuss', edit: 'p-1', create: true })).toEqual({ page: 'discuss', edit: 'p-1' })
+  expect(parseRoute({ page: 'discuss', edit: 7 })).toEqual({ page: 'discuss' })
   expect(parseRoute({ page: 'settings', query: { group: 'policy', source: 'feishu' } }))
     .toEqual({ page: 'settings', query: { group: 'source', source: 'feishu' } })
   expect([parseRoute('overview'), parseRoute(null)]).toEqual([undefined, undefined])
