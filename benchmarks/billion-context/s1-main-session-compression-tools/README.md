@@ -3,7 +3,7 @@
 - Ticket: `6f94b843ab41a9adc11ecedfae34d5e3`（alignment `q-aa660352` 的 S1 slice）
 - Branch: `agent/session-billion-context-6f94b843ab41`
 - Base: deployment `main` @ `c68e6e44`
-- PR: 见本分支提交后创建的 PR（由人复核合并，未启用 auto-merge）
+- PR: https://github.com/cinvymoe/dsh-superagent-prototype/pull/21 （OPEN；由人复核合并，未启用 auto-merge）
 - Scope: `src/app/sessions.ts` 主 Session 的 `tools.restrict({allow})` 白名单；`tests/runtime.spec.ts` 单测；`tests/fixtures/host.ts` / `tests/model-surface.spec.ts` 的 fake `get` 补齐 7 个内置工具；`docs/007-architecture.md` Main Session tools 段
 
 ## 场景

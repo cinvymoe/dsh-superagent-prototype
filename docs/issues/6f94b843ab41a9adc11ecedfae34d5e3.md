@@ -1,7 +1,7 @@
 ---
 arch_impact: local
-pr_status: none
-pr_url: none
+pr_status: open
+pr_url: https://github.com/cinvymoe/dsh-superagent-prototype/pull/21
 pr_arch_impact: local
 worktrees: []
 ---
@@ -51,6 +51,7 @@ worktrees: []
 
 ## 证据与记录（随执行回填）
 
+- Pull request: https://github.com/cinvymoe/dsh-superagent-prototype/pull/21 （open，待人工复核合并；未启用 auto-merge）
 - 评审与测试证据：`docs/issues/review-S1-billion-context.md`（双轴评审由独立 lane R1/R2 承载，测试证据由独立 lane V1 采集）。
 - 原始日志（均在修复后的最终树上重生成，源码 mtime 早于全部日志）：`docs/issues/evidence/s1-targeted.log`（2 files / 97 tests，exit 0）、`s1-typecheck.log`（exit 0）、`s1-test.log`（63 files / 1288 tests，exit 0）、`s1-build.log`（Build complete，exit 0）、`s1-baseline-env.log`（环境噪声基线对照，exit 1，仅两条 `GIT_CONFIG_GLOBAL` 环境断言失败）。
 - 执行 lane：T1 实施 `lane-T1-1`（child `e0b611df`，含一次评审发现的重建失败重试修复）；R1 `lane-R1-2`；R2 `lane-R2-3`；V1 `lane-V1-5`（首次 `lane-V1-4` 派发异常失败，重派后完成）。

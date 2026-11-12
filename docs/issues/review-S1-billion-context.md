@@ -3,6 +3,7 @@
 - Run: `run-mwdmt49d-2`（execute，policy A1），issue `q-aa660352:S1`
 - Ticket: `6f94b843ab41a9adc11ecedfae34d5e3`
 - 分支：`agent/session-billion-context-6f94b843ab41`，基线 `deployment/main` @ `c68e6e44`
+- PR: https://github.com/cinvymoe/dsh-superagent-prototype/pull/21 （open）
 - 评审日期：2026-11-12
 - 双轴评审由两个独立 lane 承载：R1（Standards 轴，T2/high，child `6aaf8c09`）、R2（Spec 轴，T2/high，child `33d1260c`）；测试证据由独立 lane V1 采集（child `5ab36c2a`）。主会话只做归档与签门。
 
