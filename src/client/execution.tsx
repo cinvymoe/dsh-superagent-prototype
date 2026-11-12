@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { TICKET_FILTERS, type TicketFilter } from '../app/api.ts'
 import { LIMITS } from '../limits.ts'
 import { usePoll, type SettingsView, type SourceView, type StateView } from './api.ts'
-import { DisclosureRow, Icon, InfoTip, Input, Pill } from './controls.tsx'
+import { Button, DisclosureRow, Icon, InfoTip, Input, Pill } from './controls.tsx'
 import { SaveBar } from './draft.tsx'
 import { usePanel } from './provider.tsx'
 import { TicketLine } from './rows.tsx'
@@ -24,6 +24,8 @@ export function ExecutionStatus({ filter: current, state, reload }: {
     label: t('processingPaused') }
     : { tone: 'ongoing', label: t('executorRunning') }
   const action = paused ? 'resumeProcessing' : 'pauseProcessing'
+  // A non-default filter clears through the same route as the Open Pill: no filter query, no new history entry.
+  const clearFilters = () => { setLimit(20); navigate({ page: 'execution' }, true) }
   return <>
     <StatusHead hint={t('executionStatusIntro')} settings="execution" />
     <div className="dt-row-meta dt-status-line">
@@ -40,6 +42,8 @@ export function ExecutionStatus({ filter: current, state, reload }: {
       {TICKET_FILTERS.map(value => <Pill key={value} active={current === value}
         onClick={() => { setLimit(20); navigate({ page: 'execution', query: value === 'open' ? {} : { filter: value } },
           true) }}>{t(`ticketFilter.${value}`)}</Pill>)}
+      {current !== 'open' && <Button variant="outline" size="sm" icon={<Icon name="filter" />}
+        onClick={clearFilters}>{t('clearFilters')}</Button>}
     </div>
     {current === 'idle' && <Hint>{t('idleHint')}</Hint>}
     <LoadState error={error} loading={!data} />

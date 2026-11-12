@@ -448,6 +448,7 @@ const TEXT = {
   'ticketFilter.working': ['执行中', 'Working'],
   'ticketFilter.idle': ['等待新触发', 'Waiting for a Trigger'],
   'ticketFilter.ended': ['已结束', 'Ended'],
+  clearFilters: ['清除筛选', 'Clear filters'],
   // Settings, drafts, and configuration history
   policyVersionUnrecorded: ['最近的保存记录里没有策略版本 {version}：它来自更早的保存、首次启动时的设置或更早的数据。', 'The recent saves do not include Policy version {version}: an older save, the settings at the first start, or older data made it.'],
   defaultModel: ['DSH 当前默认：{model}', 'DSH default: {model}'],
