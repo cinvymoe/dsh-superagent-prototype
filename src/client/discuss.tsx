@@ -1,6 +1,6 @@
 /** Local issue board: submit a requirement, read its discussion, and review the Aligner's proposal. */
 import { useState, type FormEvent } from 'react'
-import type { LocalIssue } from '../sources/local-format.ts'
+import { projectRepositories, type LocalIssue } from '../sources/local-format.ts'
 import { usePoll } from './api.ts'
 import { Button, Icon, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
@@ -47,7 +47,7 @@ export function DiscussBoard() {
   return <>
     <PageHead title={active ? active.name : t('discuss.title')}>
       <span className="dt-hint">{t('discuss.subtitle')}</span>
-      {active && <span className="dt-mono">{active.repository}</span>}
+      {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
     </PageHead>
     <div className="dt-column">
@@ -126,7 +126,7 @@ export function DiscussIssue({ id }: { id: string }) {
       <section className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.requirement')}</span></div>
         <div className="dt-row-meta"><span>{t('discuss.author')}：{issue.author}</span><When at={issue.createdAt} />
-          <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {data.project.repository}
+          <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}
             {data.project.worktreeRoot ? ` · ${data.project.worktreeRoot}` : ''}</span>}</div>
         {issue.body && <MarkdownLite text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}

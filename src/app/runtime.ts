@@ -17,7 +17,7 @@ import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, ty
 import { allowedSender, settingsPolicy } from '../policy.ts'
 import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
-import type { Deployment, Machine } from '../deployment.ts'
+import { GithubConfigSchema, githubChains, normalizeGithubConfig, type Deployment, type Machine } from '../deployment.ts'
 import { environmentOf, ticketEnvironment, type Variable } from './execution-environment.ts'
 import type { SetupProblem } from '../setup.ts'
 import { DshExecutor, sourceTrigger, triggerMessage, workerSessionId } from '../executor/dsh.ts'
@@ -31,6 +31,7 @@ import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
 import { LocalIssues } from './local.ts'
+import { Projects } from './projects.ts'
 import type { LocalProject } from '../sources/local-format.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
@@ -73,6 +74,7 @@ export class Runtime extends Service implements SourceHost {
   readonly engine: Engine
   readonly passes: Passes
   readonly local: LocalIssues
+  readonly projects: Projects
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
@@ -163,6 +165,7 @@ export class Runtime extends Service implements SourceHost {
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
       this.local = new LocalIssues({ store, receive: trigger => this.passes.receive(trigger) })
+      this.projects = new Projects({ store, local: this.local, settings: this.settings })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger) }
@@ -201,11 +204,24 @@ export class Runtime extends Service implements SourceHost {
     const trigger = sourceTrigger(this, ticket)
     return typeof trigger?.meta.project === 'string' ? this.local.project(trigger.meta.project) : undefined
   }
-  /** The deployment a ticket executes under: its local project's repository, or its chain's configured repository. */
+  /**
+   * The deployment a ticket executes under: the chain of its local project, or its chain's configured deployment.
+   * A chain added or changed since startup is not resolved yet, so it is read from the stored configuration instead.
+   */
   ticketDeployment(ticket: Ticket): Deployment {
     const base = this.setup.deploymentFor(ticket.execution?.chain)
     const project = this.ticketProject(ticket)
-    return project ? { ...base, repository: project.repository, intakeRepository: project.repository } : base
+    if (!project) return base
+    if (project.chain) {
+      const resolved = this.setup.deploymentFor(project.chain)
+      if (resolved.chain === project.chain) return resolved
+      const stored = githubChains(GithubConfigSchema.parse(normalizeGithubConfig(this.store.settings().sources.github?.config ?? {})))
+        .find(chain => chain.id === project.chain)
+      if (stored) return { ...base, chain: stored.id, repository: stored.codeRepository, intakeRepository: stored.intakeRepository }
+    }
+    const code = project.codeRepository ?? project.repository ?? base.repository
+    const intake = project.intakeRepository ?? code
+    return { ...base, repository: code, intakeRepository: intake }
   }
   ticketEnvironment(ticket: Ticket): Variable[] {
     const trigger = sourceTrigger(this, ticket)
@@ -233,6 +249,8 @@ export class Runtime extends Service implements SourceHost {
   private async initialize(): Promise<void> {
     // Register management HTTP routes before setup completes so operators can fix setup problems in the UI.
     this.disposers.push(registerHttp(this.ctx, this.httpHost()))
+    // Bind legacy projects to the chain whose code repository they already name; only records are written.
+    this.projects.bindLegacy()
     if (!await this.setup.run(this.store.settings())) {
       this.runtimeHealth.set({ ...health('paused', 'setupPending'), at: now() })
       return
@@ -252,6 +270,7 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
+      projects: this.projects,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },

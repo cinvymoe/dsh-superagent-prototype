@@ -4,15 +4,29 @@
 export const LOCAL_SOURCE = 'local'
 export const LOCAL_ACTOR = 'local'
 
-/** A local project names one execution repository; every requirement in the project uses the same flow. */
+/** A local project owns its own GitHub repository chain; every requirement in the project executes through it. */
 export interface LocalProject {
   id: string
   name: string
-  repository: string
+  /** GitHub chain id owning this project's repositories; absent on a legacy project that only has `repository`. */
+  chain?: string
+  /** Repository whose Issues the project receives; absent only on a legacy record. */
+  intakeRepository?: string
+  /** Repository workers check out and open pull requests in; absent only on a legacy record. */
+  codeRepository?: string
+  /** Execution repository of a project created before projects owned chains; read-only fallback. */
+  repository?: string
   /** Optional absolute root under which new tickets create their worktrees; absent keeps the Executor's root. */
   worktreeRoot?: string
   createdAt: string
   updatedAt: string
+}
+
+/** The repositories a project shows: its intake → code pair, or the single legacy execution repository. */
+export function projectRepositories(project: Pick<LocalProject, 'repository' | 'intakeRepository' | 'codeRepository'>): string {
+  return project.codeRepository !== undefined
+    ? `${project.intakeRepository ?? project.codeRepository} → ${project.codeRepository}`
+    : project.repository ?? ''
 }
 
 /** One task slice produced by the alignment stage of a local requirement. */

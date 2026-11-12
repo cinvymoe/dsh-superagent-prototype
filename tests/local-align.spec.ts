@@ -81,21 +81,23 @@ it('dispatches the confirmed slices as tickets, one per slice, and only after th
 })
 
 it('creates projects over HTTP and keeps requirements scoped to them', async () => {
-  const created = await h.api('POST', 'local/projects', { name: 'Other', repository: 'acme/other' })
+  const created = await h.api('POST', 'local/projects', { name: 'Other', intakeRepository: 'acme/intake', codeRepository: 'acme/other' })
   expect(created.status).toBe(200)
-  const project = created.body.project as { id: string }
+  const project = created.body.project as { id: string; intakeRepository: string; codeRepository: string }
+  expect(project).toMatchObject({ intakeRepository: 'acme/intake', codeRepository: 'acme/other' })
   const submitted = await h.api('POST', 'local/issues', { title: 'Project requirement', project: project.id })
   expect(submitted.status).toBe(200)
   const issue = submitted.body.issue as { id: string; project: string }
   expect(issue.project).toBe(project.id)
   const detail = await h.api('GET', `local/issues/${issue.id}`)
-  expect(detail.body.project).toMatchObject({ id: project.id, repository: 'acme/other' })
+  expect(detail.body.project).toMatchObject({ id: project.id, intakeRepository: 'acme/intake', codeRepository: 'acme/other' })
   const missing = await h.api('POST', 'local/issues', { title: 'No project' })
   expect(missing.status).toBe(400)
 })
 
 it('accepts an optional absolute worktree root over HTTP and refuses a relative one', async () => {
-  const created = await h.api('POST', 'local/projects', { name: 'Rooted', repository: 'acme/rooted', worktreeRoot: '/srv/worktrees' })
+  const created = await h.api('POST', 'local/projects', { name: 'Rooted', intakeRepository: 'acme/intake', codeRepository: 'acme/rooted',
+    worktreeRoot: '/srv/worktrees' })
   expect(created.status).toBe(200)
   const project = created.body.project as { id: string; worktreeRoot?: string }
   expect(project.worktreeRoot).toBe('/srv/worktrees')
@@ -106,19 +108,22 @@ it('accepts an optional absolute worktree root over HTTP and refuses a relative 
   const detail = await h.api('GET', `local/issues/${(submitted.body.issue as { id: string }).id}`)
   expect(detail.body.project).toMatchObject({ id: project.id, worktreeRoot: '/srv/worktrees' })
   // A relative root is a structured refusal that explains the rule, and nothing is stored.
-  const relative = await h.api('POST', 'local/projects', { name: 'Relative', repository: 'acme/relative', worktreeRoot: 'relative/root' })
+  const relative = await h.api('POST', 'local/projects', { name: 'Relative', intakeRepository: 'acme/intake', codeRepository: 'acme/relative',
+    worktreeRoot: 'relative/root' })
   expect(relative.status).toBe(400)
   expect(relative.body).toMatchObject({ code: 'projectWorktreeRoot', error: expect.stringContaining('absolute path') })
   expect((await h.api('GET', 'local/projects')).body.projects).not.toContainEqual(expect.objectContaining({ name: 'Relative' }))
   // An empty string means unconfigured; a legacy record without the field still answers.
-  const plain = await h.api('POST', 'local/projects', { name: 'Plain', repository: 'acme/plain', worktreeRoot: '' })
+  const plain = await h.api('POST', 'local/projects', { name: 'Plain', intakeRepository: 'acme/intake', codeRepository: 'acme/plain',
+    worktreeRoot: '' })
   expect(plain.status).toBe(200)
   expect(plain.body.project).not.toHaveProperty('worktreeRoot')
   // Omitted and whitespace-only mean unconfigured too: the route trims, and the retry alignment froze blank = no root.
-  const omitted = await h.api('POST', 'local/projects', { name: 'Omitted', repository: 'acme/omitted' })
+  const omitted = await h.api('POST', 'local/projects', { name: 'Omitted', intakeRepository: 'acme/intake', codeRepository: 'acme/omitted' })
   expect(omitted.status).toBe(200)
   expect(omitted.body.project).not.toHaveProperty('worktreeRoot')
-  const blank = await h.api('POST', 'local/projects', { name: 'Blank', repository: 'acme/blank', worktreeRoot: '   ' })
+  const blank = await h.api('POST', 'local/projects', { name: 'Blank', intakeRepository: 'acme/intake', codeRepository: 'acme/blank',
+    worktreeRoot: '   ' })
   expect(blank.status).toBe(200)
   expect(blank.body.project).not.toHaveProperty('worktreeRoot')
   const legacy = h.runtime.local.createProject({ name: 'Legacy', repository: 'acme/legacy' })
@@ -314,5 +319,127 @@ describe('project worktree roots', () => {
     expect(next.execution?.directory).toBe(join(second, next.execution!.name))
     expect(next.execution?.worktreeRoot).toBe(second)
     expect(h.runtime.store.tickets.get(accepted.id)!.execution).toEqual(execution)
+  })
+})
+
+/** A local project owns one GitHub chain: creating or editing it touches only that chain, and its tickets execute through it. */
+describe('project repository chains', () => {
+  type Chain = { id: string; intakeRepository: string; codeRepository: string }
+  /** The GitHub Source chains as stored, in order. */
+  const chains = (): Chain[] => h.runtime.store.settings().sources.github!.config.chains as Chain[]
+  /** The project rows the panel's `GET local/projects` answers with. */
+  const projects = async () => (await h.api('GET', 'local/projects')).body.projects as { id: string; name: string; chain?: string
+    intakeRepository?: string; codeRepository?: string; repository?: string }[]
+  const create = async (name: string, intakeRepository: string, codeRepository: string) => {
+    const answer = await h.api('POST', 'local/projects', { name, intakeRepository, codeRepository })
+    expect(answer.status).toBe(200)
+    return answer.body.project as { id: string; name: string; chain: string; intakeRepository: string; codeRepository: string }
+  }
+  /** The first message on a local issue's thread, which an accept routes into a ticket. */
+  const accept = async (issueId: string) => {
+    const result = await h.route({ kind: 'accept', trigger_id: firstTrigger(h, issueId), title: 'Execute the chain',
+      worktree_name: 'fix-chain', acknowledgement: '收到。' }) as { ticket: { ticket_id: string } }
+    await h.runtime.idle()
+    return h.runtime.store.tickets.get(result.ticket.ticket_id)!
+  }
+
+  it('adds only the new project\'s chain and returns both repositories', async () => {
+    const before = chains().map(chain => ({ ...chain }))
+    const project = await create('Chained', 'acme/intake', 'acme/project')
+    expect(project).toMatchObject({ intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    expect(project.chain).toBe(project.id)
+    const after = chains()
+    expect(after).toHaveLength(before.length + 1)
+    // Every chain that existed before is untouched, field by field.
+    for (const chain of before) expect(after.find(row => row.id === chain.id)).toEqual(chain)
+    expect(after.find(row => row.id === project.id)).toEqual({ id: project.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    expect((await projects()).find(row => row.id === project.id))
+      .toMatchObject({ id: project.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+  })
+
+  it('refuses bad, duplicate, unreadable and unpushable repositories without leaving a project or a chain', async () => {
+    const before = chains().map(chain => ({ ...chain }))
+    const namesBefore = (await projects()).map(row => row.name)
+    const cases: { body: Record<string, unknown>; status: number; code?: string; setup?: string }[] = [
+      { body: { name: 'Bad format', intakeRepository: 'acme/intake', codeRepository: 'not-a-repository' }, status: 400, code: 'projectRepository' },
+      { body: { name: 'Demo', intakeRepository: 'acme/intake', codeRepository: 'acme/project' }, status: 400, code: 'projectTaken' },
+      // No probe answer means the CLI reports nothing for the repository, which is the unreadable path.
+      { body: { name: 'Missing', intakeRepository: 'acme/intake', codeRepository: 'acme/missing' }, status: 400, setup: 'github' },
+      { body: { name: 'Readonly', intakeRepository: 'acme/intake', codeRepository: 'acme/readonly' }, status: 400, setup: 'github' },
+    ]
+    for (const item of cases) {
+      const answer = await h.api('POST', 'local/projects', item.body)
+      expect(answer.status).toBe(item.status)
+      if (item.code) expect(answer.body).toMatchObject({ code: item.code })
+      if (item.setup) expect(answer.body).toMatchObject({ setup: { place: item.setup } })
+    }
+    // No failed creation left a project record or changed the stored chains.
+    expect((await projects()).map(row => row.name)).toEqual(namesBefore)
+    expect(chains()).toEqual(before)
+  })
+
+  it('updates only the edited project\'s chain and leaves every other project\'s chain equal', async () => {
+    const a = await create('Alpha', 'acme/intake', 'acme/rooted')
+    const b = await create('Beta', 'acme/intake', 'acme/other')
+    const rowOfB = { ...chains().find(row => row.id === b.id)! }
+    const updated = await h.api('PUT', `local/projects/${a.id}`, { name: 'Alpha renamed', codeRepository: 'acme/project' })
+    expect(updated.status).toBe(200)
+    expect(updated.body.project).toMatchObject({ id: a.id, name: 'Alpha renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    // The other project's row is deeply equal to its snapshot, with no new row appended.
+    expect(chains().find(row => row.id === b.id)).toEqual(rowOfB)
+    expect(chains().filter(row => row.id === b.id)).toHaveLength(1)
+    expect((await projects()).find(row => row.id === a.id))
+      .toMatchObject({ name: 'Alpha renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    // A bad root on update is refused before either record changes.
+    const refused = await h.api('PUT', `local/projects/${a.id}`, { worktreeRoot: 'relative/root' })
+    expect(refused.status).toBe(400)
+    expect(refused.body).toMatchObject({ code: 'projectWorktreeRoot' })
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+  })
+
+  it('executes a project ticket through the project\'s own chain', async () => {
+    const project = await create('Chained ticket', 'acme/intake', 'acme/widgets')
+    const issue = h.runtime.local.create({ title: 'Chain requirement', project: project.id })
+    const ticket = await accept(issue.id)
+    expect(ticket.execution?.chain).toBe(project.id)
+    expect(ticket.execution?.repository).toBe('acme/widgets')
+    expect(ticket.execution?.intakeRepository).toBe('acme/intake')
+    const environment = Object.fromEntries(h.runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))
+    expect(environment.DSH_SUPERAGENT_GITHUB_REPOSITORY).toBe('acme/widgets')
+    expect(environment.DSH_SUPERAGENT_GITHUB_INTAKE_REPOSITORY).toBe('acme/intake')
+  })
+
+  it('binds a legacy project to the chain its code repository names at startup, idempotently and without a chain for unmatched ones', async () => {
+    await h.stop()
+    const at = '2026-09-01T00:00:00.000Z'
+    h = await startRuntime(seeded => {
+      seeded.set(KV.local.project('p-match'), { id: 'p-match', name: 'Matched', repository: 'acme/widgets', createdAt: at, updatedAt: at })
+      seeded.set(KV.local.project('p-unmatched'), { id: 'p-unmatched', name: 'Unmatched', repository: 'acme/legacy', createdAt: at, updatedAt: at })
+      // A second chain whose code repository the unmatched project does not name, so binding must match by value.
+      const settings = seeded.settings()
+      const github = settings.sources.github!.config as { chains: Chain[] }
+      seeded.saveSettings({ ...settings, sources: { ...settings.sources, github: { enabled: true,
+        config: { ...settings.sources.github!.config, chains: [...github.chains, { id: 'other', intakeRepository: 'acme/intake', codeRepository: 'acme/other' }] } } } })
+    })
+    const matched = h.runtime.local.project('p-match')
+    expect(matched).toMatchObject({ chain: 'default', intakeRepository: 'acme/widgets', codeRepository: 'acme/widgets', repository: 'acme/widgets' })
+    const unmatched = h.runtime.local.project('p-unmatched')
+    expect(unmatched).toMatchObject({ repository: 'acme/legacy' })
+    expect(unmatched?.chain).toBeUndefined()
+    expect(unmatched?.codeRepository).toBeUndefined()
+    // A second binding pass sees the matched project already bound and writes nothing.
+    h.runtime.projects.bindLegacy()
+    expect(h.runtime.local.project('p-match')).toEqual(matched)
+    expect(h.runtime.local.project('p-unmatched')).toEqual(unmatched)
+    const chainsAfterBinding = { ...h.runtime.store.settings().sources.github!.config }
+    const issue = h.runtime.local.create({ title: 'Legacy execution', project: 'p-unmatched' })
+    const ticket = await accept(issue.id)
+    expect(ticket.execution?.repository).toBe('acme/legacy')
+    expect(ticket.execution?.intakeRepository).toBe('acme/legacy')
+    // A legacy record keeps the deployment chain it started from and only overrides the repositories.
+    expect(ticket.execution?.chain).toBe('default')
+    // Binding only writes project records: the stored chain configuration is unchanged.
+    expect(h.runtime.store.settings().sources.github!.config).toEqual(chainsAfterBinding)
   })
 })

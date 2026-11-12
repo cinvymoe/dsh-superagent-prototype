@@ -98,7 +98,8 @@ export interface PanelServer {
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
   localIssues: LocalIssue[]
-  localProjects: { id: string; name: string; repository: string; worktreeRoot?: string; createdAt: string; updatedAt: string }[]
+  localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
+    worktreeRoot?: string; createdAt: string; updatedAt: string }[]
   threads: ThreadRow[]
   threadPages: (key: string, query: { before?: string; around?: string }) => ThreadPageView | undefined
   person: TicketRow[]; search: Pick<ApiResponse<'GET search'>, 'items' | 'threads'>; history: HistoryView
@@ -347,11 +348,23 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     }
     let id = 'p-fixture', index = 2
     while (server.localProjects.some(item => item.id === id)) id = `p-fixture-${index++}`
-    const project = { id, name: body.name, repository: body.repository,
+    const project = { id, name: body.name, chain: id, intakeRepository: body.intakeRepository, codeRepository: body.codeRepository,
       ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}),
       createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
     server.localProjects = [project, ...server.localProjects]
     return { project }
+  } },
+  'PUT local/projects/:id': { body: true, answer: ({ params, body }) => {
+    const project = server.localProjects.find(item => item.id === params.id)
+    if (!project) return refuse(404, 'Unknown local project')
+    if (Object.keys(body).length === 0) return refuse(400, 'No project field to update')
+    if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
+      return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
+    }
+    const next = { ...project, ...body, updatedAt: '2026-09-23T00:00:00Z' }
+    if ('worktreeRoot' in body && !body.worktreeRoot) delete next.worktreeRoot
+    server.localProjects = server.localProjects.map(item => item.id === params.id ? next : item)
+    return { project: next }
   } },
   'GET local/issues': { query: ['project'], answer: ({ query }) =>
     ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project) }) },

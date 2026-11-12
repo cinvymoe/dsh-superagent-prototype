@@ -145,6 +145,12 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const answers: Record<string, string> = {
     [`${AGENT} api user`]: '{"login":"agent-bot","id":7}',
     [`${AGENT} api repos/acme/widgets --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/widgets","push":true}\n',
+    [`${AGENT} api repos/acme/intake --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/intake","push":true}\n',
+    [`${AGENT} api repos/acme/project --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/project","push":true}\n',
+    [`${AGENT} api repos/acme/readonly --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/readonly","push":false}\n',
+    // Repositories the management-route specs create projects with; each is readable and pushable.
+    ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative']
+      .map(name => [`${AGENT} api repos/acme/${name} --jq {name: .full_name, push: .permissions.push}`, `{"name":"acme/${name}","push":true}\n`])),
     [`${BOT} auth status`]: JSON.stringify({ appId: 'cli_bot', brand: 'feishu', identities: { bot: { status: 'ready' } } }),
     [`${BOT} config strict-mode`]: 'strict-mode: bot (source: profile)',
     [`${BOT} api GET /open-apis/bot/v3/info --as bot --format ndjson`]: '{"bot":{"open_id":"ou_bot"},"code":0,"msg":"ok"}',
