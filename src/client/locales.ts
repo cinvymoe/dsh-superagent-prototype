@@ -173,6 +173,7 @@ const TEXT = {
   'discuss.back': ['返回需求列表', 'Back to requirements'],
   'discuss.closed': ['已关闭', 'Closed'],
   'discuss.open': ['开放', 'Open'],
+  'discuss.pendingClose': ['待关闭', 'Pending close'],
   'discuss.pending': ['待对齐', 'Not aligned'],
   'discuss.proposed': ['待审阅', 'Awaiting review'],
   'discuss.confirmed': ['已确认', 'Confirmed'],

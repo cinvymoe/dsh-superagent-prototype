@@ -47,6 +47,8 @@ export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketS
   ({ ...TICKET, ...fields, ...stage })
 export const localIssue = (title: string, body = '', project = 'p-fixture'): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
   project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+/** The HTTP requirement view: the stored record plus the derived completion flag the host adds on every response. */
+const issueView = (issue: LocalIssue) => ({ ...issue, slicesFinished: server.issueSlicesFinished.has(issue.id) })
 const localTrigger = (issue: LocalIssue): TriggerRow => ({ id: `local-${issue.id}`, source: 'local',
   actor: { source: 'local', id: issue.author || 'local' }, human: true, at: issue.createdAt, text: issue.body || issue.title,
   preview: issue.body || issue.title, url: undefined, threads: [`local:${issue.id}`], actions: { requeue: false },
@@ -110,7 +112,10 @@ export interface PanelServer {
   settings: Settings; revisions: Record<string, number>
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
+  /** Stored requirement records; every route returns them through `issueView`, so the API types stay the view type. */
   localIssues: LocalIssue[]
+  /** Requirements whose slice tickets all ended, which is what `slicesFinished` reports in the returned view. */
+  issueSlicesFinished: Set<string>
   /** Requirements whose confirmed alignment already dispatched tickets, so their execution mode is read-only. */
   dispatchedIssues: Set<string>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
@@ -286,7 +291,7 @@ function initial(): PanelServer {
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
     tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
-    dispatchedIssues: new Set(),
+    issueSlicesFinished: new Set(), dispatchedIssues: new Set(),
     localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
@@ -384,8 +389,9 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.localProjects = server.localProjects.map(item => item.id === params.id ? next : item)
     return { project: next }
   } },
+  // Every route that returns a requirement answers with the view, never the stored record.
   'GET local/issues': { query: ['project'], answer: ({ query }) =>
-    ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project) }) },
+    ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project).map(issueView) }) },
   'POST local/issues': { body: true, answer: ({ body }) => {
     // The fixture switch mirrors a host refusal of the whole create request.
     if (server.refuseIssueCreate) {
@@ -403,11 +409,11 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     }))
     const issue = { ...localIssue(title, description, body.project), ...(images.length ? { images } : {}) }
     server.localIssues = [issue, ...server.localIssues]
-    return { issue }
+    return { issue: issueView(issue) }
   } },
   'GET local/issues/:id': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
-    return issue ? { issue, project: server.localProjects.find(project => project.id === issue.project) ?? null,
+    return issue ? { issue: issueView(issue), project: server.localProjects.find(project => project.id === issue.project) ?? null,
       thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue), replies: [] }
       : refuse(404, 'Local issue not found')
   } },
@@ -416,7 +422,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (!issue) return refuse(404, 'Local issue not found')
     const next = { ...issue, updatedAt: '2026-09-23T00:00:00Z', body: `${issue.body}\n${body.text}` }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    return { issue: next }
+    return { issue: issueView(next) }
   } },
   'POST local/issues/:id/alignment': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
@@ -424,7 +430,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     const next = { ...issue, alignment: { status: 'proposed' as const, summary: body.summary ?? '', slices: body.slices ?? [],
       acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' } }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    return { issue: next }
+    return { issue: issueView(next) }
   } },
   'POST local/issues/:id/alignment/decision': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
@@ -434,7 +440,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     // A confirmed alignment dispatches the slices, so the requirement's execution mode is read-only from then on.
     if (body.decision === 'confirm') server.dispatchedIssues.add(params.id)
-    return { issue: next, tickets: body.decision === 'confirm'
+    return { issue: issueView(next), tickets: body.decision === 'confirm'
       ? next.alignment.slices.map(slice => ({ id: `ticket-${slice.id}`, title: `${slice.id} · ${slice.title}` })) : [] }
   } },
   'POST local/issues/:id/execution': { body: true, answer: ({ params, body }) => {
@@ -448,14 +454,14 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     }
     const next = { ...issue, execution: body.mode, updatedAt: '2026-09-23T00:00:00Z' }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    return { issue: next }
+    return { issue: issueView(next) }
   } },
   'POST local/issues/:id/close': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
     const next = { ...issue, state: 'closed' as const }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    return { issue: next }
+    return { issue: issueView(next) }
   } },
   'POST tickets/:id/retry': { answer: ({ params }) => {
     const ticket = ticketOf(params.id)
