@@ -1,11 +1,12 @@
 /** Read/write operations for requirements submitted through the built-in local issue board. */
 import { readFileSync, rmSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { key, UserError, type ActorRef, type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
+import { key, UserError, EXECUTION_STRATEGY_REVISION, type ActorRef, type ExecutionMode, type ExecutionStrategy, type ReceiveResult,
+  type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalAlignment, type LocalImage, type LocalImageInput, type LocalIssue, type LocalProject,
-  type LocalSlice } from '../sources/local-format.ts'
+import { LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalImage, type LocalImageInput,
+  type LocalIssue, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
 
@@ -210,8 +211,32 @@ export class LocalIssues {
     return issue ? this.propose(issue.id, input) : undefined
   }
 
-  /** The inputs a confirmed plan dispatches with: the issue thread, its human triggers, and the author. */
-  planInput(id: string): { thread: Thread; triggerIds: string[]; actor: ActorRef } | undefined {
+  /** The execution strategy the requirement dispatches under: its current mode pinned to the contract revision. */
+  executionStrategy(issue: Pick<LocalIssue, 'execution'>): ExecutionStrategy {
+    return { mode: requirementExecutionMode(issue), version: EXECUTION_STRATEGY_REVISION }
+  }
+
+  /** Whether the requirement already dispatched slice tickets; from then on its execution mode stays fixed. */
+  private dispatched(id: string): boolean {
+    return this.host.store.tickets.list().some(ticket => ticket.plan?.issueId === id)
+  }
+
+  /**
+   * Change the execution mode a requirement dispatches under. Only the two known modes are valid, and a requirement that
+   * already dispatched tickets keeps the mode it had; both refusals leave the record untouched.
+   */
+  setExecution(id: string, mode: string): LocalIssue | undefined {
+    const issue = this.get(id)
+    if (!issue) return undefined
+    if (mode !== 'native' && mode !== 'feature-exec') throw new UserError('executionMode')
+    if (this.dispatched(id)) throw new UserError('executionLocked')
+    const updated: LocalIssue = { ...issue, execution: mode as ExecutionMode, updatedAt: this.clock() }
+    this.host.store.set(KV.local.issue(id), updated)
+    return updated
+  }
+
+  /** The inputs a confirmed plan dispatches with: the issue thread, its human triggers, the author and its execution strategy. */
+  planInput(id: string): { thread: Thread; triggerIds: string[]; actor: ActorRef; execution: ExecutionStrategy } | undefined {
     const issue = this.get(id)
     if (!issue?.alignment || issue.alignment.status !== 'confirmed') return undefined
     const thread = this.host.store.threads.get(this.thread(id))
@@ -219,7 +244,7 @@ export class LocalIssues {
     const triggerIds = this.host.store.read.threadTriggers(thread.key, 200)
       .filter(trigger => trigger.source === LOCAL_SOURCE && trigger.human).map(trigger => trigger.id)
     if (!triggerIds.length) return undefined
-    return { thread, triggerIds, actor: { source: LOCAL_SOURCE, id: issue.author || LOCAL_ACTOR } }
+    return { thread, triggerIds, actor: { source: LOCAL_SOURCE, id: issue.author || LOCAL_ACTOR }, execution: this.executionStrategy(issue) }
   }
 
   /** Attach the Aligner's proposal; a person later confirms or rejects it in the panel. */

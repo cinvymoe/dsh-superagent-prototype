@@ -258,6 +258,12 @@ function routes(runtime: HttpHost): Routes {
       const tickets = input.decision === 'confirm' ? runtime.dispatchPlan(params.id).map(ticket => ({ id: ticket.id, title: ticket.title })) : []
       return { issue, tickets }
     },
+    'POST local/issues/:id/execution': async ({ params, body }) => {
+      const input = z.object({ mode: z.string() }).parse(await body())
+      const issue = runtime.local.setExecution(params.id, input.mode)
+      if (!issue) throw new RouteError(404, 'Local issue not found')
+      return { issue }
+    },
     'POST local/issues/:id/close': ({ params }) => {
       const issue = runtime.local.close(params.id)
       if (!issue) throw new RouteError(404, 'Local issue not found')

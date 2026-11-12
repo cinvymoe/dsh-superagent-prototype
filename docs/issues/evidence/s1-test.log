@@ -1,0 +1,341 @@
+$ env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM LC_ALL=C LANG=C pnpm test
+(node:1369158) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ vitest run
+(node:1369247) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/session-billion-context-6f94b843ab41
+
+(node:1369300) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369307) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369319) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369313) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369326) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369353) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369337) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369301) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369378) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369354) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369338) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369325) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369381) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369346) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369344) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369433) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369389) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369431) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369412) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369381) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369307) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369337) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369389) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369338) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369353) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369346) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369378) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369325) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369301) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369319) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369431) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369344) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369313) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1369300) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/timeline.spec.ts (4 tests) 329ms
+(node:1369576) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/local.spec.ts (10 tests) 773ms
+(node:1369625) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/outbox.spec.ts (2 tests) 493ms
+   ✓ holds every message while processing is paused, and sends it once processing resumes  308ms
+ ✓ tests/prompts.spec.ts (18 tests) 1066ms
+ ✓ tests/queue.spec.ts (2 tests) 556ms
+   ✓ delivers the relays, subscription changes and notifications that a version before the effect queue kept, once the migration queued them  346ms
+(node:1369638) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369644) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369653) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/health.spec.ts (3 tests) 850ms
+   ✓ keeps a failing relay's error while replies recover, and a failing reply's error while relays recover  315ms
+(node:1369653) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/settings.spec.ts (4 tests) 874ms
+   ✓ refuses a save of a block that another save changed during its model or account check, and saves nothing of it  340ms
+(node:1369670) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369671) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369671) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/model-surface.spec.ts (7 tests) 1424ms
+(node:1369698) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369698) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/deployment.spec.ts (8 tests) 484ms
+(node:1369775) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/migration.spec.ts (19 tests) 3489ms
+   ✓ writes a schema 10 database in its current shape once, so nothing reads an older shape  395ms
+   ✓ writes the removed auto-merge threshold and member identities into the prompts as one new version, unless an earlier version did  621ms
+(node:1369794) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/store.spec.ts (17 tests) 1915ms
+   ✓ replaces a working-set column an earlier build defined otherwise, and drops one this version no longer has  401ms
+(node:1369802) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/views.spec.ts (15 tests) 1706ms
+(node:1369810) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/effects.spec.ts (13 tests) 1543ms
+(node:1369821) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel-trigger.spec.tsx (8 tests) 2528ms
+   ✓ walks a Thread timeline newest first with dispositions as tags and its Decisions, requeues a filtered Trigger, pages backwards and returns  492ms
+   ✓ reads back the Triggers between the newest page and the earlier ones it shows, once more arrive than a page holds  1024ms
+   ✓ shows a link's target far back with every Trigger after it  355ms
+(node:1369833) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel-eval.spec.tsx (10 tests) 2813ms
+   ✓ opens the Decisions under Policy from the flow line with their reasons, Decisions that start work first, filterable by kind  394ms
+   ✓ keeps a Policy draft across remounts, and merges another save into it sender by sender and rule by rule  524ms
+   ✓ shows the current Policy version once, explains what makes it up, and opens a Mandate's version in the Policy history  310ms
+   ✓ lists each Source's bots next to its people and saves them, and sets the GitHub admission table by its receiving scopes  351ms
+(node:1369853) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/environment.spec.ts (13 tests) 375ms
+ ✓ tests/panel-prompts.spec.tsx (15 tests) 2016ms
+   ✓ lists the team sections, then the built-in parts, edits and saves them separately from settings, and resets one section  332ms
+ ✓ tests/panel-execution.spec.tsx (14 tests) 2522ms
+   ✓ lists Tickets under Execution by who they wait on, with the Executor state and its pause as an action  646ms
+   ✓ keeps what a person types in the Execution settings, converting it once on save  349ms
+ ✓ tests/panel-overview.spec.tsx (13 tests) 1827ms
+(node:1369891) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369904) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369912) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369922) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel-source.spec.tsx (18 tests) 3598ms
+   ✓ shows each Source's state on the Source status and opens its settings from a setup problem  510ms
+   ✓ lists the messages a Source did not send in the last day under it, newest first, with why and where they belong  330ms
+ ✓ tests/panel-settings.spec.tsx (6 tests) 2164ms
+   ✓ keeps a person's own value where another save changed the same setting, and says so  463ms
+   ✓ saves the Eval block on the Policy settings and the Executor with its execution environment on the Execution settings, each against its own revision  556ms
+   ✓ shows save and discard only while a settings block has edits, at the end of that block  402ms
+   ✓ lists the settings groups stages first, opens each stage's group from its status, and returns to the last group opened  517ms
+ ✓ tests/service-script.spec.ts (15 tests) 7387ms
+   ✓ keeps a stop per profile  410ms
+   ✓ records the service PID at start, and still refuses a second instance the scan finds  340ms
+   ✓ reports a service whose Feishu bot setup could not check as running, and reads an answer with keys missing  327ms
+   ✓ restarts the service, and a restart whose graceful stop timed out does not keep recovery off  1392ms
+   ✓ exits 1 when the started service does not answer in time, and leaves its process running  2202ms
+   ✓ does not signal a process that took the recorded service PID, and keeps a stop that timed out  1307ms
+(node:1369933) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369932) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369949) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/feishu-image.spec.ts (4 tests) 80ms
+ ✓ tests/core-engine.spec.ts (117 tests) 611ms
+(node:1369961) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369967) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/delivery.spec.ts (15 tests) 132ms
+ ✓ tests/commands.spec.ts (19 tests) 141ms
+(node:1369985) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1369987) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/index.spec.ts (3 tests) 69ms
+ ✓ tests/styles.spec.ts (2 tests) 108ms
+ ✓ tests/policy.spec.ts (328 tests) 260ms
+(node:1370001) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370010) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370016) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/bundle-patch.spec.ts (2 tests) 98ms
+ ✓ tests/role-models.spec.ts (5 tests) 64ms
+(node:1370026) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel-projects.spec.tsx (8 tests) 1413ms
+ ✓ tests/feishu-read.spec.ts (8 tests) 54ms
+(node:1370033) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370041) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/assessment.spec.ts (7 tests) 93ms
+(node:1370048) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370057) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/github-read.spec.ts (7 tests) 40ms
+ ✓ tests/docs.spec.ts (14 tests) 59ms
+ ✓ tests/registry.spec.ts (10 tests) 51ms
+(node:1370072) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370073) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370107) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/controls.spec.tsx (6 tests) 194ms
+ ✓ tests/followups.spec.ts (16 tests) 6651ms
+   ✓ delivers a follow-up to the worker and tells the main Session with a card, without an Eval  439ms
+   ✓ sends a person's message that reaches no ticket, such as only one a person stopped, to Eval as before  336ms
+   ✓ leaves a delivered follow-up to its ticket's worker: the main Session may stop the ticket on it, and route it only once handed back  958ms
+   ✓ costs the main Session one model call for a burst of follow-ups while it works, and two while it idles  858ms
+   ✓ keeps a follow-up's notice in the effect queue until the main Session takes it, and sends it once  433ms
+   ✓ relays a message a worker handed back as a candidate with the worker's reason  376ms
+   ✓ lets a worker follow a related thread for context, which the main Session hears of without waking, and notes a ticket  334ms
+   ✓ tells the main Session of a follow-up to an ended ticket once the ticket resumes, and not when it cannot  479ms
+   ✓ tells the main Session nothing of a message it attached to an ended ticket, which resumes for it  432ms
+   ✓ tells the main Session of a follow-up an earlier version queued for Eval, when the queue lets it go  334ms
+   ✓ sends a request on a thread a worker follows only for context to Eval, and marks the worker's copy as context  349ms
+   ✓ shows a candidate's message as its workers would read it, with the message it answers  330ms
+   ✓ keeps a listed member's request on a ticket's thread to that ticket, so it is not done twice  328ms
+ ✓ tests/cards.spec.ts (55 tests) 79ms
+ ✓ tests/retry-health.spec.ts (29 tests) 38ms
+(node:1370117) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370123) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/client.spec.tsx (5 tests) 260ms
+(node:1370129) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/class-docs.spec.ts (1 test) 28ms
+(node:1370140) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370148) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1370155) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/http.spec.ts (4 tests) 35ms
+ ✓ tests/admission-context.spec.ts (4 tests) 38ms
+ ✓ tests/stage.spec.ts (31 tests) 14ms
+(node:1370041) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/passes.spec.ts (4 tests) 19ms
+(node:1370165) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/panel-discuss.spec.tsx (20 tests) 1545ms
+   ✓ creates a project on its own page with an optional absolute worktree root and makes it current  327ms
+ ✓ tests/local-align.spec.ts (22 tests) 7176ms
+   ✓ accepts a local requirement for alignment and gives its worker the align tool instead of execution  418ms
+   ✓ dispatches the confirmed slices as tickets, one per slice, and only after the person confirms  429ms
+   ✓ accepts an optional absolute worktree root over HTTP and refuses a relative one  393ms
+     ✓ prepares a local ticket under its project worktree root, with the ticket directory and project repository  322ms
+     ✓ keeps the executor directory or the default work root when a project sets no worktree root  417ms
+     ✓ keeps a Feishu ticket on the default root when a project configures a worktree root  308ms
+     ✓ fails a launch whose explicit worktree root is missing, without creating it or falling back  404ms
+     ✓ fails a launch whose non-empty executor directory is missing, without creating it  315ms
+     ✓ retries a failed explicit-root launch once the root exists and prepares there  345ms
+     ✓ relaunches a failed explicit-root launch from a human message on the ticket thread  418ms
+     ✓ keeps an accepted ticket's directory when the project root or executor directory changes; a new ticket uses the new root  372ms
+   ✓ refuses an invalid image upload without creating the requirement or writing files  316ms
+   ✓ lets only the create-requirement route carry a body above the management limit  517ms
+     ✓ binds a legacy project to the chain its code repository names at startup, idempotently and without a chain for unmatched ones  344ms
+ ✓ tests/markdown.spec.ts (3 tests) 12ms
+ ✓ tests/background.spec.ts (5 tests) 24ms
+ ✓ tests/locales.spec.ts (6 tests) 14ms
+ ✓ tests/cache.spec.ts (1 test) 8ms
+ ✓ tests/draft.spec.ts (11 tests) 15ms
+ ✓ tests/panel-panel.spec.tsx (8 tests) 951ms
+ ✓ tests/panel-deployment.spec.tsx (7 tests) 1412ms
+   ✓ saves this machine's settings in the Deployment settings through DSH's configuration form, without a restart  487ms
+ ✓ tests/prompt-config.spec.ts (3 tests) 7ms
+ ✓ tests/marks.spec.ts (2 tests) 9ms
+ ✓ tests/navigation.spec.ts (8 tests) 18ms
+ ✓ tests/tools.spec.ts (26 tests) 8024ms
+   ✓ reads the lists, a ticket, a decision, the settings, the prompts and the models as resources  959ms
+   ✓ answers every routing tool in one shape: the decision it recorded, why, and the ticket card  560ms
+   ✓ routes several triggers in one call, in order, and answers a refused or failed item without undoing the others  453ms
+   ✓ refuses alone an item that lacks a field its kind needs or breaks a field's limit, naming the field, and ignores unused fields  457ms
+   ✓ decides a candidate's batch with its card's trigger: a second accept keeps the first, and no other decision contradicts it  343ms
+   ✓ stops one follow-up for each ticket it reached, in one call  591ms
+   ✓ returns where a reply stands: sent, or dropped when its conversation can no longer receive it  381ms
+   ✓ shows a candidate with its thread's tickets open first, the tickets it reached, those its text names, and a short next step  475ms
+   ✓ tells the main Session of the settings, prompts, requeues and unsubscriptions others made, never of its own  320ms
+ ✓ tests/sources.spec.ts (77 tests) 15822ms
+     ✓ recovers the topics of a chat while they had a message in the last two weeks, and forgets quieter ones  1089ms
+     ✓ drops the events it reads once the Source is off  1380ms
+     ✓ starts the consumer again after it exits, and is ready once the next run listens  1632ms
+     ✓ takes in the new Issues and PRs from when it started observing them, and asks again with the ETag while nothing is newer  2170ms
+     ✓ reads Issues from the intake repository and PRs from the code repository without mixing their numbers  1498ms
+     ✓ takes in the repository's conversation and review comments, on the Issue or PR each is on  526ms
+     ✓ fails the round for a stream whose read fails, keeps its cursor, and still reads the other streams  411ms
+ ✓ tests/runtime-concurrency.spec.ts (56 tests) 22820ms
+   ✓ evaluates a message that arrives on a thread while an earlier candidate's card waits for its link, in the thread's next Eval  461ms
+   ✓ delivers nothing to a ticket a person stopped while an earlier ticket's delivery waited  542ms
+   ✓ drops a delivery whose ticket a person stopped while it waited for the worker Session  340ms
+   ✓ runs prepare commands in the background, side by side, while accepts, intake and passes go on  450ms
+   ✓ keeps a launch that a pause cut short queued, and finishes it once processing resumes  317ms
+   ✓ wakes an idle worker for a bot's Input only when a worker slot is free, and creates a worker Session someone deleted again  465ms
+   ✓ wakes an idle worker for a person's message at once, in the slot kept beyond the limit  548ms
+   ✓ counts a launch under way against maxWorkers, so a bot's Input for an idle worker waits for the slot  458ms
+   ✓ records on the ticket that its worker Session could not be created again  358ms
+   ✓ lets a worker go on after a passing provider failure, three times, before its ticket fails  341ms
+     ✓ starts the count of passing failures again once its turn ends as turns do  437ms
+     ✓ stays busy while its shell job runs, holding its slot, and reports waiting once the job ended and its turn ends  417ms
+     ✓ kills its shell jobs and releases its subagents when its ticket stops, whose ends wake no one, and lets it start new ones  327ms
+     ✓ reports waiting for the Assignment that replaced one whose idle still waited for its subagents  316ms
+     ✓ frees the slot of a worker that reports blocked, stopping its subagents and leaving its jobs, whose end wakes no one  344ms
+     ✓ keeps a failed worker from being woken by a job it left, and from failing again  360ms
+     ✓ leaves the jobs a worker left to a person out of a later turn's background work, and does not kill them at the limit  368ms
+     ✓ keeps a worker busy with what it started after a message reached its ready ticket  300ms
+     ✓ gives each idle of a worker its own 30 minutes, not counting the turns that ends of its background work wake it for  917ms
+     ✓ kills the jobs that run 30 minutes after the turn ended, leaving its subagents, and reports waiting after the worker's words  2077ms
+     ✓ says a worker's subagents still run when only they ran 30 minutes after the turn ended  1481ms
+     ✓ holds a delivery that reached a worker while a hand-off stopped its subagents until the stop ended  4336ms
+     ✓ collects the end of a job left to a person until dsh-superagent stopped its workers  331ms
+   ✓ resumes an ended ticket a person wrote to during a pause once it lifts, under the Policy then  395ms
+ ✓ tests/runtime.spec.ts (95 tests) 23067ms
+   ✓ relays an explicit member mention as a candidate and creates the ticket, acknowledgement, subscription and worker on accept  406ms
+   ✓ fans a person's later thread message out to the live worker as context and tells the orchestrator, without an Eval  312ms
+   ✓ assesses a proactive observation in the orchestrator Session and creates the ticket only on a positive auto-mode decision  429ms
+   ✓ accepts silently under a rule that says so, gives the worker the rule procedure, and closes it as dropped when nothing is left for a human  384ms
+   ✓ records worker reports, binds the task PR, ends the ticket on ready without a PR, and relays attention  406ms
+   ✓ ends a ticket on ready when no PR is bound  410ms
+   ✓ stops a ticket on a person's instruction for good, and resumes an ended one on any person's message on its thread  606ms
+   ✓ tells live workers about policy changes instead of revoking them and restarts in-flight assessments  464ms
+   ✓ attaches an event to an existing open task through orchestrator_route  352ms
+   ✓ acknowledges a follow-up from the worker once and rejects events outside the task  404ms
+   ✓ treats GitHub comments through the same gate: mentions by members are explicit, others need an existing task  314ms
+   ✓ binds a PR a report names in its summary and copies the result reply to the intake Issue and the PR  323ms
+   ✓ relaunches running assignments after a restart with a recovery note  313ms
+   ✓ projects read models for the management page and removes thread subscriptions from the Web surface  316ms
+   ✓ lets an Executor drop only its own ticket from a thread it finds unrelated, but not the thread it started on or its pull request's  358ms
+   ✓ leaves waiting and blocked assignments alone after a restart and keeps blocked workers paused  2822ms
+   ✓ waits for setup without the agent's GitHub CLI: the panel works, and nothing is polled, assessed or dispatched  1863ms
+   ✓ reports each setup problem where the operator fixes it, and checks the agent CLI the way worker shells run it  681ms
+   ✓ runs a launch that fails for a passing reason again on the launch backoff three times, then fails its ticket; a failed prepare fails at once  319ms
+
+ Test Files  63 passed (63)
+      Tests  1288 passed (1288)
+   Start at  23:20:24
+   Duration  26.88s (transform 38.02s, setup 0ms, import 71.80s, tests 132.29s, environment 19.01s)
+
+exit=0
