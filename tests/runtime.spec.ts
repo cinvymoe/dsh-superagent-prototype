@@ -1669,6 +1669,69 @@ it('keeps the main Session\'s restriction in force when a rebuild fails, and ret
   expect(mutations.at(-1)).toEqual({ kind: 'release', allow: MAIN_TOOLS })
 })
 
+it('applies a saved agents block to the main Session, a running Executor and its subagents at the next step', async () => {
+  const { sessionId } = await acceptedTicket()
+  // A subagent of the running worker already exists, and inherits the worker's tools.
+  await (controller.create as (options: { sessionId: string }) => Promise<void>)({ sessionId: 'child-1' })
+  const child = agents.get('child-1')! as unknown as { session: { header: { parentSession?: string } } }
+  child.session.header = { parentSession: sessionId }
+  await (runtime as unknown as { ctx: Context }).ctx.parallel('agent/created', { agent: child } as never)
+  const workerTools = ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill']
+  expect(restricts.get(sessionId)).toEqual([{ allow: workerTools }])
+  expect(restricts.get('child-1')).toEqual([{ allow: workerTools }])
+  // Saving the block reinstalls each restriction at once; the next step reads it, and a step in flight keeps its tools.
+  const saved = runtime.store.settings()
+  const value = { main: { model: null, disabledTools: ['read_image'] }, aligner: saved.agents.aligner,
+    executor: { model: null, disabledTools: ['web_search'] } }
+  await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
+  const executorTools = workerTools.filter(name => name !== 'web_search')
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS.filter(name => name !== 'read_image') })
+  expect(restricts.get(sessionId)!.at(-1)).toEqual({ allow: executorTools })
+  expect(restricts.get('child-1')!.at(-1)).toEqual({ allow: executorTools })
+  // A Session created after the save starts without the turned-off tool, and keeps every required one.
+  const next = await acceptedTicket(feishu('2', '@bot 再修一个回归'))
+  expect(restricts.get(next.sessionId)).toEqual([{ allow: executorTools }])
+  // A save of another block reinstalls nothing: only the agents block reaches a running Session's tools.
+  const installed = restricts.get(sessionId)!.length
+  const executor = runtime.store.settings().executor
+  await runtime.settings.save('executor', { ...executor, maxWorkers: executor.maxWorkers + 1 }, runtime.store.blockRevision('executor'), 'panel')
+  expect(restricts.get(sessionId)!.length).toBe(installed)
+})
+
+it('keeps the host\'s compression tools on the main Session while a person turns read_image off', async () => {
+  lateTools.push(...COMPRESSION_TOOLS)
+  ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, ...COMPRESSION_TOOLS] })
+  const settings = runtime.store.settings()
+  await runtime.settings.save('agents', { ...settings.agents, main: { model: null, disabledTools: ['read_image'] } },
+    runtime.store.blockRevision('agents'), 'panel')
+  // The compression tools stay automatic: they are not part of the catalog, so turning read_image off leaves them in.
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS.filter(name => name !== 'read_image'), ...COMPRESSION_TOOLS] })
+})
+
+it('seeds each role\'s model override into new Sessions only, leaving a running Session\'s model as it was', async () => {
+  type Modelled = { session: { snapshotEvents: () => { type: string; data: unknown }[] } }
+  const selection = (id: string) => (agents.get(id)! as unknown as Modelled).session.snapshotEvents()
+    .filter(event => event.type === 'model/selection').map(event => event.data)
+  const mainModel = { provider: 'main-provider', model: 'main-model' }
+  const executorModel = { provider: 'executor-provider', model: 'executor-model' }
+  expect(selection(runtime.masterId)).toEqual([])
+  const first = await acceptedTicket()
+  expect(selection(first.sessionId)).toEqual([])
+  // Saving overrides changes no running Session's model: an existing Session keeps the model it started with.
+  await runtime.settings.save('agents', { ...runtime.store.settings().agents, main: { model: mainModel, disabledTools: [] },
+    executor: { model: executorModel, disabledTools: [] } }, runtime.store.blockRevision('agents'), 'panel')
+  expect(selection(runtime.masterId)).toEqual([])
+  expect(selection(first.sessionId)).toEqual([])
+  // A Ticket accepted after the save creates its Executor Session on the executor's effective model.
+  const second = await acceptedTicket(feishu('2', '@bot 修第二个'))
+  expect(selection(second.sessionId)).toEqual([executorModel])
+  // A started process seeds the main Session it creates with the main role's override.
+  await restart()
+  await runtime.ready
+  expect(selection(runtime.masterId)).toEqual([mainModel])
+})
+
 it('gives an explicit ticket\'s worker a prompt without the limits of an inferred Mandate', async () => {
   const { sessionId } = await acceptedTicket()
   await runtime.idle()

@@ -101,6 +101,20 @@ it('answers a prompt save that lost a race with 409, and a settings body over 12
   expect(saves).toEqual([])
 })
 
+it('accepts the agents settings block and answers its refusals with their code', async () => {
+  const saves: unknown[] = []
+  const call = serve({ settings: { save: async (...args: unknown[]) => {
+    saves.push(args)
+    if (args[1] === 'refused') throw new UserError('agentsRequiredTool', { role: 'executor', tools: 'bash' })
+    return { saved: true, revision: 1, restarting: false }
+  } } })
+  expect(await call('PUT', 'settings/agents', { value: 'ok', revision: 0 })).toMatchObject({ status: 200 })
+  expect(saves).toEqual([['agents', 'ok', 0, 'panel']])
+  expect(await call('PUT', 'settings/agents', { value: 'refused', revision: 0 })).toEqual({ status: 400,
+    body: { error: 'The executor Agent cannot turn off its required tools: bash', code: 'agentsRequiredTool',
+      values: { role: 'executor', tools: 'bash' } } })
+})
+
 const PREPARE: PrepareStatus = {
   checkout: { path: '/srv/dsh-superagent', repository: 'acme/widgets', branch: 'main', head: '0123456789abcdef0123456789abcdef01234567',
     committedAt: '2026-11-12T00:00:00Z', dirty: false, remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true,

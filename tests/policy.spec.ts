@@ -255,6 +255,7 @@ describe('settings migration', () => {
       policy: { rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
       eval: { mode: 'auto', timeoutSeconds: 90, model: { provider: 'p', model: 'm' } },
       executor: { model: null, maxWorkers: 5, directory: '', prepare: '', blockedCommands: [] },
+      agents: { main: { model: null, disabledTools: [] }, aligner: { model: null, disabledTools: [] }, executor: { model: null, disabledTools: [] } },
     })
     expect(migrateSettings(migrated)).toEqual(migrated)
   })
@@ -482,5 +483,20 @@ describe('bots and events without a sender', () => {
       ['pulls', { listedUnaddressed: false, unlistedAddressed: true, unlistedUnaddressed: false }],
       ['comments', { listedUnaddressed: false, unlistedAddressed: true, unlistedUnaddressed: false }],
       ['ci', { listedUnaddressed: false, unlistedAddressed: false, unlistedUnaddressed: false }]])
+  })
+})
+
+describe('agent settings', () => {
+  const empty = { main: { model: null, disabledTools: [] }, aligner: { model: null, disabledTools: [] }, executor: { model: null, disabledTools: [] } }
+  it('parses an empty agents block for the three roles, and defaults one that settings saved before it existed lack', () => {
+    expect(SettingsSchema.parse({}).agents).toEqual(empty)
+    // A snapshot written before the block existed reads as the empty block, so an upgrade changes no behavior.
+    expect(SettingsSchema.parse({ paused: true, eval: { mode: 'auto' } }).agents).toEqual(empty)
+    expect(SettingsSchema.parse(migrateSettings({ paused: true, admission: { mode: 'auto' } })).agents).toEqual(empty)
+  })
+  it('reads a stored tool name the catalog no longer has, without checking it against the catalog', () => {
+    const stored = SettingsSchema.parse({ agents: { executor: { disabledTools: ['retired_tool'] } } })
+    expect(stored.agents.executor.disabledTools).toEqual(['retired_tool'])
+    expect(stored.agents.main).toEqual({ model: null, disabledTools: [] })
   })
 })

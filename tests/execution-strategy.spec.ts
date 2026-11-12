@@ -8,6 +8,7 @@ import { EXECUTION_STRATEGY_REVISION, type Ticket } from '../src/core/index.ts'
 import { resolveExecutionStrategy } from '../src/app/execution-strategy.ts'
 import { Prompts, defaultPrompts } from '../src/app/prompts.ts'
 import { Sessions } from '../src/app/sessions.ts'
+import { SettingsSchema } from '../src/policy.ts'
 import { Store } from '../src/app/store.ts'
 import { executePrompt, nativeExecutePrompt } from '../src/app/context.ts'
 
@@ -26,19 +27,22 @@ interface Restricted { allow?: readonly string[]; guard?: (execution?: { name: s
 /**
  * Run `Sessions.workOnly` for `ticket` on a host that registered (or did not register) the feature-exec service, and return what
  * it restricted the Session's tools to. The ticket is its own store record, so the guard sees the live ticket.
+ * @param available - whether the host's parent scope provides any tool; `false` models a host whose every tool failed the filter.
  */
-function restricted(ticket: Ticket, featureExecService: boolean): Restricted {
+function restricted(ticket: Ticket, featureExecService: boolean, agents?: Record<string, unknown>, available = true): Restricted {
   const received: Restricted = {}
   const context = new Context()
   if (featureExecService) context.reflect.provide('featureExec', { list: () => [] })
   const agentContext = new Context()
-  agentContext.reflect.provide('tools', { get: (name: string) => ({ name }), register: () => () => {},
+  agentContext.reflect.provide('tools', { get: (name: string) => available ? { name } : undefined, register: () => () => {},
     restrict: (spec: { allow: readonly string[] }) => { received.allow = spec.allow; return () => {} },
     guard: (guard: (execution?: { name: string }) => string | undefined) => { received.guard = guard; return () => {} } })
-  const sessions = new Sessions({ context, store: { tickets: { get: (id: string) => id === ticket.id ? ticket : undefined } },
+  const sessions = new Sessions({ context, store: { tickets: { get: (id: string) => id === ticket.id ? ticket : undefined },
+    settings: () => SettingsSchema.parse(agents ? { agents } : {}) },
     effects: { handle: () => {} }, health: { set: () => {} }, masterId: 'master', lifetime: new AbortController().signal,
     closing: () => false, environment: () => [], tools: () => [] } as never)
-  ;(sessions as unknown as { workOnly(agent: unknown, ticket: Ticket): void }).workOnly({ id: 'worker-1', ctx: agentContext }, ticket)
+  ;(sessions as unknown as { workOnly(agent: unknown, ticket: Ticket, binding: { disposers: (() => void)[] }): void })
+    .workOnly({ id: 'worker-1', ctx: agentContext }, ticket, { disposers: [] })
   return received
 }
 function withStore(body: (prompts: Prompts) => void): void {
@@ -99,11 +103,25 @@ describe('the worker a slice Ticket gets', () => {
     expect(guard!({ name: 'bash' })).toMatch(/feature_exec_start/)
     expect(guard!({ name: 'feature_exec_start' })).toBeUndefined()
   })
+  it('keeps a feature-exec slice\'s execution tools while the executor turns its optional tools off', () => {
+    const off = { main: { model: null, disabledTools: [] }, aligner: { model: null, disabledTools: [] },
+      executor: { model: null, disabledTools: ['web_search', 'read_image'] } }
+    const { allow } = restricted(ticket(featureExec), true, off)
+    // The execution tools are not in the executor's catalog, so no save can turn them off; required tools stay too.
+    expect(allow).toEqual(expect.arrayContaining(FEATURE_EXEC))
+    expect(allow).toContain('bash')
+    expect(allow).not.toContain('web_search')
+    expect(allow).not.toContain('read_image')
+  })
   it('keeps the legacy Ticket on feature-exec, and gives a host without the service a native worker', () => {
     expect(restricted(ticket(), true).allow).toEqual(expect.arrayContaining(FEATURE_EXEC))
     const { allow, guard } = restricted(ticket(), false)
     expect(allow!.some(name => name.startsWith('feature_exec_'))).toBe(false)
     expect(guard!({ name: 'read' })).toBeUndefined()
+  })
+  it('installs an empty restriction when no work tool is available, so nothing stays unmasked', () => {
+    // A host whose every tool fails the availability filter must leave the worker with no tool, not with no restriction.
+    expect(restricted(ticket(native), false, undefined, false).allow).toEqual([])
   })
   it('keeps refusing work once the Ticket ended', () => {
     expect(restricted(ticket(native, true), true).guard!({ name: 'read' })).toBe('Ticket ended; new work needs a new authorized ticket')
