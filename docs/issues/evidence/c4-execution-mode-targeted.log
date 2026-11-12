@@ -1,0 +1,19 @@
+(node:1437039) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1437054) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-6981fa17e4b7
+
+(node:1437111) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1437112) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/locales.spec.ts (6 tests) 10ms
+ ✓ tests/panel-discuss.spec.tsx (23 tests) 973ms
+
+ Test Files  2 passed (2)
+      Tests  29 passed (29)
+   Start at  00:09:37
+   Duration  3.72s (transform 1.69s, setup 0ms, import 2.23s, tests 983ms, environment 822ms)
+
