@@ -381,11 +381,12 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/admission-context.ts` | The bounded window an assessment starts from: the first pages of a Trigger's Thread, read through its kind, and the messages around the Trigger |
 | `src/sources/feishu-image.ts` | Reads a Feishu message's image as an attachment for the assessing Session |
 | `src/client/index.tsx` | The client plugin entry: the sidebar entry, the main panel and the page in DeepSeek Harness's Plugin Manager |
-| `src/client/app.tsx` | The panel: header, search, glossary, tabs and the page of the current route |
-| `src/client/provider.tsx` | What every page reads from its host: copy, calls, navigation, notices, the state poll, and `restart`, which reads the state quickly while dsh-superagent restarts |
+| `src/client/app.tsx` | The panel: header, search, glossary, the project bar, the page tabs and the page of the current route; it remembers the current project in the route memory |
+| `src/client/provider.tsx` | What every page reads from its host: copy, calls, navigation, notices, the state and project polls, the current project, and `restart`, which reads the state quickly while dsh-superagent restarts |
 | `src/client/api.ts` | Calls and polls of the management API, typed by `src/app/api.ts`, and the Decision filters of the Eval status |
-| `src/client/discuss.tsx` | The local project and issue board: create a project with its name, repository and optional worktree root, submit a requirement, read its discussion, and confirm or send back the Aligner's proposal |
-| `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads, and the route memory with the settings group opened last |
+| `src/client/discuss.tsx` | The local issue board of the current project: its requirements, submitting one, reading its discussion, and confirming or sending back the Aligner's proposal |
+| `src/client/projects.tsx` | The project bar above the page tabs: one chip tab per local project, the More menu that keeps every project reachable when the strip overflows, and the standalone page to create a project with its name, repository and optional worktree root |
+| `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads (including the Discuss create page), and the route memory with the current project and the settings group opened last |
 | `src/client/overview.tsx` | The overview |
 | `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
 | `src/client/thread.tsx`, `ticket.tsx` | The record pages: a Thread with its timeline, and a Ticket with its authorization, Inputs and Assignments |
@@ -414,7 +415,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
 | `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
 | `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, dispatching a confirmed plan's slices as tickets, and project worktree roots |
-| `tests/panel-discuss.spec.tsx` | The Discuss board: project creation with an optional worktree root, requirement submission, and project tags |
+| `tests/panel-discuss.spec.tsx` | The Discuss board scoped to the current project: the create-first hint, requirement submission and details with their project, and the standalone project creation page |
+| `tests/panel-projects.spec.tsx` | The project bar: project tab switching and Discuss scoping, the overflow More menu, and standalone project creation |
 | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
 | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |
 | `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, the pull request rules, health |
