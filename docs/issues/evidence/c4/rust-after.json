@@ -1,0 +1,11 @@
+{
+  "chain": "default",
+  "codeRepository": "cinvymoe/rust_crane",
+  "createdAt": "2026-11-12T06:21:47.197Z",
+  "id": "p-bac24269",
+  "intakeRepository": "cinvymoe/rust_crane_issues",
+  "name": "rust_crane",
+  "repository": "cinvymoe/rust_crane",
+  "updatedAt": "2026-11-12T13:34:25.245Z",
+  "worktreeRoot": "/mnt/sdb1/workspace/dsh-worktrees"
+}

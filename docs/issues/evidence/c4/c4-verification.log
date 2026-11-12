@@ -1,0 +1,55 @@
+# C4 verification log — 2026-11-12 22:00-22:06 +08
+
+Panel: http://10.126.126.6:8399 (dsh web profile hosting dsh-superagent with stateDir /root/.dsh/state/superagent)
+API base: http://10.126.126.6:8399/orchestrator/api (same-origin header x-orchestrator-request: 1; bearer token from the panel session, not recorded here)
+
+## Precondition + deployment update
+deployment/main = 95a597cbff5829526fa002ddffc86ad1933ed94d
+local checkout /data/project/dsh-superagent HEAD = 95a597c (== deployment/main), clean worktree
+pnpm install && pnpm build: exit 0 (install 547ms, build 3029ms/3652ms), lib/index.js rebuilt 21:40:51
+
+## Before (projects + github source block)
+GET local/projects:
+  p-0d3a3830 superagent: repository=cinvymoe/dsh-superagent-prototype, chain=null
+  p-bac24269 rust_crane: repository=cinvymoe/rust_crane, chain=default,
+    intakeRepository=cinvymoe/rust_crane_issues, codeRepository=cinvymoe/rust_crane,
+    worktreeRoot=/mnt/sdb1/workspace/dsh-worktrees
+GET settings -> sources[github].value.config.chains = [default: cinvymoe/rust_crane_issues → cinvymoe/rust_crane], revision 6
+
+## Change (panel management API, the same route the project form uses)
+PUT http://10.126.126.6:8399/orchestrator/api/local/projects/p-0d3a3830
+  {"intakeRepository":"cinvymoe/dsh-superagent-prototype","codeRepository":"cinvymoe/dsh-superagent-prototype"}
+-> http=200
+  {"project":{"id":"p-0d3a3830","name":"superagent","repository":"cinvymoe/dsh-superagent-prototype",
+   "chain":"p-0d3a3830","intakeRepository":"cinvymoe/dsh-superagent-prototype",
+   "codeRepository":"cinvymoe/dsh-superagent-prototype","updatedAt":"2026-11-12T14:00:27.869Z"}}
+Repository access was probed before the save (gh-agent api: code repo push=true, intake readable).
+The settings save changed `chains` (a setup-read field), so dsh-superagent restarted itself in the 8399 host
+(assignment restarted with recovery note at 22:00:50) and came back serving.
+
+## After
+GET local/projects:
+  superagent: chain=p-0d3a3830, intake=code=cinvymoe/dsh-superagent-prototype, updatedAt 14:00:27.869Z
+  rust_crane: unchanged (same JSON as before)
+GET settings -> sources[github].value.config.chains =
+  [{id:default, intakeRepository:cinvymoe/rust_crane_issues, codeRepository:cinvymoe/rust_crane},
+   {id:p-0d3a3830, intakeRepository:cinvymoe/dsh-superagent-prototype, codeRepository:cinvymoe/dsh-superagent-prototype}]
+  revision 7
+
+## Isolation proof (field-by-field)
+diff rust_crane project before/after: identical (no diff output) -> rust_crane project unchanged
+diff default chain before/after: identical -> rust_crane chain unchanged
+diff settings before/after excluding github chains: only the github source `facts.chains` display strings and revision 6→7
+diff projects before/after excluding superagent: identical -> the other project untouched
+
+## Panel evidence
+- before-new-requirement.png: superagent project page head shows one repository `cinvymoe/dsh-superagent-prototype`, 编辑项目 entry
+- after-new-requirement.png: head shows `cinvymoe/dsh-superagent-prototype → cinvymoe/dsh-superagent-prototype`, 编辑项目 entry
+- before-settings.png: GitHub source card shows 1 chain (default)
+- after-settings.png: GitHub source card shows 2 chains (default, p-0d3a3830)
+- after-superagent-edit.png: 编辑项目 form prefilled with 项目名称=superagent, 接收 Issue 的仓库=cinvymoe/dsh-superagent-prototype, 执行代码的仓库=cinvymoe/dsh-superagent-prototype
+
+## Service state
+- Effective instance: 8399 dsh web process (started 21:34:12 by the owner, same stateDir), serving; overview `problems: []`.
+- `scripts/dsh-superagent --profile superagent status`: pids=[], manually_stopped=true, exit 1 — the separate 3082 profile is still
+  intentionally stopped; it was NOT started (the owner's restart of 8399 is the effective instance).

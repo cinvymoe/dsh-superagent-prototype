@@ -1,0 +1,49 @@
+== C4 precondition check 2026-11-12T18:10:42+08:00
+
+-- deployment/main (cinvymoe/dsh-superagent-prototype)
+deployment/main = afab266eb6952765ee55b29660cd67b1b28d62d5
+afab266 Merge pull request #11 from cinvymoe/agent/github-source-e98e00c734ae
+a7c1f11 docs(c1): record the open pull request and verification evidence
+71670ba feat(github-source): require explicit repository chains
+
+-- C1/C2/C3 PR state
+PR #16 OPEN merged=null head=agent/slice-7da08cb013a1 https://github.com/cinvymoe/dsh-superagent-prototype/pull/16
+  feat(panel): create and edit a project's repository chain from one form (C3)
+PR #13 OPEN merged=null head=agent/slice-4e2a92d2a5b4 https://github.com/cinvymoe/dsh-superagent-prototype/pull/13
+  feat(projects): give each local project its own GitHub repository chain (C2)
+PR #11 MERGED merged=2026-11-12T08:11:09Z head=agent/github-source-e98e00c734ae https://github.com/cinvymoe/dsh-superagent-prototype/pull/11
+  feat(github-source): require explicit repository chains (C1)
+
+-- ancestry of slice heads in deployment/main
+5f429bc9 ancestor=NO
+48674b87 ancestor=NO
+df875f01 ancestor=NO
+6374fec7 ancestor=NO
+
+-- local deployment checkout
+path=/data/project/dsh-superagent
+HEAD=04cb04495c55cd5abf48323bb5687aedc4417f65 branch=main
+ahead/behind vs deployment/main: 0	3
+  (end status)
+
+-- local project records (state store, read-only)
+{"key":"local-project:p-0d3a3830","name":"superagent","repository":"cinvymoe/dsh-superagent-prototype","chain":null,"intakeRepository":null,"codeRepository":null,"worktreeRoot":null}
+{"key":"local-project:p-bac24269","name":"rust_crane","repository":"cinvymoe/rust_crane","chain":null,"intakeRepository":null,"codeRepository":null,"worktreeRoot":"/mnt/sdb1/workspace/dsh-worktrees"}
+
+-- latest settings snapshot (state store, read-only)
+{"revision":15,"savedAt":"2026-11-12T06:54:18.276Z","github":{"repository":"cinvymoe/rust_crane","intakeRepository":"cinvymoe/rust_crane_issues","codeRepository":"cinvymoe/rust_crane","cli":"/root/.local/bin/gh-agent","pollSeconds":60,"failuresBeforeError":3,"observeIssues":true,"observePulls":true,"observeComments":false,"observeCi":false}}
+
+-- profile superagent service
+{
+  "pids": [],
+  "cwd": "/data/project/dsh-superagent",
+  "url": "http://127.0.0.1:3082",
+  "manually_stopped": true,
+  "health": null,
+  "errors": null,
+  "setup": null,
+  "feishu": null
+}
+status_exit=1
+curl: (7) Failed to connect to 127.0.0.1 port 3082 after 0 ms: Couldn't connect to server
+healthz_http=000
