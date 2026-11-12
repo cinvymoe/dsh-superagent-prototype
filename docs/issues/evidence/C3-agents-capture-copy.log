@@ -1,0 +1,11 @@
+# C3 executor role-hint copy — Before/After capture (follow-up to PR #42)
+# Before: c6aba7ba (the merged PR #42 head) built in /tmp/c3agents-copy-before with pnpm install --frozen-lockfile && pnpm build
+# After: the ticket worktree at the sediment commit, built by pnpm check after the copy edit
+# Same DSH profile agents-capture, stateDir /root/.dsh/state/agents-after, webserver 10.126.126.6:3151,
+#   viewport 1440x1100, light, zh-CN. The capture hovers the (?) beside the 执行器 card title to open its portaled tooltip.
+# Command: python3 /tmp/c3agents-hint-capture.py <token url> docs/evidence/c3-agents <before|after>
+TOOLTIP before: 执行器留空时使用执行设置里的执行器模型；它的子代理继承这里的可选工具。
+TOOLTIP after:  执行器留空时使用执行设置里的执行器模型；它的子代理继承这里的可选工具，工单问答的只读 fork 也使用执行器的模型。
+SHOT docs/evidence/c3-agents/before-executor-hint.png
+SHOT docs/evidence/c3-agents/after-executor-hint.png
+# The temporary server was stopped after the capture; the token is not recorded.
