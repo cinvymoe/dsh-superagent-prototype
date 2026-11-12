@@ -48,9 +48,11 @@ export class LocalIssues {
     const repository = input.repository.trim()
     if (!REPOSITORY.test(repository)) throw new UserError('projectRepository')
     if (this.projects().some(project => project.name.toLowerCase() === name.toLowerCase())) throw new UserError('projectTaken', { name })
-    // Omitted and exactly empty mean no project root; any other value must name an absolute directory. Existence and
-    // writability are checked at a ticket's launch, not here, because the root may not exist yet when the project is made.
-    const worktreeRoot = input.worktreeRoot === undefined || input.worktreeRoot === '' ? undefined : input.worktreeRoot.trim()
+    // Omitted, empty and whitespace-only all mean no project root; any other value must name an absolute directory.
+    // Existence and writability are checked at a ticket's launch, not here, because the root may not exist yet when the
+    // project is made.
+    const trimmedRoot = input.worktreeRoot?.trim()
+    const worktreeRoot = trimmedRoot ? trimmedRoot : undefined
     if (worktreeRoot !== undefined && !isAbsolute(worktreeRoot)) throw new UserError('projectWorktreeRoot')
     const at = this.clock()
     const project: LocalProject = {

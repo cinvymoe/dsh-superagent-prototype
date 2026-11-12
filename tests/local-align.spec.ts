@@ -114,6 +114,10 @@ it('accepts an optional absolute worktree root over HTTP and refuses a relative 
   const plain = await h.api('POST', 'local/projects', { name: 'Plain', repository: 'acme/plain', worktreeRoot: '' })
   expect(plain.status).toBe(200)
   expect(plain.body.project).not.toHaveProperty('worktreeRoot')
+  // Whitespace-only is equivalent to unconfigured end to end: no error, and no field stored on the project.
+  const blank = await h.api('POST', 'local/projects', { name: 'Blank', repository: 'acme/blank', worktreeRoot: '   ' })
+  expect(blank.status).toBe(200)
+  expect(blank.body.project).not.toHaveProperty('worktreeRoot')
   const legacy = h.runtime.local.createProject({ name: 'Legacy', repository: 'acme/legacy' })
   const oldIssue = h.runtime.local.create({ title: 'Legacy requirement', project: legacy.id })
   const old = await h.api('GET', `local/issues/${oldIssue.id}`)
