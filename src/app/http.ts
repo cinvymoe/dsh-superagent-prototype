@@ -264,8 +264,9 @@ function routes(runtime: HttpHost): Routes {
       return { issue: runtime.local.view(issue) }
     },
     'POST local/issues/:id/alignment/decision': async ({ params, body }) => {
-      const input = z.object({ decision: z.enum(['confirm', 'reject']), reason: z.string().max(4_000).optional() }).parse(await body())
-      const issue = runtime.local.decide(params.id, input.decision, input.reason)
+      const input = z.object({ decision: z.enum(['confirm', 'reject']), reason: z.string().max(4_000).optional(),
+        roundId: z.string().min(1).optional() }).parse(await body())
+      const issue = runtime.local.decide(params.id, input.decision, input.reason, input.roundId)
       if (!issue) throw new RouteError(404, 'Local issue or alignment not found')
       // The person's confirmation is the authorization to dispatch: each slice becomes a worker ticket, dependencies gated by the executor.
       const tickets = input.decision === 'confirm' ? runtime.dispatchPlan(params.id).map(ticket => ({ id: ticket.id, title: ticket.title })) : []

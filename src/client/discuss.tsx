@@ -57,6 +57,7 @@ function statusTag(t: T, issue: LocalIssue) {
   if (!alignment) return <Tag tone="neutral">{t('discuss.pending')}</Tag>
   if (alignment.status === 'proposed') return <Tag tone="warning">{t('discuss.proposed')}</Tag>
   if (alignment.status === 'confirmed') return <Tag tone="success">{t('discuss.confirmed')}</Tag>
+  if (alignment.status === 'superseded') return <Tag tone="neutral">{t('discuss.superseded')}</Tag>
   return <Tag tone="danger">{t('discuss.rejected')}</Tag>
 }
 
@@ -245,7 +246,9 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   const retryQuestion = (questionId: string) => act(() => call('POST local/issues/:id/questions/:questionId/retry',
     { id, questionId }))
   const decide = (decision: 'confirm' | 'reject') => act(async () => {
+    // The decision names the round this page showed, so a page left open cannot confirm a newer proposal.
     const answer = await call('POST local/issues/:id/alignment/decision', { id, body: { decision,
+      ...(alignment?.roundId ? { roundId: alignment.roundId } : {}),
       ...(decision === 'reject' && reason.trim() ? { reason: reason.trim() } : {}) } })
     // Confirming is the authorization to dispatch: the slices became tickets, which the list below shows.
     if (decision === 'confirm') notify(t('discuss.dispatched', { count: answer.tickets.length }))

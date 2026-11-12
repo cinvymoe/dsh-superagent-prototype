@@ -157,7 +157,7 @@ it('keeps submission disabled while the description is blank and submits the des
 it('lists the current project requirements newest first with their tags, time and slice count', async () => {
   const slice = { id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
   const newer = { ...localIssue('Newer requirement'), id: 'q-newer', createdAt: '2026-09-23T00:00:00Z',
-    alignment: { status: 'proposed' as const, summary: '', slices: [slice, { ...slice, id: 'C2' }], acceptance: [],
+    alignment: { roundId: 'al-1', status: 'proposed' as const, summary: '', slices: [slice, { ...slice, id: 'C2' }], acceptance: [],
       proposedAt: '2026-09-23T00:00:00Z' } }
   const older = { ...localIssue('Older requirement'), id: 'q-older', createdAt: '2026-09-20T00:00:00Z', state: 'closed' as const }
   server.localProjects = [PROJECT, { ...PROJECT, id: 'p-other', name: 'Other', repository: 'acme/other' }]
@@ -216,7 +216,7 @@ it('lists the current project requirements newest first with their tags, time an
 
 it('keeps a non-default filter when a requirement detail returns to the list', async () => {
   server.localProjects = [PROJECT]
-  const confirmed = { ...localIssue('Confirmed requirement'), id: 'q-confirmed', alignment: { status: 'confirmed' as const, summary: '',
+  const confirmed = { ...localIssue('Confirmed requirement'), id: 'q-confirmed', alignment: { roundId: 'al-1', status: 'confirmed' as const, summary: '',
     slices: [], acceptance: [], proposedAt: '2026-09-23T00:00:00Z' } }
   server.localIssues = [confirmed, { ...localIssue('Pending requirement'), id: 'q-pending' }]
   at({ page: 'requirements', query: { filter: 'confirmed' } })
@@ -594,7 +594,7 @@ it('renders a legacy requirement whose project has no worktree root', async () =
 })
 
 /** A one-slice alignment proposal, enough for the requirement detail to offer its execution switch. */
-const proposal = (status: 'proposed' | 'confirmed') => ({ status, summary: '', acceptance: [],
+const proposal = (status: 'proposed' | 'confirmed') => ({ roundId: 'al-1', status, summary: '', acceptance: [],
   slices: [{ id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }],
   proposedAt: '2026-09-23T00:00:00Z', ...(status === 'confirmed' ? { decidedAt: '2026-09-23T00:00:00Z' } : {}) })
 
