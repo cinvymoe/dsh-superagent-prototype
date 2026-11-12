@@ -23,6 +23,8 @@ The route is the read side of "merge locally and take effect": it must answer wh
 
 8. **`orchestrator_report` rejected the PR number.** The report with `pr_number: 28` came back "PR does not belong to this ticket", although the PR sits on `agent/get-deployment-checkout-2b9bf67f6fd82b0720ed7644ef721c67` and was opened by `rust-crane-agent[bot]` (the same shape as PR #20). Reported without `pr_number` and said so in the summary, leaving the association to the host's head-branch recovery.
 
+9. **The merge was pushed to a mistyped branch name.** The push target was written as `agent/get-deployment-checkout-<full ticket id>` instead of `agent/get-deployment-checkout-<short ticket name>` (the deployment names branches `agent/$DSH_SUPERAGENT_NAME`, a 12-hex-char short name). The push reported success, a distant branch was created, and the PR kept saying `CONFLICTING`. Diagnosed by comparing `git ls-remote` and the GitHub refs API with the PR's `headRefName`; fixed by pushing `HEAD` to the real branch and deleting the stray one. Lesson: after a push that should change a PR, verify the PR's `headRefOid` (or `git ls-remote` of the exact ref), never only the push output.
+
 ## What a later slice inherits
 
 - `repository` reads the `origin` remote only. This deployment's plugin checkout has `origin` on the upstream `deepseek-ai/dsh-superagent-prototype` while the pull request target sits in a remote named `deployment`, so the merge action must compare with the deployment repository instead of trusting `available`.
