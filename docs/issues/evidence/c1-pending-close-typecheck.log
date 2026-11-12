@@ -1,8 +1,8 @@
-# C1 typecheck
+# C1 pending-close typecheck — merged tree
 # command: pnpm typecheck
-# date: 2026-11-13T00:35:09+08:00
+# date: 2026-11-13T01:04:15+08:00
 
-(node:1469410) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1532634) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
 $ tsc --noEmit
 EXIT=0

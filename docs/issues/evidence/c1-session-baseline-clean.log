@@ -1,0 +1,25 @@
+(node:1400682) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1400707) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /tmp/e31c-baseline
+
+(node:1400761) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1400760) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1400760) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/environment.spec.ts (13 tests) 142ms
+ ✓ tests/runtime.spec.ts (92 tests) 13263ms
+   ✓ fans a person's later thread message out to the live worker as context and tells the orchestrator, without an Eval  317ms
+   ✓ tells live workers about policy changes instead of revoking them and restarts in-flight assessments  346ms
+   ✓ waits for setup when the shim directory holds a file dsh-superagent did not write, and leaves the file alone  333ms
+   ✓ resumes several ended tickets on one thread from one message without the launch waiting on itself  313ms
+   ✓ launches a queued Assignment once when the host resumes, and gives a failed launch's slot back  319ms
+
+ Test Files  2 passed (2)
+      Tests  105 passed (105)
+   Start at  23:42:33
+   Duration  14.78s (transform 1.20s, setup 0ms, import 1.70s, tests 13.40s, environment 0ms)
+

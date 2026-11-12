@@ -1,0 +1,93 @@
+# C1 pending-close merge — deployment main 934a1f07 merged, conflicts resolved, gate rerun
+# date: 2026-11-13T01:04:15+08:00
+# Before of the refreshed captures: deployment main 934a1f076d977c1507340b562cfcb5b229c71a0d
+
+## Merge
+branch: agent/slice-687169eff807 (was e51c9e83)
+merged:  934a1f076d977c1507340b562cfcb5b229c71a0d (deployment main, Merge pull request #23)
+conflicts resolved by hand in 3 files; git auto-merged docs/007-architecture.md, tests/panel-discuss.spec.tsx, src/client/locales.ts;
+all of them were reviewed for main's new module rows, filter tests and locale keys.
+
+- docs/005-panel.md: kept main's filter row (待处理/已确认/已关闭/全部), filter persistence, Open Session link and newest-first
+  message timeline, and appended this slice's three states sentence (Open / Pending close / Closed, alignment tag stays Confirmed).
+- src/client/discuss.tsx: kept main's requirementExecutionMode import and filter list, plus this slice's LocalIssueView import;
+  stateTag stays closed -> 已关闭, open+slicesFinished -> 待关闭 (info), else 开放, and the filter row is unchanged.
+- tests/fixtures/panel-server.ts: kept main's localComments/localReplies fields and comment thread update, added issueSlicesFinished
+  and issueView(); every route that returns a requirement still answers with the view (list, detail, create, comments, alignment,
+  decision, execution, close).
+
+## pnpm install --frozen-lockfile
+Already up to date / Done in 593ms (EXIT=0)
+
+## pnpm typecheck
+(node:1532634) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ tsc --noEmit
+EXIT=0
+
+## targeted: pnpm vitest run tests/local-align.spec.ts tests/panel-discuss.spec.tsx tests/navigation.spec.ts tests/locales.spec.ts tests/docs.spec.ts tests/class-docs.spec.ts
+ Test Files  6 passed (6)
+      Tests  88 passed (88)
+EXIT=0
+
+## pnpm build
+(node:1533339) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ tsdown
+(node:1533353) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ℹ tsdown v0.22.14 powered by rolldown v1.2.7
+ℹ config file: /data/project/workspace/dsh-worktrees/slice-687169eff807/tsdown.config.ts 
+ℹ entry: src/index.ts, src/sources/github.ts, src/sources/feishu.ts, src/sources/local.ts, src/worker-shell.ts
+ℹ target: es2024
+ℹ tsconfig: tsconfig.json
+ℹ entry: src/client/index.tsx
+ℹ target: node22.19.0
+ℹ tsconfig: tsconfig.json
+ℹ Build start
+
+ WARN  We recommend using the ESM format instead of CommonJS.
+The ESM format is compatible with modern platforms and runtimes, and most new libraries are now distributed only in ESM format.
+Learn more at https://nodejs.org/en/learn/modules/publishing-a-package#how-did-we-get-here
+
+ℹ Cleaning 17 files
+ℹ [CJS] lib/client.js  423.02 kB │ gzip: 99.62 kB
+ℹ [CJS] 1 files, total: 423.02 kB
+✔ Build complete in 3395ms
+ℹ [ESM] lib/index.js                 503.35 kB │ gzip: 141.88 kB
+ℹ [ESM] lib/github-watch.js           40.00 kB │ gzip:  12.37 kB
+ℹ [ESM] lib/worker-shell.js            0.97 kB │ gzip:   0.50 kB
+ℹ [ESM] lib/feishu-watch.js            0.60 kB │ gzip:   0.29 kB
+ℹ [ESM] lib/local-watch.js             0.30 kB │ gzip:   0.18 kB
+ℹ [ESM] lib/feishu-vcIFvZuM.js        48.41 kB │ gzip:  14.60 kB
+ℹ [ESM] lib/poll-BiBPT6O3.js          44.27 kB │ gzip:  15.71 kB
+ℹ [ESM] lib/github-pull-5sgc4PN9.js   32.94 kB │ gzip:  10.20 kB
+ℹ [ESM] lib/local-CFR9DG8r.js          3.66 kB │ gzip:   1.56 kB
+ℹ [ESM] lib/index.d.ts                27.64 kB │ gzip:   8.57 kB
+ℹ [ESM] lib/feishu-watch.d.ts          5.98 kB │ gzip:   2.00 kB
+ℹ [ESM] lib/local-watch.d.ts           3.95 kB │ gzip:   1.55 kB
+ℹ [ESM] lib/worker-shell.d.ts          2.28 kB │ gzip:   0.65 kB
+ℹ [ESM] lib/github-watch.d.ts          0.43 kB │ gzip:   0.24 kB
+ℹ [ESM] lib/kind-Cri-YTlJ.d.ts        37.06 kB │ gzip:   9.42 kB
+ℹ [ESM] lib/intake-gqjE_HK3.d.ts      33.47 kB │ gzip:  10.40 kB
+ℹ [ESM] 16 files, total: 785.32 kB
+[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 3.5s of this 3.7s build (96%).
+The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+  - rolldown-plugin-dts:generate load (77%, 2.8s, 45 calls)
+Additional hook time came from the hooks below and from hooks under 1s.
+3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
+  - rolldown-plugin-dts:resolver resolveId (320 calls)
+  - tsdown:deps resolveId (76 calls)
+  - rolldown-plugin-dts:fake-js transform (45 calls)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✔ Build complete in 3830ms
+EXIT=0
+
+## final gate: env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check
+ Test Files  64 passed (64)
+      Tests  1324 passed (1324)
+ℹ config file: /data/project/workspace/dsh-worktrees/slice-687169eff807/tsdown.config.ts 
+✔ Build complete in 3316ms
+✔ Build complete in 3756ms
+EXIT=0

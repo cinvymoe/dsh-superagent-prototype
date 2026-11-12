@@ -1,11 +1,11 @@
-# C1 pending-close build
+# C1 pending-close build — merged tree
 # command: pnpm build
-# date: 2026-11-13T00:44:12+08:00
+# date: 2026-11-13T01:04:15+08:00
 
-(node:1470543) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1533339) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
 $ tsdown
-(node:1470570) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(node:1533353) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
 ℹ tsdown v0.22.14 powered by rolldown v1.2.7
 ℹ config file: /data/project/workspace/dsh-worktrees/slice-687169eff807/tsdown.config.ts 
@@ -21,10 +21,11 @@ $ tsdown
 The ESM format is compatible with modern platforms and runtimes, and most new libraries are now distributed only in ESM format.
 Learn more at https://nodejs.org/en/learn/modules/publishing-a-package#how-did-we-get-here
 
-ℹ [CJS] lib/client.js  417.66 kB │ gzip: 98.38 kB
-ℹ [CJS] 1 files, total: 417.66 kB
-✔ Build complete in 6063ms
-ℹ [ESM] lib/index.js                 501.16 kB │ gzip: 141.28 kB
+ℹ Cleaning 17 files
+ℹ [CJS] lib/client.js  423.02 kB │ gzip: 99.62 kB
+ℹ [CJS] 1 files, total: 423.02 kB
+✔ Build complete in 3395ms
+ℹ [ESM] lib/index.js                 503.35 kB │ gzip: 141.88 kB
 ℹ [ESM] lib/github-watch.js           40.00 kB │ gzip:  12.37 kB
 ℹ [ESM] lib/worker-shell.js            0.97 kB │ gzip:   0.50 kB
 ℹ [ESM] lib/feishu-watch.js            0.60 kB │ gzip:   0.29 kB
@@ -40,16 +41,16 @@ Learn more at https://nodejs.org/en/learn/modules/publishing-a-package#how-did-w
 ℹ [ESM] lib/github-watch.d.ts          0.43 kB │ gzip:   0.24 kB
 ℹ [ESM] lib/kind-Cri-YTlJ.d.ts        37.06 kB │ gzip:   9.42 kB
 ℹ [ESM] lib/intake-gqjE_HK3.d.ts      33.47 kB │ gzip:  10.40 kB
-ℹ [ESM] 16 files, total: 783.14 kB
-[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 5.9s of this 6.1s build (98%).
+ℹ [ESM] 16 files, total: 785.32 kB
+[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 3.5s of this 3.7s build (96%).
 The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
-  - rolldown-plugin-dts:generate load (84%, 5.1s, 45 calls)
+  - rolldown-plugin-dts:generate load (77%, 2.8s, 45 calls)
 Additional hook time came from the hooks below and from hooks under 1s.
 3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
-  - rolldown-plugin-dts:resolver resolveId (318 calls)
+  - rolldown-plugin-dts:resolver resolveId (320 calls)
   - tsdown:deps resolveId (76 calls)
   - rolldown-plugin-dts:fake-js transform (45 calls)
 See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
 
-✔ Build complete in 6485ms
+✔ Build complete in 3830ms
 EXIT=0

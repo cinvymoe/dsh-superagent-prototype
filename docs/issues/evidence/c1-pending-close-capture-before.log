@@ -1,11 +1,15 @@
-# C1 pending-close Before capture — deployment main 40191e32 build in /tmp/c1-close-before
-# profile c1close-before, viewport 1440x1100, locale zh-CN, light color scheme, project p-widgets
-# command: /usr/bin/python3 /tmp/c1-close-capture.py 'http://<before-host>/?token=<redacted>' docs/evidence/c1-pending-close before
-# date: 2026-11-13T00:40:50+08:00
+# C1 pending-close Before capture — deployment main 934a1f07 build in /tmp/c1-close-before2
+# profile c1close-before, viewport 1440x1100, locale zh-CN, light color scheme, project p-widgets, filter 全部
+# request: goto http://<before-host>/?token=<redacted by policy> (the token is not written to this log)
+# date: 2026-11-13T01:03:00+08:00
+# command: /usr/bin/python3 /tmp/c1-close-capture2.py '<before token URL>' /data/project/workspace/dsh-worktrees/slice-687169eff807/docs/evidence/c1-pending-close before
 
 MODE before
-LIST ROWS: [('需求列表新增待关闭状态', '开放\n已确认\n7小时前\n2 个切片'), ('需求详情支持批量导出', '开放\n已确认\n7小时前\n2 个切片'), ('旧版需求列表布局', '已关闭\n已确认\n7小时前\n2 个切片'), ('为需求列表增加复制链接按钮', '开放\n待对齐\n7小时前\n0 个切片')]
-LIST TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 需求列表 | 4 | 需求列表新增待关闭状态 | 开放 | 已确认 | 7小时前 | 2 个切片 | 需求详情支持批量导出 | 开放 | 已确认 | 7小时前 | 2 个切片 | 旧版需求列表布局 | 已关闭 | 已确认 | 7小时前 | 2 个切片 | 为需求列表增加复制链接按钮 | 开放 | 待对齐 | 7小时前 | 0 个切片
+PILLS: [('待处理', 'false'), ('已确认', 'false'), ('已关闭', 'false'), ('全部', 'true')]
+LIST ROWS: [('需求列表新增待关闭状态', '开放 / 已确认 / 原生 / 7小时前 / 2 个切片'), ('需求详情支持批量导出', '开放 / 已确认 / 原生 / 7小时前 / 2 个切片'), ('旧版需求列表布局', '已关闭 / 已确认 / 原生 / 7小时前 / 2 个切片'), ('为需求列表增加复制链接按钮', '开放 / 待对齐 / 原生 / 7小时前 / 0 个切片')]
+LIST TEXT: Widgets | 审阅对齐结果，确认或打回。 | acme/intake → acme/widgets | /srv/worktrees | 待处理 | 已确认 | 已关闭 | 全部 | 需求列表 | 4 | 需求列表新增待关闭状态 | 开放 | 已确认 | 原生 | 7小时前 | 2 个切片 | 需求详情支持批量导出 | 开放 | 已确认 | 原生 | 7小时前 | 2 个切片 | 旧版需求列表布局 | 已关闭 | 已确认 | 原生 | 7小时前 | 2 个切片 | 为需求列表增加复制链接按钮 | 开放 | 待对齐 | 原生 | 7小时前 | 0 个切片
 DETAIL HEAD: 返回需求列表 | 需求列表新增待关闭状态 | 需求详情与对齐审阅 | 开放 | 已确认
-DETAIL TEXT: 返回需求列表 | 需求列表新增待关闭状态 | 需求详情与对齐审阅 | 开放 | 已确认 | 需求原文 | 提交人：local | 7小时前 | q-close-done | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 需求列表新增待关闭状态 |  | 一条需求的全部切片执行完毕后，状态显示待关闭，对齐标签保持不变。 |  | 对齐结果 | 已确认 |  | 拆成两个切片，先后端派生再补面板标签。 |  | C1 | 服务端派生 slicesFinished | full | 1 条验收标准 | C2 | 面板显示待关闭 | full | 1 条验收标准 | 7小时前 | 7小时前 | 消息记录 | 0 | 发表评论 | 关联工单 | 2 | C1 · 服务端派生 slicesFinished | C2 · 面板显示待关闭 | 关闭需求
-BODY CLASS:  DATA-THEME: 
+DETAIL TEXT: 返回需求列表 | 需求列表新增待关闭状态 | 需求详情与对齐审阅 | 开放 | 已确认 | 需求原文 | 提交人：local | 7小时前 | q-close-done | 项目：Widgets · acme/intake → acme/widgets · /srv/worktrees |  | 需求列表新增待关闭状态 |  | 一条需求的全部切片执行完毕后，状态显示待关闭，对齐标签保持不变。 |  | 对齐结果 | 已确认 |  | 拆成两个切片，先后端派生再补面板标签。 |  | C1 | 服务端派生 slicesFinished | full | 1 条验收标准 | C2 | 面板显示待关闭 | full | 1 条验收标准 | 7小时前 | 7小时前 | 原生 | 已派发工单，执行方式固定。 | 消息记录 | 0 | 发表评论 | 关联工单 | 2 | C1 · 服务端派生 slicesFinished | C2 · 面板显示待关闭 | 关闭需求
+SCHEME: {'prefersDark': False, 'bodyBg': 'rgb(255, 255, 255)'}
+
+# The temporary Before server on 10.126.126.6:3131 was stopped after this capture (no listener); the token is not recorded.
