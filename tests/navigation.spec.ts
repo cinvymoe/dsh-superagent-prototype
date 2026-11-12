@@ -60,6 +60,16 @@ it('reads each page a tab remembered with the parameters it takes, and leaves ou
     .toEqual({ page: 'settings', query: { group: 'source', source: 'feishu' } })
   expect([parseRoute('overview'), parseRoute(null)]).toEqual([undefined, undefined])
 })
+it('reads the requirement pages and maps a saved Discuss route onto them', () => {
+  expect(parseRoute({ page: 'newRequirement', id: 'q1', create: true })).toEqual({ page: 'newRequirement' })
+  expect(parseRoute({ page: 'requirements' })).toEqual({ page: 'requirements' })
+  expect(parseRoute({ page: 'requirements', create: true })).toEqual({ page: 'requirements', create: true })
+  expect(parseRoute({ page: 'requirements', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
+  // The removed Discuss tab stays readable: detail, create page and list open their matching requirement page.
+  expect(parseRoute({ page: 'discuss', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
+  expect(parseRoute({ page: 'discuss', create: true })).toEqual({ page: 'requirements', create: true })
+  expect(parseRoute({ page: 'discuss' })).toEqual({ page: 'requirements' })
+})
 it('opens the settings that fix each setup problem: the Deployment group, or the card of the Source it names', () => {
   expect(setupPage('deployment')).toEqual({ page: 'settings', query: { group: 'deployment' } })
   for (const place of ['github', 'feishu'] as const) expect(setupPage(place)).toEqual({ page: 'settings', query: { group: 'source', source: place } })

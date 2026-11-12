@@ -47,10 +47,15 @@ export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketS
   ({ ...TICKET, ...fields, ...stage })
 export const localIssue = (title: string, body = '', project = 'p-fixture'): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
   project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+const localTrigger = (issue: LocalIssue): TriggerRow => ({ id: `local-${issue.id}`, source: 'local',
+  actor: { source: 'local', id: issue.author || 'local' }, human: true, at: issue.createdAt, text: issue.body || issue.title,
+  preview: issue.body || issue.title, url: undefined, threads: [`local:${issue.id}`], actions: { requeue: false },
+  disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined } })
 const localThread = (issue: LocalIssue): ThreadPageView => ({ key: `local:${issue.id}`, source: 'local', title: issue.title,
   stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
   evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
-  timeline: [], earlier: null })
+  // The original requirement is the Thread's first Trigger, as the host records it, so detail de-duplication stays testable.
+  timeline: [localTrigger(issue)], earlier: null })
 export const threadSummary = (fields: Partial<ThreadRow> = {}): ThreadRow => ({
   key: 'feishu:oc_1:om_root', source: 'feishu', title: '这个文案好奇怪', stage: 'subscribed', latest: undefined, lastAt: '2026-09-23T00:00:00Z',
   createdAt: '2026-09-22T00:00:00Z', subscriptions: 1, tickets: [{ id: 't1', title: '修复回归', state: 'open' }], evaluating: undefined,
@@ -356,7 +361,11 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET local/issues': { query: ['project'], answer: ({ query }) =>
     ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project) }) },
   'POST local/issues': { body: true, answer: ({ body }) => {
-    const issue = localIssue(body.title, body.body, body.project)
+    // Mirror the host's title derivation: the first non-empty line of the description, collapsed and shortened to 200.
+    const description = (body.body ?? '').trim()
+    const title = body.title?.trim() || (description.split('\n').find((line: string) => line.trim()) ?? '').trim()
+      .replace(/\s+/g, ' ').slice(0, 200)
+    const issue = localIssue(title, description, body.project)
     server.localIssues = [issue, ...server.localIssues]
     return { issue }
   } },

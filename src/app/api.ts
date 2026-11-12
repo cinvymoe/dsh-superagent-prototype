@@ -37,7 +37,7 @@ export interface Api {
   'GET local/projects': { response: { projects: LocalProject[] } }
   'POST local/projects': { body: { name: string; repository: string; worktreeRoot?: string }; response: { project: LocalProject } }
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssue[] } }
-  'POST local/issues': { body: { title: string; body?: string; project: string }; response: { issue: LocalIssue } }
+  'POST local/issues': { body: { title?: string; body?: string; project: string }; response: { issue: LocalIssue } }
   'GET local/issues/:id': { response: { issue: LocalIssue; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }
   'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssue } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssue } }

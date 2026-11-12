@@ -1,4 +1,4 @@
-/** Local issue board: submit a requirement, read its discussion, and review the Aligner's proposal. */
+/** Requirement pages: submit a requirement, list the project's requirements, and review the Aligner's proposal. */
 import { useState, type FormEvent } from 'react'
 import type { LocalIssue } from '../sources/local-format.ts'
 import { usePoll } from './api.ts'
@@ -18,62 +18,72 @@ function statusTag(t: T, issue: LocalIssue) {
   return <Tag tone="danger">{t('discuss.rejected')}</Tag>
 }
 
-/** New-requirement composer of the current local project; each submission becomes a Thread and enters the Engine as a human Trigger. */
-export function DiscussBoard() {
+/** New-requirement page: the current project's head and one description field; each submission becomes a Thread. */
+export function NewRequirementPage() {
   const { t, call, notify, navigate, project } = usePanel()
   const { projects } = usePanelData()
   const active = projects.find(item => item.id === project) ?? projects[0]
-  const { data, error, reload } = usePoll(async () => active
-    ? call('GET local/issues', { query: { project: active.id } })
-    : { issues: [] }, [call, active?.id])
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
+  const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
-  const issues = data?.issues ?? []
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    const clean = title.trim()
-    if (!clean || busy || !active) return
+    const text = description.trim()
+    if (!text || busy || !active) return
     setBusy(true)
     try {
-      const { issue } = await call('POST local/issues', { body: { title: clean, project: active.id,
-        ...(body.trim() ? { body: body.trim() } : {}) } })
-      setTitle('')
-      setBody('')
-      await reload()
-      navigate({ page: 'discuss', id: issue.id })
+      const { issue } = await call('POST local/issues', { body: { body: text, project: active.id } })
+      setDescription('')
+      navigate({ page: 'requirements', id: issue.id })
     } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
   }
   return <>
-    <PageHead title={active ? active.name : t('discuss.title')}>
-      <span className="dt-hint">{t('discuss.subtitle')}</span>
+    <PageHead back={false} title={active ? active.name : t('discuss.new')}>
+      <span className="dt-hint">{t('discuss.newSubtitle')}</span>
       {active && <span className="dt-mono">{active.repository}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
     </PageHead>
     <div className="dt-column">
-      {!active && <Section title={t('discuss.issues')}>
-        <p className="dt-hint">{t('discuss.noProjects')}</p>
-      </Section>}
+      {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
       {active && <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.new')}</span><Tag tone="neutral">{active.name}</Tag></div>
-        <input className="dt-text-input" value={title} maxLength={200} placeholder={t('discuss.titlePlaceholder')}
-          aria-label={t('discuss.titlePlaceholder')} onChange={event => setTitle(event.target.value)} />
-        <textarea className="dt-textarea" value={body} maxLength={20000} rows={5}
-          placeholder={t('discuss.bodyPlaceholder')} aria-label={t('discuss.bodyPlaceholder')}
-          onChange={event => setBody(event.target.value)} />
+        <textarea className="dt-textarea" value={description} maxLength={20000} rows={6}
+          placeholder={t('discuss.descriptionPlaceholder')} aria-label={t('discuss.descriptionPlaceholder')}
+          onChange={event => setDescription(event.target.value)} />
+        <p className="dt-hint">{t('discuss.descriptionHint')}</p>
         <div className="dt-actions">
-          <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />} disabled={busy || !title.trim() || !active}>
-            {t('discuss.submit')}</Button>
+          <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
+            disabled={busy || !description.trim() || !active}>{t('discuss.submit')}</Button>
         </div>
       </form>}
+    </div>
+  </>
+}
+
+/** Requirement list of the current project, newest first; a row opens the requirement detail. */
+export function RequirementList() {
+  const { t, call, navigate, project } = usePanel()
+  const { projects } = usePanelData()
+  const active = projects.find(item => item.id === project) ?? projects[0]
+  const { data, error } = usePoll(async () => active
+    ? call('GET local/issues', { query: { project: active.id } })
+    : { issues: [] }, [call, active?.id])
+  const issues = data?.issues ?? []
+  return <>
+    <PageHead back={false} title={active ? active.name : t('discuss.requirements')}>
+      <span className="dt-hint">{t('discuss.listSubtitle')}</span>
+      {active && <span className="dt-mono">{active.repository}</span>}
+      {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
+    </PageHead>
+    <div className="dt-column">
+      {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
       {error && <p className="dt-error" role="alert">{error.message}</p>}
-      {active && <Section title={t('discuss.issues')} count={issues.length}>
+      {active && <Section title={t('discuss.requirements')} count={issues.length}>
         {data && issues.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
         <ul className="dt-list dt-cards">{issues.map(issue => <li key={issue.id} className="dt-row">
           <Icon name="message" size={14} />
           <div className="dt-row-main">
             <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
-              onClick={() => navigate({ page: 'discuss', id: issue.id })}>{issue.title}</button></div>
+              onClick={() => navigate({ page: 'requirements', id: issue.id })}>{issue.title}</button></div>
             <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}
               <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span></div>
           </div>
@@ -83,8 +93,8 @@ export function DiscussBoard() {
   </>
 }
 
-/** Issue detail: original requirement, discussion timeline, linked Tickets, and the read-only Aligner proposal. */
-export function DiscussIssue({ id }: { id: string }) {
+/** Requirement detail: the requirement text, its message timeline, linked Tickets, and the read-only Aligner proposal. */
+export function RequirementDetail({ id }: { id: string }) {
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/issues/:id', { id }), [id])
   const [comment, setComment] = useState('')
@@ -116,12 +126,17 @@ export function DiscussIssue({ id }: { id: string }) {
   const alignment = issue.alignment
   const timeline = data!.thread.timeline
   const replies = data!.replies.filter(reply => reply.status === 'sent')
+  // The requirement card above already shows the submitted text, so its original Trigger is left out of the timeline
+  // instead of repeating the full description a second time on the page.
+  const original = issue.body || issue.title
+  const skipped = timeline.findIndex(trigger => trigger.text === original)
   const events = [
-    ...timeline.map(trigger => ({ at: trigger.at, kind: 'trigger' as const, trigger })),
+    ...timeline.flatMap((trigger, index) => index === skipped ? [] : [{ at: trigger.at, kind: 'trigger' as const, trigger }]),
     ...replies.map(reply => ({ at: reply.sentAt ?? '', kind: 'reply' as const, reply })),
   ].sort((a, b) => a.at.localeCompare(b.at))
   return <>
-    <PageHead title={issue.title}><span className="dt-hint">{t('discuss.detail')}</span>{stateTag(t, issue)}{statusTag(t, issue)}</PageHead>
+    <PageHead title={issue.title} back={{ label: t('discuss.back'), onClick: () => navigate({ page: 'requirements' }, true) }}>
+      <span className="dt-hint">{t('discuss.detail')}</span>{stateTag(t, issue)}{statusTag(t, issue)}</PageHead>
     <div className="dt-column dt-form">
       <section className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.requirement')}</span></div>
@@ -207,7 +222,6 @@ export function DiscussIssue({ id }: { id: string }) {
       <div className="dt-actions">
         {issue.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
           onClick={() => { void act(() => call('POST local/issues/:id/close', { id })) }}>{t('discuss.close')}</Button>}
-        <Button variant="ghost" size="sm" onClick={() => navigate({ page: 'discuss' })}>{t('discuss.back')}</Button>
       </div>
     </div>
   </>

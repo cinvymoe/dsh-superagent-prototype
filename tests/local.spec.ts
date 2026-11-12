@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { LocalIssues } from '../src/app/local.ts'
+import { LocalIssues, requirementTitle } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
 import type { Trigger } from '../src/core/index.ts'
 
@@ -32,6 +32,27 @@ describe('the local issue board', () => {
       channel: { source: 'local', thread: `local:${issue.id}`, address: { issue: issue.id } },
     })
     expect(triggers[0]!.text).toBe('Local requirement\n\nThe body')
+  })
+
+  it('derives a title from the first non-empty line of a description and stores the whole description', () => {
+    expect(requirementTitle('\n\n  First   line  \nSecond line')).toBe('First line')
+    expect(requirementTitle('   ')).toBe('')
+    const long = Array.from({ length: 60 }, () => 'word').join('   ')
+    expect(requirementTitle(long)).toHaveLength(200)
+    expect(requirementTitle(long)).not.toContain('  ')
+    const { issues, triggers, project } = setup()
+    const description = '\n  Improve   the panel \n\nMore detail here'
+    const issue = issues.create({ body: description, project: project.id })
+    expect(issue.title).toBe('Improve the panel')
+    expect(issue.body).toBe('Improve   the panel \n\nMore detail here')
+    // A derived title is part of the description, so the Thread message is the description once, without a title prefix.
+    expect(triggers[0]!.text).toBe('Improve   the panel \n\nMore detail here')
+  })
+
+  it('refuses a requirement with neither a title nor a description', () => {
+    const { issues, project } = setup()
+    expect(() => issues.create({ project: project.id })).toThrow('A requirement needs a description')
+    expect(() => issues.create({ body: '   ', project: project.id })).toThrow('A requirement needs a description')
   })
 
   it('adds comments as further Triggers without changing the requirement', () => {
