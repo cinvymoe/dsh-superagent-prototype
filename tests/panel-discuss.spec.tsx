@@ -67,3 +67,45 @@ it('names the project worktree root field and hint in English as well', async ()
   expect(input(en['discuss.projectWorktreeRoot'])).toBeInstanceOf(HTMLInputElement)
   expect(text()).toContain(en['discuss.projectWorktreeRootHint'])
 })
+
+it('omits a whitespace-only worktree root from the payload', async () => {
+  at({ page: 'discuss' })
+  await mount()
+  await click(zh['discuss.newProject'])
+  await type(input(zh['discuss.projectName']), 'Spaced')
+  await type(input(zh['discuss.projectRepository']), 'acme/spaced')
+  await type(input(zh['discuss.projectWorktreeRoot']), '   ')
+  await click(zh['discuss.createProject'])
+  const request = server.requests.find(entry => entry.path === 'local/projects' && entry.method === 'POST')!
+  expect(request.body).toEqual({ name: 'Spaced', repository: 'acme/spaced' })
+  expect(request.body).not.toHaveProperty('worktreeRoot')
+})
+
+it('shows the project worktree root on a requirement detail', async () => {
+  server.localProjects = [{ ...PROJECT, worktreeRoot: '/srv/worktrees' }]
+  server.localIssues = [localIssue('Rooted requirement')]
+  at({ page: 'discuss', id: 'q-fixture' })
+  await mount()
+  expect(text()).toContain('项目：Widgets · acme/widgets · /srv/worktrees')
+})
+
+it('renders a legacy requirement whose project has no worktree root', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [localIssue('Legacy requirement')]
+  at({ page: 'discuss', id: 'q-fixture' })
+  await mount()
+  expect(text()).toContain('项目：Widgets · acme/widgets')
+  expect(text()).not.toContain('/srv/worktrees')
+})
+
+it('shows the localized refusal when the worktree root is relative', async () => {
+  at({ page: 'discuss' })
+  await mount()
+  await click(zh['discuss.newProject'])
+  await type(input(zh['discuss.projectName']), 'Relative')
+  await type(input(zh['discuss.projectRepository']), 'acme/relative')
+  await type(input(zh['discuss.projectWorktreeRoot']), 'relative/root')
+  await click(zh['discuss.createProject'])
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.projectWorktreeRoot'])
+  expect(server.localProjects).toHaveLength(0)
+})

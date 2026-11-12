@@ -339,6 +339,10 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET tickets/:id': { answer: ({ params }) => server.ticketDetails[params.id] ?? refuse(404, 'Ticket not found') },
   'GET local/projects': { answer: () => ({ projects: server.localProjects }) },
   'POST local/projects': { body: true, answer: ({ body }) => {
+    // The host refuses a relative root with a structured user error; mirror it so the panel's refusal path stays covered.
+    if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
+      return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
+    }
     const project = { id: 'p-fixture', name: body.name, repository: body.repository,
       ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}),
       createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
