@@ -133,6 +133,7 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   stateDir: string, deployment?: Deployment, projectRoot?: string): Execution {
   const name = ticketWorktreeName(outcome.name ?? '', ticket.id)
   const root = resolvedExecutionRoot({ settings, stateDir, ...(projectRoot ? { projectRoot } : {}) })
+  const directory = join(root.root, name)
   const source = ticket.origin.triggerId
   const note = outcome.note ? `\nRouting note (not the source request): ${outcome.note}` : ''
   const ruleIds = ticket.mandate.basis.rules
@@ -141,12 +142,12 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
   const precedence = rules ? `\nMatched rules; their procedure and communication instructions take precedence over the default acknowledgement and messaging policy for this ticket:${rules}` : ''
   // The origin trigger is delivered alongside the assignment, so `assignment` omits the trigger text.
   const acceptance = ticket.plan
-    ? `\nAlignment: issue ${ticket.plan.issueId}, slice ${ticket.plan.sliceId}.\nAcceptance criteria:${ticket.plan.acceptance?.length ? `\n${ticket.plan.acceptance.map(item => `- ${item}`).join('\n')}` : ' see the alignment record.'}`
+    ? `\nAlignment: issue ${ticket.plan.issueId}, slice ${ticket.plan.sliceId}.\nDispatch cwd: ${directory}\nAcceptance criteria:${ticket.plan.acceptance?.length ? `\n${ticket.plan.acceptance.map(item => `- ${item}`).join('\n')}` : ' see the alignment record.'}`
     : ''
   const assignment = (ticket.mandate.strength === 'inferred' && ruleIds
     ? `Proactively accepted under ${ruleIds.join(', ')}. Scope: ${outcome.scope}.${precedence}${note}`
     : note.trim()) + acceptance
-  return { name, directory: join(root.root, name), ...(root.explicit ? { worktreeRoot: root.root } : {}), assignment,
+  return { name, directory, ...(root.explicit ? { worktreeRoot: root.root } : {}), assignment,
     ...(deployment?.chain ? { chain: deployment.chain } : {}),
     ...(deployment ? { repository: deployment.repository, intakeRepository: deployment.intakeRepository } : {}) }
 }

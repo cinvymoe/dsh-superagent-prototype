@@ -58,6 +58,8 @@ declare module '@deepseek-ai/cordis' {
  * changes the profile, schedules work or starts goals outside the worker slots, the pause and a person's hold, starts or
  * messages other Sessions, or edits documents.
  */
+/** Tools a slice worker may not call before its feature-exec run starts, so it cannot spend its turn exploring first. */
+const PRE_RUN_TOOLS = new Set(['bash', 'read', 'read_image', 'write', 'edit', 'glob', 'grep', 'web_search', 'web_fetch'])
 const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
   'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
 /** The feature-exec execution tools a sliced Ticket may use to run its pre-approved plan. */
@@ -304,10 +306,10 @@ export class Sessions {
     return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard((execution?: { name: string }) => {
       const current = store.tickets.get(ticket.id)
       if (!current || !liveTicket(current)) return 'Ticket ended; new work needs a new authorized ticket'
-      if (featureExec && current.plan && (execution?.name === 'write' || execution?.name === 'edit')) {
+      if (featureExec && current.plan && execution?.name && PRE_RUN_TOOLS.has(execution.name)) {
         const issue = `${current.plan.issueId}:${current.plan.sliceId}`
         const started = featureExec.list().some(run => run.flow === 'execute' && run.status === 'active' && run.subject?.issue?.id === issue)
-        if (!started) return 'Start this slice with feature_exec_start({flow:"execute"}) before writing files.'
+        if (!started) return 'Start this slice with feature_exec_start({flow:"execute"}) before inspecting or changing files.'
       }
       return undefined
     })]
