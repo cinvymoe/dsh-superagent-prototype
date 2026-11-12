@@ -171,6 +171,11 @@ const TEXT = {
   'userError.projectTaken': ['同名项目已存在。', 'A project with that name already exists.'],
   'userError.projectRepository': ['执行仓库必须是 owner/name 格式。', 'The execution repository must be an owner/name pair.'],
   'userError.projectWorktreeRoot': ['项目 worktree 根目录必须是绝对路径。', 'A project worktree root must be an absolute path.'],
+  'userError.issueImageCount': ['一次需求最多附带 {max} 张图片。', 'A requirement accepts at most {max} images.'],
+  'userError.issueImageName': ['图片缺少原始文件名。', 'A requirement image needs its original file name.'],
+  'userError.issueImageType': ['图片 {name} 必须是 PNG、JPEG、WebP 或 GIF。', 'Image {name} must be a PNG, JPEG, WebP or GIF image.'],
+  'userError.issueImageSize': ['图片 {name} 超过 {max} 字节。', 'Image {name} is larger than {max} bytes.'],
+  'userError.issueImageData': ['图片 {name} 不是有效的 base64 图片数据。', 'Image {name} is not valid base64 image data.'],
   'userError.issueEmpty': ['需求需要填写描述。', 'A requirement needs a description.'],
   // Overview
   sourceError: ['{source} 来源异常', '{source} Source failing'],

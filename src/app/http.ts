@@ -28,6 +28,7 @@ import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import type { LocalIssues } from './local.ts'
+import { REQUIREMENT_BODY_BYTES } from '../limits.ts'
 
 export interface HttpHost {
   readonly store: Store
@@ -211,8 +212,10 @@ function routes(runtime: HttpHost): Routes {
       return { issues: runtime.local.list(project) }
     },
     'POST local/issues': async ({ body }) => {
+      // The one route that carries images, so it alone reads more than the default management body limit.
       const input = z.object({ title: z.string().trim().min(1).max(200).optional(), body: z.string().trim().max(20_000).optional(),
-        project: z.string().min(1) }).parse(await body())
+        project: z.string().min(1), images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional()
+      }).parse(await body(REQUIREMENT_BODY_BYTES))
       return { issue: runtime.local.create(input) }
     },
     'GET local/issues/:id': ({ params }) => {
@@ -276,6 +279,17 @@ function routes(runtime: HttpHost): Routes {
 function decoded(segment: string): string {
   try { return decodeURIComponent(segment) } catch { throw new RouteError(400, 'A path segment has a malformed escape') }
 }
+/** The ids of a stored requirement image request (`local/issues/<id>/images/<image id>`), or undefined for any other path. */
+function imageRequest(method: string, segments: string[]): { id: string; imageId: string } | undefined {
+  if (method !== 'GET' || segments.length !== 5 || segments[0] !== 'local' || segments[1] !== 'issues' || segments[3] !== 'images') return undefined
+  return { id: decoded(segments[2]!), imageId: decoded(segments[4]!) }
+}
+/** Writes one stored image as its own media type, never cached and never sniffed differently by a browser. */
+function imageResponse(res: ServerResponse, image: { bytes: Buffer; mediaType: string }): void {
+  res.writeHead(200, { 'content-type': image.mediaType, 'content-length': String(image.bytes.length), 'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff' })
+  res.end(image.bytes)
+}
 function match(table: Routes, method: string, segments: string[]) {
   for (const [route, run] of Object.entries(table)) {
     const [verb, path] = route.split(' ') as [string, string]
@@ -297,7 +311,16 @@ export function registerHttp(ctx: Context, runtime: HttpHost): () => void {
       if (!sameOrigin(req, ctx.webServer)) { json(res, 403, { error: 'Same-origin management request required' }); return }
       try {
         await runtime.ready
-        const route = match(table, req.method ?? 'GET', url.pathname.slice('/orchestrator/api/'.length).split('/'))
+        const segments = url.pathname.slice('/orchestrator/api/'.length).split('/')
+        // Requirement images answer their bytes rather than JSON; every other route goes through the typed table.
+        const image = imageRequest(req.method ?? 'GET', segments)
+        if (image) {
+          const found = runtime.local.image(image.id, image.imageId)
+          if (!found) throw new RouteError(404, 'Local issue image not found')
+          imageResponse(res, found)
+          return
+        }
+        const route = match(table, req.method ?? 'GET', segments)
         if (!route) throw new RouteError(404, 'Unknown operation')
         const query = Object.fromEntries(url.searchParams)
         json(res, 200, await route.run({ params: route.params as never, query, body: maxBytes => readBody(req, maxBytes) }))
