@@ -1,0 +1,30 @@
+digraph lifecycle {
+  graph [rankdir=TB, fontname="Noto Sans CJK SC", fontsize=12, bgcolor="white", pad=0.4, nodesep=0.45, ranksep=0.4];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=11, color="#94a3b8", fillcolor="#ffffff", penwidth=1.2, margin="0.16,0.1"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9, color="#64748b", fontcolor="#475569", arrowsize=0.6];
+
+  start [shape=oval, label="① 人在 Issue / 评论 @ 智能体", fillcolor="#e0f2fe", color="#38bdf8"];
+  trigger [label="② Source 轮询 → Trigger\n（去重、归属 Thread）", fillcolor="#f3e8ff", color="#a78bfa"];
+  hasTicket [shape=diamond, label="③ 该 Thread 已有\n订阅的 Ticket？", fillcolor="#fef3c7", color="#f59e0b", style="filled"];
+  direct [label="是 → 人的消息直接投递给 Worker\n（不经 Eval / Router；作为 Input 唤醒空闲工单，进入 ⑦）", fillcolor="#d1fae5", color="#10b981"];
+  eval [label="④ Eval：Gate 准入 + Router 研判\nRouter 收到 candidate 卡片", fillcolor="#fef3c7", color="#f59e0b"];
+  route [label="⑤ Router.orchestrator_route\naccept → Ticket + Mandate + Assignment", fillcolor="#fef3c7", color="#f59e0b"];
+  launch [label="⑥ DshExecutor launch\nprepare 一次（sh，10 分钟）\n→ worker-<ticketId> Session", fillcolor="#d1fae5", color="#10b981"];
+  work [label="⑦ Worker 执行\n读代码 / 改代码 / 跑测试 / 提 PR\n长命令转后台，可开 subagent", fillcolor="#d1fae5", color="#10b981"];
+  report [label="⑧ orchestrator_report\nprogress / ready / blocked / failed / dropped（turn 结束自动 waiting）", fillcolor="#d1fae5", color="#10b981"];
+  stage [label="⑨ Ticket 阶段判定\nperson/review · working · idle · person/blocked …", fillcolor="#f3e8ff", color="#a78bfa"];
+  merged [shape=diamond, label="⑩ PR 合并 / 关闭？", fillcolor="#fef3c7", color="#f59e0b", style="filled"];
+  done [shape=oval, label="Ticket 结束（merged / closed）\n结果写回 Source", fillcolor="#dcfce7", color="#22c55e"];
+  relay [shape=note, label="问题 / 受阻：reportRelay 立即回到 Router\nRouter 可 ticket_note / request_status / retry", fillcolor="#fffbeb", color="#f59e0b", fontsize=9.5];
+
+  start -> trigger -> hasTicket;
+  hasTicket -> eval [label="否：需要新工作"];
+  hasTicket -> direct [label="是"];
+  eval -> route -> launch -> work -> report -> stage -> merged;
+  merged -> done [label="是"];
+  merged -> work [label="否：继续（新报告 / 新输入）", constraint=false];
+  report -> relay [style=dashed, label="问题/受阻上报", constraint=false];
+
+  { rank=same; hasTicket; direct; }
+  { rank=same; report; relay; }
+}

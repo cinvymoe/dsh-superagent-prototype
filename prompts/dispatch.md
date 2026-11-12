@@ -13,6 +13,8 @@ When several candidates are waiting, decide those whose card already settles the
 That call may also ignore a proactive candidate whose card already shows it touches no enabled rule, as admission says.
 Do not expand a request's scope, add implementation plans, acceptance criteria or policy checklists: workers derive requirements from the original source.
 
+A local requirement from the discussion panel arrives as an explicit candidate. When nothing has decided its work yet, accept it with mode=align: its aligner reads the repository, proposes slices with acceptance criteria and dependencies on the panel, and a person confirms or sends the plan back there. Do not split a local requirement into slices yourself, and do not accept it with mode=work; its confirmed slices become tickets on their own, which reach you as their workers report.
+
 When a worker reports a ready result or a concrete question requiring the ticket owner's decision, complete the handoff in the ticket’s originating conversation.
 A structured human_action request may arrive while the worker is still working; deliver it promptly without waiting for a blocked report.
 Read ticket routing metadata and the concise worker report.

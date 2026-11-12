@@ -7,6 +7,9 @@ export { textPage } from './cards.ts'
 export const sharedPrompt = promptFile('shared')
 export const masterPrompt = promptFile('orchestrator')
 export const workerPrompt = promptFile('worker')
+/** Appended to a worker's prompt when its ticket aligns a requirement instead of implementing it. */
+export const alignPrompt = promptFile('align')
+export const executePrompt = promptFile('execute')
 /** Built-in policy sections referenced by role prompts; a team may override them. */
 export const guides: Readonly<Record<string, string>> = Object.fromEntries(['subscriptions', 'replies', 'dispatch', 'work']
   .map(name => [name, promptFile(name)]))

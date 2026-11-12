@@ -21,6 +21,7 @@ import { feishuKind } from '../../src/sources/feishu.ts'
 import { githubKind } from '../../src/sources/github.ts'
 import type { Health } from '../../src/sources/host.ts'
 import type { SourceKind } from '../../src/sources/kind.ts'
+import type { LocalIssue } from '../../src/sources/local-format.ts'
 import { testDeployment } from './deployment.ts'
 
 export const MEMBER = 'ou_alice'
@@ -44,6 +45,12 @@ const TICKET = {
 } satisfies TicketFields
 export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketStage = { stage: 'working' }): TicketRow =>
   ({ ...TICKET, ...fields, ...stage })
+export const localIssue = (title: string, body = ''): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
+  project: 'p-fixture', createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+const localThread = (issue: LocalIssue): ThreadPageView => ({ key: `local:${issue.id}`, source: 'local', title: issue.title,
+  stage: 'subscribed', latest: undefined, lastAt: issue.updatedAt, createdAt: issue.createdAt, subscriptions: 0, tickets: [],
+  evaluating: undefined, pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
+  timeline: [], earlier: null })
 export const threadSummary = (fields: Partial<ThreadRow> = {}): ThreadRow => ({
   key: 'feishu:oc_1:om_root', source: 'feishu', title: '这个文案好奇怪', stage: 'subscribed', latest: undefined, lastAt: '2026-09-23T00:00:00Z',
   createdAt: '2026-09-22T00:00:00Z', subscriptions: 1, tickets: [{ id: 't1', title: '修复回归', state: 'open' }], evaluating: undefined,
@@ -90,6 +97,8 @@ export interface PanelServer {
   settings: Settings; revisions: Record<string, number>
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
+  localIssues: LocalIssue[]
+  localProjects: { id: string; name: string; repository: string; worktreeRoot?: string; createdAt: string; updatedAt: string }[]
   threads: ThreadRow[]
   threadPages: (key: string, query: { before?: string; around?: string }) => ThreadPageView | undefined
   person: TicketRow[]; search: Pick<ApiResponse<'GET search'>, 'items' | 'threads'>; history: HistoryView
@@ -249,14 +258,15 @@ function initial(): PanelServer {
   return {
     health: {}, down: false, pending: 0, opened: [], requests: [], misuse: [], queued: new Set(), dropped: [], failing: [],
     setup: { machine: MACHINE, problem: null, feishuProblem: null,
-      accounts: { repository: 'acme/widgets', agent: 'agent-bot', feishu: { appId: 'cli_bot', brand: 'feishu', botId: 'ou_bot',
+      accounts: { repository: 'acme/widgets', intakeRepository: 'acme/widgets', agent: 'agent-bot', feishu: { appId: 'cli_bot', brand: 'feishu', botId: 'ou_bot',
         name: 'Widgets Bot' } } },
     settings, revisions: { policy: 3, eval: 1, executor: 0 },
     prompts: { masterId: 'master', sections: TEAM_SECTIONS, skillName: SKILL_NAME.source, builtin: ['feishu', 'github'],
       skillPrefix: SKILL_PREFIX, revision: 0, current: { ...defaults, config: defaultPrompts() },
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
-    tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() },
+    tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
+    localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
       { stage: 'person', action: 'answer' }),
@@ -327,6 +337,57 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET tickets': { query: ['state', 'offset', 'limit'], answer: ({ query }) => page(server.tickets[query.state === 'ended' ? 'ended'
     : 'open']) },
   'GET tickets/:id': { answer: ({ params }) => server.ticketDetails[params.id] ?? refuse(404, 'Ticket not found') },
+  'GET local/projects': { answer: () => ({ projects: server.localProjects }) },
+  'POST local/projects': { body: true, answer: ({ body }) => {
+    const project = { id: 'p-fixture', name: body.name, repository: body.repository,
+      ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}),
+      createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
+    server.localProjects = [project, ...server.localProjects]
+    return { project }
+  } },
+  'GET local/issues': { answer: () => ({ issues: server.localIssues }) },
+  'POST local/issues': { body: true, answer: ({ body }) => {
+    const issue = localIssue(body.title, body.body)
+    server.localIssues = [issue, ...server.localIssues]
+    return { issue }
+  } },
+  'GET local/issues/:id': { answer: ({ params }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    return issue ? { issue, project: server.localProjects.find(project => project.id === issue.project) ?? null,
+      thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue), replies: [] }
+      : refuse(404, 'Local issue not found')
+  } },
+  'POST local/issues/:id/comments': { body: true, answer: ({ params, body }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    if (!issue) return refuse(404, 'Local issue not found')
+    const next = { ...issue, updatedAt: '2026-09-23T00:00:00Z', body: `${issue.body}\n${body.text}` }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: next }
+  } },
+  'POST local/issues/:id/alignment': { body: true, answer: ({ params, body }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    if (!issue) return refuse(404, 'Local issue not found')
+    const next = { ...issue, alignment: { status: 'proposed' as const, summary: body.summary ?? '', slices: body.slices ?? [],
+      acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' } }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: next }
+  } },
+  'POST local/issues/:id/alignment/decision': { body: true, answer: ({ params, body }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    if (!issue?.alignment) return refuse(404, 'Local issue or alignment not found')
+    const next = { ...issue, alignment: { ...issue.alignment, status: body.decision === 'confirm' ? 'confirmed' as const : 'rejected' as const,
+      decidedAt: '2026-09-23T00:00:00Z', ...(body.decision === 'reject' && body.reason ? { reason: body.reason } : {}) } }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: next, tickets: body.decision === 'confirm'
+      ? next.alignment.slices.map(slice => ({ id: `ticket-${slice.id}`, title: `${slice.id} · ${slice.title}` })) : [] }
+  } },
+  'POST local/issues/:id/close': { answer: ({ params }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    if (!issue) return refuse(404, 'Local issue not found')
+    const next = { ...issue, state: 'closed' as const }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: next }
+  } },
   'POST tickets/:id/retry': { answer: ({ params }) => {
     const ticket = ticketOf(params.id)
     if (!ticket) return refuse(404, 'Ticket not found')

@@ -6,6 +6,8 @@
       name: dsh-superagent
     - id: dsh-superagent-github
       name: dsh-superagent/github-watch
+    - id: dsh-superagent-local
+      name: dsh-superagent/local-watch
     # Optional Feishu Source; requires configuring a bot CLI after enabling.
     - id: dsh-superagent-feishu
       name: dsh-superagent/feishu-watch
@@ -43,7 +45,7 @@
               shell: true
             config:
               - id: bash-sandbox
-                name: '@deepseek-ai/dsh-bash-sandbox'
+                name: dsh-superagent/worker-shell
                 disabled: !!js process.platform === 'win32'
                 config:
                   timeoutMs: 5000

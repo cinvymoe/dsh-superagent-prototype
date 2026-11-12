@@ -25,7 +25,7 @@ export interface SessionsHost {
   /** DSH Cordis context: sessions, agents, persistence, and their events. */
   readonly context: Context
   readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
-  readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'skills'>
+  readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'composeAlign' | 'composeExecute' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
   /** The `models` health entry, which reports managed sessions waiting on a model-budget retry. */
   readonly health: HealthEntry
@@ -58,8 +58,13 @@ declare module '@deepseek-ai/cordis' {
  * changes the profile, schedules work or starts goals outside the worker slots, the pause and a person's hold, starts or
  * messages other Sessions, or edits documents.
  */
+/** Tools a slice worker may not call before its feature-exec run starts, so it cannot spend its turn exploring first. */
+const PRE_RUN_TOOLS = new Set(['bash', 'read', 'read_image', 'write', 'edit', 'glob', 'grep', 'web_search', 'web_fetch'])
 const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
   'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
+/** The feature-exec execution tools a sliced Ticket may use to run its pre-approved plan. */
+const EXECUTE_TOOLS = ['feature_exec_flow', 'feature_exec_start', 'feature_exec_status', 'feature_exec_gate', 'feature_exec_advance',
+  'feature_exec_plan', 'feature_exec_dispatch', 'feature_exec_close']
 /** What the main Session is told when it would wait: what it waits for comes to it, and a waiting step holds back the next. */
 const NO_WAIT = 'Reports, follow_up notices, new candidates and a background job\'s end with its output arrive by themselves as messages; '
   + 'end the turn instead of waiting for them.'
@@ -244,7 +249,10 @@ export class Sessions {
     binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-policy', order: 9999, interpolate: false, text: context => {
       const version = this.promptFor(agent, context.signal !== undefined)
       const current = ticket && host.store.tickets.get(ticket.id)
-      const composed = host.prompts.compose(version.config, master ? 'orchestrator' : 'worker', current ? host.environment(current) : undefined)
+      const composed = master ? host.prompts.compose(version.config, 'orchestrator', current ? host.environment(current) : undefined)
+        : current?.mode === 'align' ? host.prompts.composeAlign(version.config, host.environment(current))
+        : current?.plan ? host.prompts.composeExecute(version.config, host.environment(current))
+        : host.prompts.compose(version.config, 'worker', current ? host.environment(current) : undefined)
       return `[dsh-superagent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
     }, ...(master ? { complete: true } : {}) }))
     // A recreated skill scope (e.g. after the skills service restarts) starts empty, so reset `binding.skills` before rebinding.
@@ -264,7 +272,7 @@ export class Sessions {
         agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
     } else {
       // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
-      binding.disposers.push(...this.workOnly(agent, ticket!.id))
+      binding.disposers.push(...this.workOnly(agent, ticket!))
     }
   }
   /**
@@ -286,13 +294,24 @@ export class Sessions {
    * (see the executor). Read inherited tools through the parent scope, which includes the preset's tools. The global view
    * misses preset tools; the agent's own view also includes local tools such as subagent, which restrict refuses to name.
    */
-  private workOnly(agent: Agent, ticketId: string): (() => void)[] {
+  private workOnly(agent: Agent, ticket: Ticket): (() => void)[] {
     const store = this.host.store
     const parent = scopeParentOf(agent)
-    const allow = WORK_TOOLS.filter(name => agent.ctx.tools.get(name, parent))
-    return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard(() => {
-      const current = store.tickets.get(ticketId)
-      return !current || !liveTicket(current) ? 'Ticket ended; new work needs a new authorized ticket' : undefined
+    // A slice ticket may start its feature-exec execution run; an aligner has no feature-exec tool.
+    const tools = ticket.plan ? [...WORK_TOOLS, ...EXECUTE_TOOLS] : WORK_TOOLS
+    const allow = tools.filter(name => agent.ctx.tools.get(name, parent))
+    const featureExec = allow.includes('feature_exec_start')
+      ? this.ctx.get('featureExec') as { list(): readonly { flow: string; status: string; subject?: { issue?: { id?: string } } }[] } | undefined
+      : undefined
+    return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard((execution?: { name: string }) => {
+      const current = store.tickets.get(ticket.id)
+      if (!current || !liveTicket(current)) return 'Ticket ended; new work needs a new authorized ticket'
+      if (featureExec && current.plan && execution?.name && PRE_RUN_TOOLS.has(execution.name)) {
+        const issue = `${current.plan.issueId}:${current.plan.sliceId}`
+        const started = featureExec.list().some(run => run.flow === 'execute' && run.status === 'active' && run.subject?.issue?.id === issue)
+        if (!started) return 'Start this slice with feature_exec_start({flow:"execute"}) before inspecting or changing files.'
+      }
+      return undefined
     })]
   }
   /**
@@ -307,8 +326,9 @@ export class Sessions {
       parent = this.ctx.agents.get(parent)?.session.header.parentSession
     }
     const ticketId = parent === undefined ? undefined : ticketOfSession(parent)
-    if (ticketId === undefined || !this.host.store.tickets.get(ticketId)) return
-    this.bindings.set(agent, { disposers: this.workOnly(agent, ticketId), subagent: true })
+    const ticket = ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
+    if (!ticket) return
+    this.bindings.set(agent, { disposers: this.workOnly(agent, ticket), subagent: true })
   }
   /** Register the skills of a prompt version in the agent's skill scope, in place of an earlier version's. */
   private bindSkills(binding: SessionBinding, version: PromptVersion): void {

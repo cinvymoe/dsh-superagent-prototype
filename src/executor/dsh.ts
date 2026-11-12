@@ -2,17 +2,18 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { mkdir, rmdir, stat } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, mkdir, mkdtemp, rmdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { key, latestAssignment, latestReport, liveTicket, runningAssignment, threadKey, waitsForPerson } from '../core/index.ts'
 import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Executor, Mandate, PolicyEffect, Ticket, TicketInput, Trigger }
   from '../core/index.ts'
-import type { Machine } from '../deployment.ts'
+import type { Deployment, Machine } from '../deployment.ts'
 import { runAsWorker, verifyDirectory } from '../infra/environment.ts'
 import type { Settings } from '../policy.ts'
 import type { Store } from '../app/store.ts'
 import { Later, type Effects } from '../app/effects.ts'
-import { executionRoot, type Variable } from '../app/execution-environment.ts'
+import { resolvedExecutionRoot, type Variable } from '../app/execution-environment.ts'
 import type { Sessions } from '../app/sessions.ts'
 import { WorktreeNameSchema } from '../app/assessment.ts'
 import { resultRelay } from '../app/notices.ts'
@@ -55,6 +56,28 @@ export function transient(error: unknown): boolean {
 }
 /** Appends a stable 12-character ticket ID suffix to a validated English worktree name. */
 const ticketWorktreeName = (name: string, id: string): string => `${WorktreeNameSchema.parse(name)}-${id.slice(0, 12)}`
+/**
+ * Verifies an explicitly configured worktree root before a launch creates anything: it exists, is a directory, and takes a
+ * write. The write probe catches read-only mounts, which permission bits do not report to a root user. A failure throws
+ * `PrepareFailed`, so the launch fails without an automatic retry and leaves the root as it is; it never falls back to
+ * the default root, and the ticket directory is never created elsewhere.
+ */
+async function verifyWorktreeRoot(root: string): Promise<void> {
+  const failed = (error: unknown): string => error instanceof Error ? error.message : String(error)
+  const info = await stat(root).catch((error: unknown) => {
+    throw new PrepareFailed((error as { code?: unknown }).code === 'ENOENT'
+      ? `The worktree root ${root} does not exist`
+      : `The worktree root ${root} cannot be inspected: ${failed(error)}`)
+  })
+  if (!info.isDirectory()) throw new PrepareFailed(`The worktree root ${root} is not a directory`)
+  await access(root, constants.W_OK).catch((error: unknown) => {
+    throw new PrepareFailed(`The worktree root ${root} is not writable: ${failed(error)}`)
+  })
+  const probe = await mkdtemp(join(root, '.dsh-superagent-write-check-')).catch((error: unknown) => {
+    throw new PrepareFailed(`The worktree root ${root} is not writable: ${failed(error)}`)
+  })
+  await rmdir(probe).catch(() => { /* The probe only needs the write; a failed removal does not fail the launch. */ })
+}
 /** Host dependencies used by `DshExecutor`. */
 export interface ExecutorHost {
   /** DSH Cordis context: agents and their events, and the subprocess service used to run prepare commands. */
@@ -76,6 +99,14 @@ export interface ExecutorHost {
   paused(): boolean
   /** Execution environment variables for `ticket`, passed to its workspace prepare command. */
   environment(ticket: Ticket): Variable[]
+  /** Explicit environment for worker commands and worker shells. */
+  workerEnvironment(): Record<string, string>
+  /** The deployment of one configured chain, or the default deployment when the chain is absent. */
+  deploymentFor?(chain?: string): Deployment
+  /** The deployment for one ticket, including a local project's repository override. */
+  deploymentForTicket?(ticket: Ticket): Deployment
+  /** The explicit worktree root a local project configures for this ticket, when any; absent means the Executor's root. */
+  worktreeRoot?(ticket: Ticket): string | undefined
   sourceLink(trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }>
   /** Stored Trigger of the message `trigger` replies to, when it replies to one. */
   repliedTo(trigger: Trigger): Trigger | undefined
@@ -93,10 +124,16 @@ export function mandateInstructions(mandate: Pick<Mandate, 'strength'>): string 
     + 'internal to one module within the accepted rule scope. If it requires public-interface or behavior changes, new interaction, product '
     + 'decisions or clarification, stop and report dropped; do not expand scope.' : ''
 }
-/** Builds a newly accepted ticket's Execution metadata: its worktree name, workspace directory, and assignment text. */
+/**
+ * Builds a newly accepted ticket's Execution metadata: its worktree name, workspace directory, and assignment text.
+ * The directory is created under the project's worktree root, the Executor's directory, or the default state root; the
+ * explicit root is recorded with it so the launch validates the root accepted here, even if settings change later.
+ */
 export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>, settings: Settings,
-  stateDir: string): Execution {
+  stateDir: string, deployment?: Deployment, projectRoot?: string): Execution {
   const name = ticketWorktreeName(outcome.name ?? '', ticket.id)
+  const root = resolvedExecutionRoot({ settings, stateDir, ...(projectRoot ? { projectRoot } : {}) })
+  const directory = join(root.root, name)
   const source = ticket.origin.triggerId
   const note = outcome.note ? `\nRouting note (not the source request): ${outcome.note}` : ''
   const ruleIds = ticket.mandate.basis.rules
@@ -104,10 +141,15 @@ export function ticketExecution(ticket: Ticket, outcome: Extract<AssessmentOutco
     .map(rule => `\n- ${rule.name} (${rule.id}): ${rule.instruction}`).join('')
   const precedence = rules ? `\nMatched rules; their procedure and communication instructions take precedence over the default acknowledgement and messaging policy for this ticket:${rules}` : ''
   // The origin trigger is delivered alongside the assignment, so `assignment` omits the trigger text.
-  const assignment = ticket.mandate.strength === 'inferred' && ruleIds
+  const acceptance = ticket.plan
+    ? `\nAlignment: issue ${ticket.plan.issueId}, slice ${ticket.plan.sliceId}.\nDispatch cwd: ${directory}\nAcceptance criteria:${ticket.plan.acceptance?.length ? `\n${ticket.plan.acceptance.map(item => `- ${item}`).join('\n')}` : ' see the alignment record.'}`
+    : ''
+  const assignment = (ticket.mandate.strength === 'inferred' && ruleIds
     ? `Proactively accepted under ${ruleIds.join(', ')}. Scope: ${outcome.scope}.${precedence}${note}`
-    : note.trim()
-  return { name, directory: join(executionRoot(settings, stateDir), name), assignment }
+    : note.trim()) + acceptance
+  return { name, directory, ...(root.explicit ? { worktreeRoot: root.root } : {}), assignment,
+    ...(deployment?.chain ? { chain: deployment.chain } : {}),
+    ...(deployment ? { repository: deployment.repository, intakeRepository: deployment.intakeRepository } : {}) }
 }
 /** Character limits for inline assignment and trigger text in worker messages; longer text is read via its resource. */
 const ASSIGNMENT_CHARS = 1500, TRIGGER_CHARS = 600
@@ -236,29 +278,39 @@ export class DshExecutor implements Executor {
   }
   /** Populates a newly accepted ticket's `execution` attributes (worktree name, workspace directory, and assignment text). */
   prepare(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Ticket {
-    return { ...ticket, execution: ticketExecution(ticket, outcome, this.host.store.settings(), this.host.machine.stateDir) }
+    const source = sourceTrigger(this.host, ticket)
+    const chain = ticket.execution?.chain ?? (typeof source?.meta.chain === 'string' ? source.meta.chain : undefined)
+    const deployment = this.host.deploymentForTicket?.(ticket) ?? this.host.deploymentFor?.(chain)
+    const projectRoot = this.host.worktreeRoot?.(ticket)
+    return { ...ticket, execution: ticketExecution(ticket, outcome, this.host.store.settings(), this.host.machine.stateDir, deployment, projectRoot) }
   }
   /**
-   * Runs the configured `executor.prepare` command for a new ticket workspace in its parent directory with the ticket's
+   * Runs the configured `executor.prepare` command for a new ticket workspace in the selected root with the ticket's
    * execution environment variables, then verifies the directory as the worker sees it.
-   * A failed prepare command throws `PrepareFailed`, which is not retried automatically; an empty directory it left is removed, a non-empty one kept.
-   * @throws PrepareFailed with the command's output when the prepare command fails.
+   * An explicit root is validated first and is never created or replaced by the default root; the default root missing is
+   * created as before. A failure throws `PrepareFailed`, which is not retried automatically; an empty directory a failed
+   * prepare command left is removed, a non-empty one kept.
+   * @throws PrepareFailed with the root's problem or the command's output when the launch cannot prepare the workspace.
    */
   private async prepareDirectory(ticket: Ticket): Promise<void> {
     const directory = ticket.execution?.directory ?? ''
-    await mkdir(dirname(directory), { recursive: true })
+    const explicitRoot = ticket.execution?.worktreeRoot
+    // The root accepted with the ticket: the project's or Executor's explicit root, or the default <stateDir>/work.
+    const root = explicitRoot ?? dirname(directory)
+    if (explicitRoot) await verifyWorktreeRoot(explicitRoot)
+    else await mkdir(root, { recursive: true })
     const command = this.host.store.settings().executor.prepare.trim()
-    const env = Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value]))
+    const env = { ...this.host.workerEnvironment(), ...Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value])) }
     // Enforce a timeout so a hung prepare command (such as on a credential prompt) fails the ticket instead of holding a worker slot indefinitely.
     const signal = AbortSignal.any([this.host.lifetime, AbortSignal.timeout(PREPARE_TIMEOUT_MS)])
-    if (command) await runAsWorker(this.host.context.subprocess, ['sh', '-c', command], dirname(directory), signal, env)
+    if (command) await runAsWorker(this.host.context.subprocess, ['sh', '-c', command], root, signal, env)
       .catch(async (error: unknown) => {
         // Remove an empty directory left by a failed prepare command so a later retry does not treat it as already prepared.
         await rmdir(directory).catch(() => { /* Absent, or holding what the command wrote, which the output explains. */ })
         throw new PrepareFailed(`The prepare command failed: ${error instanceof Error ? error.message : String(error)}`)
       })
     await mkdir(directory, { recursive: true })
-    await verifyDirectory(directory, this.host.context.subprocess, this.host.lifetime)
+    await verifyDirectory(directory, this.host.context.subprocess, this.host.lifetime, env)
   }
   /** Enqueues a `launch` effect for an accepted or resumed assignment; launches start in queue order as worker slots free up. */
   start(ticket: Ticket, assignment: Assignment): void {
@@ -271,6 +323,9 @@ export class DshExecutor implements Executor {
     const ticket = this.host.store.tickets.get(ticketId)
     const assignment = ticket && latestAssignment(ticket)
     if (!ticket || !liveTicket(ticket) || assignment?.id !== assignmentId || assignment.state !== 'pending') return
+    // A planned slice waits for the tickets its dependencies became; the launch retries until they end.
+    const waiting = ticket.dependsOn?.filter(id => { const dependency = this.host.store.tickets.get(id); return dependency && liveTicket(dependency) })
+    if (waiting?.length) throw new Later()
     this.slots.reserve(ticketId, 'launch')
     try { await this.launch(ticket, assignment); this.transient.delete(`launch:${assignmentId}`) }
     catch (error) {

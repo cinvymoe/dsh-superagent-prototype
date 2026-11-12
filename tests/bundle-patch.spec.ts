@@ -28,13 +28,14 @@ const presetOf = (rows: readonly Row[], id: string) => rows.map(row => row.confi
 
 it('defines the worker preset Executor Sessions run under, with a shell that moves long commands to the background', async () => {
   const rows = await patched()
-  expect(rows.map(row => row.id)).toEqual(['dsh-superagent', 'dsh-superagent-github', 'dsh-superagent-feishu', 'dsh-superagent-worker-preset',
+  expect(rows.map(row => row.id)).toEqual(['dsh-superagent', 'dsh-superagent-github', 'dsh-superagent-local', 'dsh-superagent-feishu', 'dsh-superagent-worker-preset',
     'dsh-superagent-router-preset'])
   const preset = presetOf(rows, WORKER_PRESET)
   expect(preset.id).toBe(WORKER_PRESET)
   const plugins = flat(preset.plugins)
   const named = (name: string) => plugins.filter(row => row.name === name).map(row => row.config)
-  expect(named('@deepseek-ai/dsh-bash-sandbox')).toEqual([{ timeoutMs: 5000, maxTimeoutMs: 5000 }])
+  expect(named('dsh-superagent/worker-shell')).toEqual([{ timeoutMs: 5000, maxTimeoutMs: 5000 }])
+  expect(named('@deepseek-ai/dsh-bash-sandbox')).toEqual([])
   expect(named('@deepseek-ai/dsh-pwsh-sandbox')).toEqual([{ timeoutMs: 5000, maxTimeoutMs: 5000 }])
   expect(named('@deepseek-ai/dsh-tool-jobs')).toEqual([{ waitTimeoutMs: 5000, maxWaitTimeoutMs: 5000 }])
   expect(named('@deepseek-ai/dsh-tool-web')).toEqual([expect.objectContaining({ fetch: false })])
@@ -57,7 +58,9 @@ it('defines the router preset the main Session runs under: the worker\'s 5-secon
   expect(router.order).toBe(91)
   const plugins = flat(router.plugins)
   const named = (preset: Row[], name: string) => preset.filter(row => row.name === name).map(row => row.config)
-  for (const name of ['@deepseek-ai/dsh-bash-sandbox', '@deepseek-ai/dsh-pwsh-sandbox', '@deepseek-ai/dsh-tool-jobs']) {
+  expect(named(plugins, '@deepseek-ai/dsh-bash-sandbox'), '@deepseek-ai/dsh-bash-sandbox')
+    .toEqual(named(flat(worker.plugins), 'dsh-superagent/worker-shell'))
+  for (const name of ['@deepseek-ai/dsh-pwsh-sandbox', '@deepseek-ai/dsh-tool-jobs']) {
     expect(named(plugins, name), name).toEqual(named(flat(worker.plugins), name))
   }
   // The tools its allow list keeps: skill, bash, read, read_image and the job tools; the file tools only read.

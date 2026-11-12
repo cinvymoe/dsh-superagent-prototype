@@ -132,6 +132,16 @@ export interface Mandate {
   scope: string
 }
 
+/** One slice of a confirmed requirement plan, which becomes an execution ticket. */
+export interface PlanSlice {
+  id: string
+  title: string
+  outcome: string
+  acceptance: string[]
+  dependsOn: string[]
+  lane: 'full' | 'light'
+}
+
 /** Active trigger evaluation on a thread; at most one exists per thread. */
 export interface Evaluation {
   id: string
@@ -305,6 +315,12 @@ export interface Ticket {
   execution?: Execution
   /** The latest failed delivery of an Input to its worker, until a delivery succeeds. */
   delivery?: { error: string; at: string }
+  /** How its worker works: the default implementation, or the requirement alignment that must be confirmed before delivery. */
+  mode?: 'work' | 'align'
+  /** Tickets that must have ended before this one launches, by ticket id. */
+  dependsOn?: string[]
+  /** The confirmed plan slice this ticket executes. */
+  plan?: { issueId: string; sliceId: string; acceptance?: string[] }
 }
 /**
  * A Thread a ticket follows, by its key: `own` when the ticket opened it, such as its own pull request, and when and how it
@@ -312,7 +328,21 @@ export interface Ticket {
  * Thread closed; the ticket then ends unless its work has not finished (see `Tickets.unfinished`).
  */
 export interface Follow { thread: string; own: boolean; closed?: { at: string; outcome: 'merged' | 'closed' } }
-export interface Execution { name: string; directory: string; assignment: string }
+export interface Execution {
+  name: string
+  directory: string
+  /**
+   * The explicitly configured root the directory was created under (a local project's `worktreeRoot` or a non-empty
+   * `executor.directory`). Absent for the default `<stateDir>/work`, and never updated after acceptance: a launch validates
+   * the root accepted with the ticket.
+   */
+  worktreeRoot?: string
+  assignment: string
+  /** The GitHub chain this ticket executes in, when the Source configures more than the legacy single chain. */
+  chain?: string
+  repository?: string
+  intakeRepository?: string
+}
 
 /** Whether a ticket is open: it has not ended. */
 export const liveTicket = (ticket: Pick<Ticket, 'ended'>): boolean => !ticket.ended

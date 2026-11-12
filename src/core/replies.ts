@@ -84,6 +84,15 @@ export class Replies extends EnginePart {
     const channel = request.purpose === 'answer' ? trigger!.channel : asker?.channel ?? (ticket ? this.sourceChannel(ticket) : undefined)
     if (!channel) throw new UserError('noChannel')
     this.options.outbox.send({ id, channel, text: request.text, kind: 'reply', ...ticket ? { ticketId: ticket.id } : {} })
+    // A result is also copied to the ticket's own pull requests, so a deployment that separates the intake and code
+    // repositories reports the same words in both.
+    if (request.purpose === 'result' && ticket && channel.source === 'github') {
+      for (const copy of this.options.replyCopies?.(ticket) ?? []) {
+        if (copy.thread === channel.thread) continue
+        this.options.outbox.send({ id: key('reply-copy', ticket.id, copy.thread ?? '', request.text), channel: copy,
+          text: request.text, kind: 'reply', ticketId: ticket.id })
+      }
+    }
     if (request.purpose === 'answer' && ticket && trigger && ticket.answers?.includes(trigger.id)) {
       ticket.answers = ticket.answers.filter(item => item !== trigger.id)
       this.repo.tickets.save(ticket)

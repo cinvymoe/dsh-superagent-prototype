@@ -30,10 +30,12 @@ import { TextCache } from './cache.ts'
 import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
+import { LocalIssues } from './local.ts'
+import type { LocalProject } from '../sources/local-format.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
-import { pullEndNotices } from '../sources/github-pull.ts'
+import { pullEndNotices, pullReplyChannels } from '../sources/github-pull.ts'
 import { HealthBoard } from '../infra/health.ts'
 import { Outbox } from './outbox.ts'
 import { Passes } from './passes.ts'
@@ -70,6 +72,7 @@ export class Runtime extends Service implements SourceHost {
   readonly outbox: Outbox
   readonly engine: Engine
   readonly passes: Passes
+  readonly local: LocalIssues
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
@@ -126,16 +129,19 @@ export class Runtime extends Service implements SourceHost {
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
-        lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment, sourceLink: link,
+        lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment,
+        workerEnvironment: () => setup.workerEnvironment, deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,
+        worktreeRoot: ticket => this.ticketProject(ticket)?.worktreeRoot,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
-      this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, effects,
+      this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, deploymentFor: chain => setup.deploymentFor(chain), effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
         deliver: (id, text) => sessions.prompt(masterId, id, text, 'steer'), candidateCard: candidate => candidateCard(links, candidate) })
       const outbox = this.outbox = new Outbox({ store, effects, sources, commands, paused: () => this.paused() })
       const { assessor, executor } = this
-      const policy = () => settingsPolicy(store.settings(), sources)
+      const policy = () => settingsPolicy(store.settings(), sources, source => sources.policyPart(source))
       const engine = this.engine = new Engine({ repo: store, scope: sources, policy, assessor, executor,
-        outbox, prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
+        outbox, replyCopies: ticket => setup.configured() ? pullReplyChannels(ticket, setup.deploymentFor(ticket.execution?.chain)) : [],
+        prepareTicket: (ticket, outcome) => executor.prepare(ticket, outcome), emit: event => {
           // Notify the main Session only about domain events it did not initiate itself.
           const notice = this.quiet ? undefined : eventNotice(event, id => store.tickets.get(id))
           if (notice) sessions.notify(...notice)
@@ -147,8 +153,8 @@ export class Runtime extends Service implements SourceHost {
           // Notify the ticket's conversations whenever it ends via a pull request.
           const ended = event.type === 'ticket.ended' ? store.tickets.get(event.data.ticketId) : undefined
           if (ended && setup.configured()) {
-            const request = store.triggers.get(ended.origin.triggerId)?.text ?? ''
-            for (const message of pullEndNotices(ended, request, setup.deployment.repository)) outbox.send(message)
+            const origin = store.triggers.get(ended.origin.triggerId)
+            for (const message of pullEndNotices(ended, origin?.text ?? '', setup.deploymentFor(ended.execution?.chain).repository, origin?.channel)) outbox.send(message)
           }
         } })
       // Update the `evals` health entry on every pass if an evaluation failed as unavailable within the last hour.
@@ -156,10 +162,11 @@ export class Runtime extends Service implements SourceHost {
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
+      this.local = new LocalIssues({ store, receive: trigger => this.passes.receive(trigger) })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger) }
-      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources,
+      this.toolHost = { context: ctx, engine, store, prompts, sessions, settings: this.settings, assessor, resources, local: this.local,
         get github() { return runtime.context({ kind: 'github', health: ['github'] }) },
         requestPass: () => { passes.request() }, sendReplies: () => outbox.sent(),
         quietly: run => { this.quiet++; try { return run() } finally { this.quiet-- } } }
@@ -182,16 +189,41 @@ export class Runtime extends Service implements SourceHost {
   get feishuProblem(): SetupProblem | undefined { return this.setup.feishuProblem }
   links(): LinkTarget {
     const resolved = this.setup.configured() ? this.setup.deployment : undefined
-    const links = resolved ? { repository: resolved.repository, ...(resolved.feishu ? { feishu: resolved.feishu } : {}) } : {}
+    const links = resolved ? { repository: resolved.repository, ...(resolved.feishu ? { feishu: resolved.feishu } : {}),
+      ...(resolved.chains ? { chains: Object.fromEntries(Object.entries(resolved.chains).map(([id, chain]) => [id, { repository: chain.repository, intakeRepository: chain.intakeRepository }])) } : {}) } : {}
     return channel => this.sources.link(channel, links)
+  }
+  /**
+   * The local project a ticket belongs to, from the project its origin trigger names. GitHub and Feishu tickets carry no
+   * project, so their execution keeps the chain's deployment and the Executor's root.
+   */
+  ticketProject(ticket: Ticket): LocalProject | undefined {
+    const trigger = sourceTrigger(this, ticket)
+    return typeof trigger?.meta.project === 'string' ? this.local.project(trigger.meta.project) : undefined
+  }
+  /** The deployment a ticket executes under: its local project's repository, or its chain's configured repository. */
+  ticketDeployment(ticket: Ticket): Deployment {
+    const base = this.setup.deploymentFor(ticket.execution?.chain)
+    const project = this.ticketProject(ticket)
+    return project ? { ...base, repository: project.repository, intakeRepository: project.repository } : base
   }
   ticketEnvironment(ticket: Ticket): Variable[] {
     const trigger = sourceTrigger(this, ticket)
-    const { setup: { deployment }, sources } = this
+    const { sources } = this
+    const deployment = this.ticketDeployment(ticket)
     return ticketEnvironment({ deployment, sources, settings: this.store.settings(), ticket, ...trigger ? { trigger } : {} })
   }
   checkSetup(): void { this.setup.check() }
   receive(trigger: Trigger): ReceiveResult { return this.passes.receive(trigger) }
+  /** Dispatch the confirmed slices of a local requirement as execution tickets; repeated calls reuse their tickets. */
+  dispatchPlan(issueId: string): Ticket[] {
+    const input = this.local.planInput(issueId)
+    const issue = this.local.get(issueId)
+    if (!input || !issue?.alignment) throw new Error('No confirmed alignment to dispatch')
+    return this.engine.acceptPlan({ source: 'local', id: issueId }, { issueId, triggerIds: input.triggerIds, actor: input.actor,
+      slices: issue.alignment.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome,
+        acceptance: slice.acceptance, dependsOn: slice.dependsOn, lane: slice.lane })) })
+  }
   idle(): Promise<void> { return this.passes.idle() }
   pump(): Promise<void> { return this.passes.pump() }
   sendReplies(): Promise<void> { return this.outbox.sent() }
@@ -219,11 +251,13 @@ export class Runtime extends Service implements SourceHost {
   private httpHost(): HttpHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
-    return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks,
+    return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
       get deployment() { return setup.deployment },
+      deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
-      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog() }
+      checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(),
+      dispatchPlan: (id: string) => runtime.dispatchPlan(id) }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }
@@ -243,7 +277,6 @@ export class Runtime extends Service implements SourceHost {
       await this.ctx.sessionPersistence.flush()
     } finally {
       // Close the database before releasing the directory lock so another process cannot open the database mid-write; a compromised lock may already be released.
-      this.setup.restore()
       try { this.store.close() } finally {
         const unreleased = (error: unknown) => { this.ctx.logger.warn('dsh-superagent could not release its state directory lock: %s',
           String(error)) }

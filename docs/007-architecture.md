@@ -106,7 +106,7 @@ After a change, the Engine emits an event from `DomainEvents` in `src/core/ports
 
 `trigger.received`, `eval.started`, `decision.recorded`, `ticket.created`, `ticket.resumed`, `ticket.ended`, `assignment.started`, `assignment.ended`, `thread.subscribed`, `thread.unsubscribed`, `trigger.requeued`, or `policy.changed`.
 
-Runtime turns `ticket.ended`, `trigger.requeued` and `thread.unsubscribed` into notices. A human `trigger.received` delivered to Tickets becomes a follow-up relay. `pullEndNotices` sends one chat notice, using a stable id, when a Ticket ends merged or closed. Other events currently have no consumer.
+Runtime turns `ticket.ended`, `trigger.requeued` and `thread.unsubscribed` into notices. A human `trigger.received` delivered to Tickets becomes a follow-up relay. `pullEndNotices` sends the same chat notice text, using a stable id per Channel, to a Ticket's IM Channels, to the pull request it ended with, and to its source GitHub conversation, when a Ticket ends merged or closed. Result replies to a GitHub conversation are copied to each pull request the Ticket follows or names in its latest Report, so both repositories show the same reply text. When a pull request is bound, `pullDescriptionNotices` copies the problem, change, and verification sections of its description into the Ticket's source GitHub conversation, so the issue repository shows the same explanation as the PR. Other events currently have no consumer.
 
 ### Model
 
@@ -198,7 +198,9 @@ That context supplies deployment and commands, setup readiness (`ready`, `config
 
 `DshExecutor` (`src/executor/dsh.ts`) provides one Session and directory per Ticket. `start` and `deliver` enqueue `launch` and `delivery` effects. `stop` cancels the turn through `Store.afterCommit`, so a rolled-back end does not stop the worker.
 
-`prepare(ticket, outcome)` supplies the Engine's `prepareTicket` hook: short name, directory and `ticketExecution` assignment text. `workerSessionId(ticket.id)` derives the Session id.
+`prepare(ticket, outcome)` supplies the Engine's `prepareTicket` hook: short name, directory and `ticketExecution` assignment text. It resolves the directory root from the local project's `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`, and records an explicitly configured root on the Ticket's Execution so a later settings change cannot move it. `workerSessionId(ticket.id)` derives the Session id.
+
+`prepareDirectory` validates an explicit root before creating anything: it must exist, be a directory and accept a write. A failure throws `PrepareFailed` with the absolute path and reason, without creating a directory or falling back to the default root; the default root is still created when missing.
 
 `WorkerSlots` reserves capacity before a launch or a delivery that wakes an idle worker. A human message can use one slot beyond `maxWorkers`, and wakes have priority over launches. `activeCount` supplies panel load.
 
@@ -250,7 +252,7 @@ Each model request binds the Session to the current prompt revision. The revisio
 | `src/app/http.ts`, `src/app/views/`, `src/app/api.ts` | HTTP requests into calls, and Store reads into the panel's views; `api.ts` types every route for the panel |
 | `src/app/resources.ts`, `src/app/links.ts`, `src/app/cards.ts` | Resource names into reads, source messages into links, records into compact cards for models |
 | `src/sources/github*.ts`, `src/sources/feishu*.ts`, `src/sources/poll.ts` | GitHub and Feishu payloads into Triggers and Thread facts, and messages into CLI calls |
-| `src/deployment.ts`, `src/setup.ts`, `src/infra/` | Setup probes and problems, CLI transport, the agent's process environment |
+| `src/deployment.ts`, `src/setup.ts`, `src/infra/`, `src/worker-shell.ts` | Setup probes and problems, CLI transport, the agent's process environment, and the worker-only shell that applies that environment to each command |
 
 ## Dependency rules
 
@@ -279,7 +281,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 - Outbox applies the Feishu chat word limit.
 - `src/app/links.ts` resolves Feishu message links and `repliedTo`. It and Runtime read settings with `feishuSettings`.
 - `src/app/resources.ts` reads the `feishu/` and `github/` originals; `src/app/cards.ts` uses `pullOf` for Ticket cards.
-- Runtime sends `pullEndNotices` for merged or closed Tickets.
+- Runtime sends `pullEndNotices` for merged or closed Tickets, passing the Channel of the Trigger they started from.
 - Executor tools bind reported pull requests with `readPull` and `claimPull`, using the GitHub context exposed by Runtime.
 - MasterAssessor reads repository files with `readRepositoryPath`.
 - Sessions and Prompts register built-in skills only for GitHub and Feishu. Migration converts their schema-10 records.
@@ -334,9 +336,10 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/retry-health.ts` | `RetryHealth`: which Sessions wait on a model budget retry, for the `models` health entry |
 | `src/app/role-models.ts` | Resolves the Eval and Executor models, and seeds a new Session with its role's model |
 | `src/app/assessment.ts` | The MasterAssessor, the assessment schema and the window `orchestrator_eval` answers |
-| `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory root and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
+| `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory-root resolution (project `worktreeRoot` > `executor.directory` > `<stateDir>/work`) and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
+| `src/app/local.ts` | `LocalIssues`: local projects, the issue records bound to them, their comments as human Triggers, and the read-only alignment proposal a person confirms or sends back |
 | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
 | `src/app/resources.ts` | `RESOURCES` and `readResource`: what `orchestrator_read` reads, for each role |
 | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
@@ -355,6 +358,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/executor/background.ts` | A worker's background work in DeepSeek Harness, the shell jobs its Session owns (`ctx.jobs`) and its subagents (`ctx.subagents`): `runningJobs`, `untilQuiet`, `killJobs`, `collectJobs`, `stopSubagents`, `stopBackground`, `until`, and `cancelled`, the workers whose turn a stop of their subagents cancelled |
 | `src/infra/commands.ts` | `Commands`, the CLI transport: `run`; `api` and `pages`, limited to the configured repository and validated; `lark` as the bot; `git`. `CliError` carries the code a command's output reports, such as a GitHub HTTP status, and a command that prints nothing fails with how it ended, never with its arguments; `validItems` skips and counts the malformed items of a list |
 | `src/infra/environment.ts` | The agent's process environment: command shims, the git configuration and credential helper, `runAsWorker`, and the checks of the environment and of a Ticket's directory |
+| `src/worker-shell.ts` | The worker-only shell executor: adds the agent's isolated gh and git environment to every command and preserves the inherited sandbox policy |
 | `src/infra/paths.ts` | The package's root, where packaged files are |
 | `src/infra/text.ts` | Word counts and the chat message limit, `fill` and `sameName` |
 | `src/infra/health.ts` | The `HealthBoard`, every part's health entry, each claimed by its one writer |
@@ -364,9 +368,11 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/poll.ts` | What GitHub and Feishu polling share: `POLL_HORIZON_MS`, `polled`, `cursorAt`, and `pollThreads`, which keeps a failure on its Thread as `pollError` |
 | `src/sources/github.ts` | The GitHub kind and plugin entry, exported as `./github-watch`: a poll round of notifications, the pull requests of open Tickets with their CI, and subscribed Threads |
 | `src/sources/github-trigger.ts` | GitHub comments, reviews, Issue bodies and CI changes as Triggers, and GitHub addresses |
-| `src/sources/github-pull.ts` | The pull request rules: which pull requests a Ticket follows (`claimPull`, `observePull`), the closes it reports to the Engine, and `pullEndNotices`, the chat notice of a Ticket that ended merged or closed |
+| `src/sources/github-pull.ts` | The pull request rules: which pull requests a Ticket follows (`claimPull`, `observePull`), the closes it reports to the Engine, `pullReplyChannels`, which selects the pull request channels that receive a copy of a result reply, `pullDescriptionNotices`, which copies a PR description's problem, change, and verification sections to the Ticket's source GitHub conversation, and `pullEndNotices`, the terminal notice of a Ticket that ended merged or closed to its IM Channels, its pull request, and its source GitHub conversation |
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
+| `src/sources/local.ts` | The local panel kind and plugin entry, exported as `./local-watch`: human Triggers, a Channel that needs no transport, and the default local policy |
+| `src/sources/local-format.ts` | The local project, issue, slices and alignment proposal, shared by the host and the panel |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
@@ -378,6 +384,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/app.tsx` | The panel: header, search, glossary, tabs and the page of the current route |
 | `src/client/provider.tsx` | What every page reads from its host: copy, calls, navigation, notices, the state poll, and `restart`, which reads the state quickly while dsh-superagent restarts |
 | `src/client/api.ts` | Calls and polls of the management API, typed by `src/app/api.ts`, and the Decision filters of the Eval status |
+| `src/client/discuss.tsx` | The local project and issue board: create a project with its repository, submit a requirement, read its discussion, and confirm or send back the Aligner's proposal |
 | `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads, and the route memory with the settings group opened last |
 | `src/client/overview.tsx` | The overview |
 | `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
@@ -397,7 +404,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/locales.ts` | All copy in both languages, and the glossary of [001 Domain model](001-domain.md) |
 | `src/client/client.css`, `css.d.ts` | The panel's stylesheet, loaded as text |
 
-`src/sources/github.ts` and `src/sources/feishu.ts` are also the entries of the two Source plugins, built by `tsdown.config.ts` and exported in `package.json` as `./github-watch` and `./feishu-watch`. The bundle's `cordis.patch.yml` inserts the three plugins, with Feishu disabled.
+`src/sources/github.ts`, `src/sources/feishu.ts` and `src/sources/local.ts` are also the entries of the Source plugins, built by `tsdown.config.ts` and exported in `package.json` as `./github-watch`, `./feishu-watch` and `./local-watch`. The bundle's `cordis.patch.yml` inserts the four plugins, with Feishu disabled.
 
 ## Tests
 
@@ -405,6 +412,9 @@ Some generic modules still refer directly to GitHub or Feishu:
 | --- | --- |
 | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
+| `tests/local.spec.ts` | The local issue board: projects, a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
+| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, and dispatching a confirmed plan's slices as tickets |
+| `tests/panel-discuss.spec.tsx` | The Discuss board: project creation with an optional worktree root, requirement submission, and project tags |
 | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
 | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |
 | `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, the pull request rules, health |
@@ -529,6 +539,12 @@ Each Executor has six application tools:
 
 A hand-back returns `queued: false` if another Ticket still owns the message, or this Ticket never owned it. For example, a bot message went to Eval independently.
 
+An align Ticket (`mode: 'align'`) also gets `orchestrator_align`, which publishes the requirement's summary, execution slices and acceptance criteria to the local issue it came from. An aligner never runs feature-exec: its plan is the source of truth. The slices stay a proposal: confirming them in the panel calls `Engine.acceptPlan`, which creates one execution Ticket per slice and reuses the Tickets a repeated confirmation would otherwise duplicate. A Ticket created from a confirmed slice gets the `feature_exec_*` execution tools (`feature_exec_start`, `feature_exec_plan`, `feature_exec_dispatch`, the stage gates and `feature_exec_close`) and starts a `flow: 'execute'` run, which begins at execution intake and skips the feature-exec discuss and decomposition stages. Its guard refuses shell, file and search tools until that run exists, so the worker starts the run instead of exploring first; the dispatch defaults its lane directory to the worker's own Session directory, and the assignment also spells it out as `Dispatch cwd`. The execute flow ends at an **open** PR (`pr-opened`), not a merge: the worker commits, pushes the ticket branch (to the deployment repository when the account can write, otherwise its fork), opens the PR and records `pr_status: open`, leaving review and merge to a person.
+
+### Plan slices
+
+A Ticket created from a confirmed slice carries `plan: { issueId, sliceId, acceptance }` and `mode: 'work'`; its assignment carries the acceptance criteria as a list so the worker does not have to reconstruct them from the issue thread; its `dependsOn` lists the Tickets its slice's dependencies became. `DshExecutor.launchQueued` throws `Later` while any dependency is still live, so a dependent slice waits for a worker slot only once its predecessors ended. Slice Tickets are keyed by issue and slice, which makes confirmation idempotent.
+
 The worker preset is defined in `cordis.patch.yml` and selected through `WORKER_PRESET`. `WORK_TOOLS` in `src/app/sessions.ts` retains available file, search, shell, job, web, skill, todo and subagent tools. Workers do not receive tools for asking or presenting to a person, changing the profile, scheduling work outside worker slots, starting or messaging other Sessions, or editing external documents. Tool calls are refused after the Ticket ends.
 
 ### Result shapes and assessment context
@@ -597,7 +613,7 @@ Workers receive assignments and Inputs inline. The first message includes the ti
 
 There is no tool for dismissing an unavailable Decision, rerunning setup, refreshing Source display names, or sending an Executor-owned human follow-up to Eval. The last action is deliberately refused by `orchestrator_trigger_requeue`. Other panel actions have equivalent tools.
 
-Most built-in instructions live in `prompts/*.md`, with one sentence per line joined by `promptFile`. Source skills live in `skills/dsh-superagent-*/SKILL.md`. Tool descriptions and fixed notices such as restart recovery notes remain in code. Assessment instructions live only in `prompts/admission.md`.
+Most built-in instructions live in `prompts/*.md`, with one sentence per line joined by `promptFile`. `prompts/align.md` is the core of an align Ticket's dedicated prompt; `Prompts.composeAlign` composes the shared rules and guides without the worker's implementation mandate, so an aligner plans instead of implementing. `prompts/execute.md` is appended to a slice worker's prompt; `Prompts.composeExecute` keeps the worker rules and adds the execution-only handoff. Neither is a built-in part a team overrides. Source skills live in `skills/dsh-superagent-*/SKILL.md`. Tool descriptions and fixed notices such as restart recovery notes remain in code. Assessment instructions live only in `prompts/admission.md`.
 
 `tests/model-surface.spec.ts` checks these surfaces for drift. [004 Prompts](004-prompts.md) explains the team's editable parts.
 

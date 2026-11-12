@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import { UserError, key } from '../core/index.ts'
 import { policyVersion, type Settings, type SettingsOrigin } from '../policy.ts'
-import { masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults, sourceSkills, cliNotes } from './context.ts'
+import { alignPrompt, executePrompt, masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults, sourceSkills, cliNotes } from './context.ts'
 import { environmentLines, type Variable } from './execution-environment.ts'
 import { promptsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -141,6 +141,23 @@ export class Prompts {
   /** A role's prompt; the main Session's Policy section follows the settings as they are now, at each model request. */
   compose(config: PromptConfig, role: Role, variables = this.environment()): string {
     return composePrompt(config, role, environmentSection(config, variables), role === 'orchestrator' ? policySection(this.store.settings(), config) : undefined)
+  }
+  /**
+   * An aligner's prompt: the shared rules and guides, without the worker's implementation mandate, followed by the alignment
+   * guide. An aligner plans and asks; it must not read like a worker that owns delivery.
+   */
+  composeAlign(config: PromptConfig, variables = this.environment()): string {
+    const parts = promptParts(config, 'worker', environmentSection(config, variables))
+      .filter(part => !['runtime/worker', 'runtime/work', 'runtime/handoff/worker'].includes(part.name))
+      .map(part => part.text)
+    return [...parts, alignPrompt].join('\n\n')
+  }
+  /**
+   * A slice worker's prompt: the worker rules and guides, followed by the execution handoff guide. The slice was already
+   * aligned and approved, so the worker starts a feature-exec execution run instead of re-planning the requirement.
+   */
+  composeExecute(config: PromptConfig, variables = this.environment()): string {
+    return `${this.compose(config, 'worker', variables)}\n\n${executePrompt}`
   }
   /** Returns skills to register in every Session: built-in Source skills (`feishu` only when a Feishu bot is configured) followed by team skills. */
   skills(config: PromptConfig): [string, string][] {

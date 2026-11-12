@@ -2,9 +2,10 @@
 import { z } from 'zod'
 import { liveTicket, type EngineForExecutor, type Ticket } from '../../core/index.ts'
 import { IM_WORDS } from '../../infra/text.ts'
-import { claimPull, readPull } from '../../sources/github-pull.ts'
+import { claimPull, readPull, reportedPull } from '../../sources/github-pull.ts'
 import type { SourceContext } from '../../sources/host.ts'
 import { readResource, type ResourceHost } from '../resources.ts'
+import type { LocalIssues } from '../local.ts'
 import type { Store } from '../store.ts'
 import { reportRelay, threadFollowedNotice } from '../notices.ts'
 import type { Sessions } from '../sessions.ts'
@@ -15,6 +16,8 @@ export interface ExecutorToolsHost {
   readonly store: Pick<Store, 'tickets' | 'replyStatus' | 'atomic'>
   readonly sessions: Pick<Sessions, 'relay' | 'notify'>
   readonly resources: ResourceHost
+  /** The local requirement board, for the aligner's proposal. */
+  readonly local: Pick<LocalIssues, 'proposeForTicket'>
   /** GitHub Source context whose pull-request rules govern claiming a reported PR. */
   readonly github: SourceContext
   sendReplies(): Promise<void>
@@ -71,6 +74,31 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       }).strict(),
       execute: async args => ({ trigger_id: args.trigger_id, queued: host.engine.handback(ticketId, args.trigger_id, args.reason) }),
     }),
+    ...(ticket.mode === 'align' ? [tool({
+      name: 'orchestrator_align',
+      description: 'Publish the requirement alignment to the local discussion board: a summary, one or more execution slices with acceptance criteria and dependencies, and the overall acceptance. A person then confirms or sends it back; this does not create execution tickets.',
+      schema: z.object({
+        summary: z.string().trim().min(1).max(20_000).describe('What the requirement is, what is in and out of scope, and the key decisions.'),
+        slices: z.array(z.object({
+          id: z.string().regex(/^[A-Za-z0-9_-]+$/).describe('A short stable id, such as C1.'),
+          title: z.string().trim().min(1).max(200),
+          outcome: z.string().trim().min(1).max(4_000).describe('The concrete result this slice delivers.'),
+          in_scope: z.array(z.string()).default([]),
+          out_of_scope: z.array(z.string()).default([]),
+          acceptance: z.array(z.string()).min(1).describe('Observable acceptance criteria, one per item.'),
+          depends_on: z.array(z.string()).default([]).describe('Ids of slices that must finish first; the graph must be acyclic.'),
+          lane: z.enum(['full', 'light']).default('full'),
+        })).min(1),
+        acceptance: z.array(z.string()).default([]).describe('Overall acceptance criteria for the requirement.'),
+      }).strict(),
+      execute: async args => {
+        const updated = host.local.proposeForTicket(ticketId, { summary: args.summary, acceptance: args.acceptance,
+          slices: args.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome, inScope: slice.in_scope,
+            outOfScope: slice.out_of_scope, acceptance: slice.acceptance, dependsOn: slice.depends_on, lane: slice.lane })) })
+        if (!updated) throw new Error('This ticket is not a local requirement')
+        return { issue_id: updated.id, status: updated.alignment?.status, slices: updated.alignment?.slices.length ?? 0 }
+      },
+    })] : []),
     tool({
       name: 'orchestrator_report',
       description: 'Report progress, ready, blocked, failed or dropped, as the work and handoff sections say.',
@@ -85,11 +113,17 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       execute: async (args, signal) => {
         const current = host.store.tickets.get(ticketId)
         if (!current || !liveTicket(current)) throw new Error('Ticket ended (PR was closed or work finished); do not resume it')
-        const pull = args.pr_number != null ? await readPull(host.github, args.pr_number, signal) : undefined
+        const deployment = host.github.deploymentFor(current.execution?.chain)
+        // A worker that names its PR only in the report still binds it: the ticket then follows the PR to its merge.
+        const reported = args.pr_number == null
+          ? reportedPull(args.summary, deployment) ?? reportedPull(current.assignments.at(-1)?.report?.summary, deployment)
+          : undefined
+        const pull = args.pr_number != null ? await readPull(host.github, args.pr_number, signal, deployment)
+          : reported !== undefined ? await readPull(host.github, reported, signal, deployment).catch(() => undefined) : undefined
         // Claim the PR, record the report, and queue the relay atomically so a rejected PR claim or invalid report leaves no partial state, and a recorded report always reaches the main Session.
         return host.store.atomic(() => {
           const refused = pull && claimPull(host.github, ticketId, pull)
-          if (refused) throw new Error(refused)
+          if (refused && args.pr_number != null) throw new Error(refused)
           const report = { state: args.state, summary: args.summary, ...(args.human_action !== undefined ? { question: args.human_action } : {}),
             ...(args.question_for_trigger_id ? { askedBy: args.question_for_trigger_id } : {}),
             ...(args.reply_to_trigger_id ? { answers: args.reply_to_trigger_id } : {}) }

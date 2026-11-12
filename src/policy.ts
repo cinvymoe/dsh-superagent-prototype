@@ -164,9 +164,16 @@ export function policyEffects(tickets: readonly Ticket[], old: Settings, now: Se
   return effects
 }
 /** Build the active Policy for gating incoming Triggers and revalidating existing Ticket Mandates. */
-export function settingsPolicy(settings: Settings, sources: SourceScope): Policy {
+export type SourcePolicyLookup = (source: string) => Pick<SourcePolicy, 'allowed' | 'admission'> | undefined
+/** Build the active Policy; `sourcePolicy` supplies a kind's default policy for Sources with no stored entry. */
+export function settingsPolicy(settings: Settings, sources: SourceScope, sourcePolicy?: SourcePolicyLookup): Policy {
   const version = policyVersion(settings)
   const mode = settings.eval.mode
+  const policyOf = (source: string): Pick<SourcePolicy, 'allowed' | 'admission'> | undefined =>
+    settings.policy.sources[source] ?? sourcePolicy?.(source)
+  const allowedFor = (actor: ActorRef) => policyOf(actor.source)?.allowed.find(entry => sameName(entry.id, actor.id))
+  const admissionFor = (source: string, row: string | undefined, cell: AdmissionCell): Admission =>
+    (row === undefined ? undefined : policyOf(source)?.admission[row]?.[cell]) ?? ADMISSION_DEFAULTS[cell]
   /** Gate non-human triggers: only listed bots (as inferred candidates) and senderless system/CI events may pass; other bots are rejected. */
   const machineGate = (trigger: Trigger): GateResult => {
     const bot = trigger.actor.id ? listedBot(settings, trigger.actor) : undefined
@@ -181,7 +188,7 @@ export function settingsPolicy(settings: Settings, sources: SourceScope): Policy
       return { admissible: true, strength: 'inferred', basis }
     }
     const cell = 'unlistedUnaddressed' as const
-    if (admissionOf(settings, trigger.source, scope.row, cell) !== 'inferred' || mode === 'off') {
+    if (admissionFor(trigger.source, scope.row, cell) !== 'inferred' || mode === 'off') {
       return { admissible: false, reason: 'admission_ignored' }
     }
     return { admissible: true, strength: 'inferred', basis: { ...recorded, via: 'admission', cell, observation: { mode } } }
@@ -190,7 +197,7 @@ export function settingsPolicy(settings: Settings, sources: SourceScope): Policy
     version, paused: settings.paused, evalTimeoutMs: settings.eval.timeoutSeconds * 1000,
     gate(trigger: Trigger, thread, tickets) {
       if (!trigger.human) return machineGate(trigger)
-      const allowed = allowedSender(settings, trigger.actor)
+      const allowed = allowedFor(trigger.actor)
       const scope = listened(sources, trigger.source, trigger.meta)
       const row = scope.listened ? scope.row : undefined
       const recorded = { source: trigger.source, scope: trigger.meta, ...row === undefined ? {} : { row }, ...allowed ? { sender: senderName(allowed) } : {} }
@@ -198,7 +205,7 @@ export function settingsPolicy(settings: Settings, sources: SourceScope): Policy
       const cell = admissionCell(!!allowed, !!trigger.addressed)!
       // Unaddressed messages only use the admission table when the Source observes all messages in that scope.
       const receivable = !!trigger.addressed || (scope.listened && scope.observed)
-      const admission = receivable ? admissionOf(settings, trigger.source, row, cell) : 'ignore'
+      const admission = receivable ? admissionFor(trigger.source, row, cell) : 'ignore'
       const basis = { ...recorded, via: 'admission' as const, cell, ...trigger.addressed ? { addressed: trigger.addressed } : {} }
       // Check explicit admission cells before thread follow-ups so a thread's tickets never weaken an explicit request to a follow-up.
       if (admission === 'explicit') return { admissible: true, strength: 'explicit', basis }
@@ -224,16 +231,16 @@ export function settingsPolicy(settings: Settings, sources: SourceScope): Policy
       // An admission-table Mandate holds while the sender's current cell still grants at least the original strength.
       if (basis.via === 'admission') {
         const { cell } = basis
-        const listed = !!allowedSender(settings, mandate.actor)
+        const listed = !!allowedFor(mandate.actor)
         // A listed sender who addresses the agent is always explicit and uses no table cell.
         if (cell === 'unlistedAddressed' && listed) return true
         // A sender added to the allowed list since acceptance moves to the listed cell, and still undergoes observation checks below.
         const now = cell === 'unlistedUnaddressed' && listed ? 'listedUnaddressed' : cell
         if (now === 'listedUnaddressed' && !listed) return false
-        const admission = admissionOf(settings, source ?? '', current?.listened ? current.row : undefined, now)
+        const admission = admissionFor(source ?? '', current?.listened ? current.row : undefined, now)
         if (STRENGTH[admission] < STRENGTH[mandate.strength]) return false
         if (mandate.strength === 'explicit') return true
-      } else if (basis.via !== 'bot' && !allowedSender(settings, mandate.actor)) return false
+      } else if (basis.via !== 'bot' && !allowedFor(mandate.actor)) return false
       // Observed/inferred Mandates hold only while auto mode is active and all matched rules remain enabled.
       if ((basis.via === 'admission' || basis.via === 'listed' || basis.via === 'bot') && basis.observation) return mode === 'auto' && rulesOn(basis.rules)
       return true

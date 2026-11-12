@@ -5,7 +5,7 @@ import { CliError } from '../infra/commands.ts'
 import { sameName } from '../infra/text.ts'
 import type { SourceContext } from './host.ts'
 import type { ChannelLink, ChannelLinks } from './kind.ts'
-import { githubAddress, githubPage } from './github-trigger.ts'
+import { githubAddress, githubPage, githubRepository, threadChain } from './github-trigger.ts'
 
 const CommentSchema = z.looseObject({
   id: z.number(), body: z.string().nullish(), in_reply_to_id: z.number().nullish(), user: z.looseObject({ login: z.string() }).nullish(),
@@ -17,7 +17,12 @@ const missing = (error: unknown): boolean => error instanceof CliError && (error
 /** Posts a comment or review-thread reply with an embedded HTML marker so retries do not create duplicate comments. */
 export async function sendGithub(host: Pick<SourceContext, 'commands'>, message: OutboundMessage): Promise<'sent' | 'gone'> {
   const { commands } = host
-  const { repository, github } = commands.deployment
+  const chain = message.channel.address.chain ?? threadChain(message.channel.thread.replace(/^github:/, ''))
+  const deployment = commands.deploymentFor(chain)
+  const { github } = deployment
+  const repository = (typeof message.channel.address.url === 'string' ? githubRepository(message.channel.address.url) : undefined)
+    ?? deployment.repository
+  const scoped = commands.withDeployment(deployment).withRepository(repository)
   const number = Number(message.channel.address.number)
   if (!number) throw new Error('Missing GitHub reply target')
   try {
@@ -26,7 +31,7 @@ export async function sendGithub(host: Pick<SourceContext, 'commands'>, message:
     let rootId: number | undefined
     if (address?.pr && address.discussion && address.number === number) {
       // Fall back to a top-level PR comment if the target inline review comment was deleted.
-      const source = await commands.api(CommentSchema, `pulls/comments/${address.discussion}`)
+      const source = await scoped.api(CommentSchema, `pulls/comments/${address.discussion}`)
         .catch((error: unknown) => { if (missing(error)) return undefined; throw error })
       rootId = source ? source.in_reply_to_id ?? source.id : undefined
     }
@@ -34,9 +39,9 @@ export async function sendGithub(host: Pick<SourceContext, 'commands'>, message:
     const marker = `<!-- dsh-superagent:${message.id} -->`
     const mine = (comment: z.infer<typeof CommentSchema>) => sameName(comment.user?.login ?? '', github.login)
       && (rootId === undefined || comment.in_reply_to_id === rootId) && (comment.body ?? '').includes(marker)
-    if ((await commands.pages(CommentSchema, path)).some(mine)) return 'sent'
+    if ((await scoped.pages(CommentSchema, path)).some(mine)) return 'sent'
     const target = rootId === undefined ? path : `${path}/${rootId}/replies`
-    await commands.api(z.unknown(), target, '--method', 'POST', '-f', `body=${message.text}\n\n${marker}`)
+    await scoped.api(z.unknown(), target, '--method', 'POST', '-f', `body=${message.text}\n\n${marker}`)
     return 'sent'
   } catch (error) {
     if (gone(error)) return 'gone'
@@ -45,8 +50,11 @@ export async function sendGithub(host: Pick<SourceContext, 'commands'>, message:
 }
 export function githubLink(address: Record<string, string>, links: ChannelLinks): ChannelLink {
   const number = address.number ?? ''
-  const review = !!links.repository && !!githubAddress(address.url ?? '', links.repository)?.discussion
-  return { url: address.url ?? (links.repository ? githubPage(links.repository, Number(number)) : ''),
+  const chain = address.chain ? links.chains?.[address.chain] : undefined
+  const repository = (typeof address.url === 'string' ? githubRepository(address.url) : undefined)
+    ?? chain?.repository ?? links.repository ?? links.intakeRepository
+  const review = !!repository && !!githubAddress(address.url ?? '', repository)?.discussion
+  return { url: address.url ?? (repository ? githubPage(repository, Number(number)) : ''),
     label: review ? { zh: `GitHub #${number} 的 review 讨论`, en: `Review discussion on GitHub #${number}` }
       : { zh: `GitHub #${number}`, en: `GitHub #${number}` } }
 }

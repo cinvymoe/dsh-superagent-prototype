@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>当前架构与角色 · dsh-superagent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+    .container { max-width: 1360px; margin: 0 auto; }
+    .header { margin-bottom: 2.25rem; max-width: 920px; }
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.2vw + 0.8rem, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin-bottom: 0.65rem;
+    }
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 78ch;
+    }
+    .diagram-container {
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+    .d-name { font-family: var(--font-sans); font-size: 12px; font-weight: 600; }
+    .d-sub { font-family: var(--font-sans); font-size: 12px; }
+    .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+    .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 1fr 0.9fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 1100px) { .cards { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: 1.15rem;
+    }
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.52rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.55rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.ink { background: var(--color-ink); }
+    .card-dot.link { background: var(--color-link); }
+    .card h3 { font-size: 0.9rem; font-weight: 600; letter-spacing: -0.005em; }
+    .card p { color: var(--color-muted); font-size: 0.82rem; line-height: 1.55; margin-bottom: 0.6rem; }
+    .card ul { color: var(--color-muted); font-size: 0.82rem; line-height: 1.6; list-style: none; }
+    .card li { margin-bottom: 0.32rem; padding-left: 0.9rem; position: relative; }
+    .card li::before { content: '—'; position: absolute; left: 0; color: rgba(45,49,66,0.25); font-size: 0.75rem; }
+    .card code {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--color-ink);
+      background: rgba(45,49,66,0.04);
+      padding: 0.05rem 0.2rem;
+      border-radius: 2px;
+    }
+    .matrix { margin-top: 2rem; }
+    .matrix h2, .binding h2 {
+      font-family: var(--font-serif);
+      font-size: 1.55rem;
+      font-weight: 400;
+      letter-spacing: -0.015em;
+      margin-bottom: 0.85rem;
+    }
+    .matrix table, .binding table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border: 1px solid var(--color-rule);
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+    .matrix th, .matrix td, .binding th, .binding td {
+      text-align: left;
+      vertical-align: top;
+      padding: 0.7rem 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+    .matrix th, .binding th {
+      font-family: var(--font-mono);
+      font-size: 0.56rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--color-soft);
+      background: rgba(45,49,66,0.02);
+    }
+    .matrix tr:last-child td, .binding tr:last-child td { border-bottom: 0; }
+    .matrix td strong, .binding td strong { font-weight: 600; color: var(--color-ink); }
+    .matrix td span, .binding td span { color: var(--color-muted); }
+    .binding { margin-top: 1.75rem; }
+    .note {
+      margin-top: 1.25rem;
+      padding: 0.9rem 1rem;
+      border-left: 2px solid var(--color-accent);
+      background: var(--color-accent-tint);
+      color: var(--color-muted);
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+    .note strong { color: var(--color-ink); }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    @media print {
+      .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+      svg { min-width: 0; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <p class="header-eyebrow">DSH Superagent · Current Architecture</p>
+      <h1>本地讨论，Router 决策，slice 执行</h1>
+      <p class="subtitle">Discuss 面板提交需求 → Aligner 出提案 → 人确认 → Engine 按 slice 派 Ticket → Worker 在 feature-exec 的 execute flow 中实现并开 PR。<br>Engine 是唯一状态写入者；Router、Aligner、Worker 之间不直接对话。</p>
+    </header>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="current-architecture-title current-architecture-desc">
+        <title id="current-architecture-title">当前架构与角色：本地讨论、Router、Aligner、Worker</title>
+        <desc id="current-architecture-desc">人通过 Discuss 面板提交需求，local Source 把 Trigger 交给 Engine；Engine 让 Router 决策，Router 以 align 模式接单；Engine 创建 align Ticket，由 Aligner 产出 slices 提案；人确认后 Engine 按 slice 派 work Ticket，Worker 在 execute flow 中实现并向 GitHub 开 PR。</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- Connectors first: z-order keeps lines behind the boxes -->
+        <line x1="136" y1="192" x2="136" y2="232" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <line x1="296" y1="276" x2="344" y2="276" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <line x1="616" y1="160" x2="656" y2="160" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="656" y1="200" x2="616" y2="200" stroke="#bf4520" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <line x1="616" y1="316" x2="656" y2="316" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="656" y1="344" x2="616" y2="344" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <line x1="616" y1="460" x2="656" y2="460" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="936" y1="496" x2="968" y2="496" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <line x1="656" y1="548" x2="616" y2="548" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- Arrow labels: opaque paper masks, 6px above the stroke -->
+        <rect x="144" y="204" width="28" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="158" y="216" class="d-label" fill="#2e5aa8" text-anchor="middle">提交</text>
+
+        <rect x="300" y="254" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="320" y="266" class="d-label" fill="#2e5aa8" text-anchor="middle">触发</text>
+
+        <rect x="618" y="138" width="36" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="636" y="150" class="d-label" fill="#4f5d75" text-anchor="middle">候选</text>
+
+        <rect x="618" y="178" width="36" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="636" y="190" class="d-label" fill="#bf4520" text-anchor="middle">对齐</text>
+
+        <rect x="618" y="294" width="36" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="636" y="306" class="d-label" fill="#4f5d75" text-anchor="middle">派单</text>
+
+        <rect x="618" y="322" width="36" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="636" y="334" class="d-label" fill="#5a6580" text-anchor="middle">提案</text>
+
+        <rect x="618" y="438" width="36" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="636" y="450" class="d-label" fill="#4f5d75" text-anchor="middle">派工</text>
+
+        <rect x="942" y="474" width="24" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="954" y="486" class="d-label" fill="#2e5aa8" text-anchor="middle">PR</text>
+
+        <rect x="618" y="526" width="36" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="636" y="538" class="d-label" fill="#4f5d75" text-anchor="middle">回报</text>
+
+        <!-- Node: Human -->
+        <rect x="56" y="120" width="240" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="120" width="240" height="72" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="64" y="130" width="40" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="84" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">HUMAN</text>
+        <text x="176" y="158" class="d-name" fill="#2d3142" text-anchor="middle">人 / 产品</text>
+        <text x="176" y="178" class="d-sub" fill="#4f5d75" text-anchor="middle">提交 · 审阅 · 确认或打回</text>
+
+        <!-- Node: Discuss board / local source -->
+        <rect x="56" y="232" width="240" height="128" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="232" width="240" height="128" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="64" y="242" width="72" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="100" y="251" class="d-tag" fill="#5a6580" text-anchor="middle">LOCAL SOURCE</text>
+        <text x="176" y="270" class="d-name" fill="#2d3142" text-anchor="middle">Discuss 面板</text>
+        <text x="176" y="290" class="d-sub" fill="#4f5d75" text-anchor="middle">需求原文 · 时间线 · 决策记录</text>
+        <text x="176" y="308" class="d-sub" fill="#4f5d75" text-anchor="middle">对齐提案：slices + 验收标准</text>
+        <text x="176" y="326" class="d-mono" fill="#5a6580" text-anchor="middle">local:q-…</text>
+        <text x="176" y="346" class="d-sub" fill="#2d3142" text-anchor="middle">Confirm → 派发 slice Ticket</text>
+
+        <!-- Node: Engine -->
+        <rect x="344" y="120" width="272" height="480" rx="6" fill="#f5f5f5"/>
+        <rect x="344" y="120" width="272" height="480" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="360" y="130" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="384" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">BROKER</text>
+        <text x="360" y="166" class="d-name" fill="#2d3142">Engine</text>
+        <text x="360" y="186" class="d-sub" fill="#4f5d75">唯一状态写入者 · SQLite</text>
+        <line x1="360" y1="202" x2="600" y2="202" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+
+        <text x="360" y="224" class="d-mono" fill="#5a6580" letter-spacing="0.06em">INTAKE</text>
+        <text x="440" y="224" class="d-sub" fill="#2d3142">Trigger 去重 · Thread</text>
+        <text x="440" y="240" class="d-sub" fill="#2d3142">Subscription 订阅</text>
+        <line x1="360" y1="252" x2="600" y2="252" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="360" y="274" class="d-mono" fill="#5a6580" letter-spacing="0.06em">EVAL</text>
+        <text x="408" y="274" class="d-sub" fill="#2d3142">Gate 准入 +</text>
+        <text x="408" y="290" class="d-sub" fill="#2d3142">Assessment 研判</text>
+        <line x1="360" y1="302" x2="600" y2="302" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="360" y="324" class="d-mono" fill="#5a6580" letter-spacing="0.06em">TICKET</text>
+        <text x="424" y="324" class="d-sub" fill="#2d3142">Ticket · Assignment</text>
+        <text x="424" y="340" class="d-sub" fill="#2d3142">dependsOn 依赖</text>
+        <line x1="360" y1="352" x2="600" y2="352" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="360" y="374" class="d-mono" fill="#5a6580" letter-spacing="0.06em">EFFECTS</text>
+        <text x="432" y="374" class="d-sub" fill="#2d3142">assessment · launch</text>
+        <text x="432" y="390" class="d-sub" fill="#2d3142">relay · reply</text>
+        <line x1="360" y1="402" x2="600" y2="402" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="360" y="426" class="d-sub" fill="#4f5d75">acceptPlan：每 slice 一个 Ticket</text>
+        <text x="360" y="446" class="d-sub" fill="#4f5d75">依赖未结束：Later() 不占 slot</text>
+        <text x="360" y="466" class="d-sub" fill="#4f5d75">Outbox 回复到 Discuss / 来源</text>
+        <line x1="360" y1="482" x2="600" y2="482" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+
+        <text x="360" y="506" class="d-mono" fill="#5a6580" letter-spacing="0.06em">PERSISTENCE</text>
+        <text x="360" y="528" class="d-mono" fill="#4f5d75">Ticket.plan = {issueId, sliceId,</text>
+        <text x="360" y="548" class="d-mono" fill="#4f5d75">acceptance}</text>
+        <text x="360" y="570" class="d-sub" fill="#4f5d75">重启恢复：trigger / ticket /</text>
+        <text x="360" y="586" class="d-sub" fill="#4f5d75">effect / outbox</text>
+
+        <!-- Node: Router (focal) -->
+        <rect x="656" y="120" width="280" height="112" rx="6" fill="#f5f5f5"/>
+        <rect x="656" y="120" width="280" height="112" rx="6" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.2"/>
+        <rect x="672" y="130" width="48" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.50)" stroke-width="0.8"/>
+        <text x="696" y="139" class="d-tag" fill="#bf4520" text-anchor="middle">ROUTER</text>
+        <text x="796" y="160" class="d-name" fill="#2d3142" text-anchor="middle">Router · 主 Session</text>
+        <text x="796" y="180" class="d-sub" fill="#4f5d75" text-anchor="middle">orchestrator · settings.eval.model</text>
+        <text x="796" y="200" class="d-sub" fill="#4f5d75" text-anchor="middle">研判 · 路由 · 对外沟通</text>
+        <text x="796" y="220" class="d-mono" fill="#5a6580" text-anchor="middle">14 tools · 5s · 不写代码</text>
+
+        <!-- Node: Aligner -->
+        <rect x="656" y="264" width="280" height="104" rx="6" fill="#f5f5f5"/>
+        <rect x="656" y="264" width="280" height="104" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="672" y="274" width="56" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="700" y="283" class="d-tag" fill="#5a6580" text-anchor="middle">ALIGNER</text>
+        <text x="796" y="302" class="d-name" fill="#2d3142" text-anchor="middle">Aligner · align Ticket</text>
+        <text x="796" y="322" class="d-sub" fill="#4f5d75" text-anchor="middle">每需求一个 Session · 不实现</text>
+        <text x="796" y="342" class="d-mono" fill="#5a6580" text-anchor="middle">orchestrator_align</text>
+        <text x="796" y="358" class="d-sub" fill="#4f5d75" text-anchor="middle">summary + slices + dependsOn</text>
+
+        <!-- Node: Workers -->
+        <rect x="656" y="424" width="280" height="152" rx="6" fill="#f5f5f5"/>
+        <rect x="656" y="424" width="280" height="152" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="672" y="434" width="64" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="704" y="443" class="d-tag" fill="#5a6580" text-anchor="middle">EXECUTION</text>
+        <text x="796" y="462" class="d-name" fill="#2d3142" text-anchor="middle">Worker Agents × N</text>
+        <text x="796" y="482" class="d-sub" fill="#4f5d75" text-anchor="middle">每个 slice 一个 Session</text>
+        <text x="796" y="502" class="d-mono" fill="#5a6580" text-anchor="middle">feature_exec_start({flow:'execute'})</text>
+        <text x="796" y="522" class="d-sub" fill="#4f5d75" text-anchor="middle">e1–e5：实现 · 测试 · PR · 沉淀</text>
+        <text x="796" y="542" class="d-sub" fill="#4f5d75" text-anchor="middle">PR 回到 GitHub 执行仓库</text>
+        <text x="796" y="562" class="d-sub" fill="#bf4520" text-anchor="middle">execute run 前禁止 write / edit</text>
+
+        <!-- Node: GitHub -->
+        <rect x="968" y="432" width="256" height="128" rx="6" fill="#f5f5f5"/>
+        <rect x="968" y="432" width="256" height="128" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="984" y="442" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="1008" y="451" class="d-tag" fill="#5a6580" text-anchor="middle">EXTERNAL</text>
+        <text x="1096" y="472" class="d-name" fill="#2d3142" text-anchor="middle">GitHub 执行仓库</text>
+        <text x="1096" y="494" class="d-mono" fill="#5a6580" text-anchor="middle">cinvymoe/rust_crane</text>
+        <text x="1096" y="514" class="d-sub" fill="#4f5d75" text-anchor="middle">deployment 的 GitHub 链绑定</text>
+        <text x="1096" y="534" class="d-sub" fill="#4f5d75" text-anchor="middle">branch · PR · review</text>
+        <text x="1096" y="552" class="d-sub" fill="#5a6580" text-anchor="middle">当前正式实例</text>
+
+        <!-- Legend: bottom strip -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <line x1="120" y1="664" x2="148" y2="664" stroke="#4f5d75" stroke-width="1.2"/>
+        <text x="156" y="668" class="d-sub" fill="#4f5d75">主动调用 / 状态推进</text>
+        <line x1="340" y1="664" x2="368" y2="664" stroke="#bf4520" stroke-width="1.4"/>
+        <text x="376" y="668" class="d-sub" fill="#4f5d75">决策路径</text>
+        <line x1="500" y1="664" x2="528" y2="664" stroke="#5a6580" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="536" y="668" class="d-sub" fill="#4f5d75">异步回传 / 提案</text>
+        <line x1="700" y1="664" x2="728" y2="664" stroke="#2e5aa8" stroke-width="1.2"/>
+        <text x="736" y="668" class="d-sub" fill="#4f5d75">本地 / 外部</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">2026-11-11 · 当前实现</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <p class="eyebrow">Orchestration</p>
+        <div class="card-header"><span class="card-dot coral"></span><h3>Router · 主 Session</h3></div>
+        <p>常驻的研判与路由 Agent，不拥有代码。</p>
+        <ul>
+          <li>读 candidate 卡，决定 accept / attach / stop / ignore</li>
+          <li>本地需求用 <code>mode='align'</code> 接单，不直接开 worker</li>
+          <li>把 Worker 的回报、提问转成对外的回复</li>
+          <li>不拆 slice、不写实现计划、不调 feature-exec</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <p class="eyebrow">Requirement alignment</p>
+        <div class="card-header"><span class="card-dot link"></span><h3>Aligner · align Ticket</h3></div>
+        <p>每个需求一个 Aligner Session，产物是提案，不是代码。</p>
+        <ul>
+          <li>读需求、仓库设计文档与相关代码</li>
+          <li>调 <code>orchestrator_align</code> 写回 summary + slices + acceptance</li>
+          <li>一个 slice = 一个 Worker 的工单，带无环 <code>dependsOn</code></li>
+          <li>提案不自动开工；人在 Discuss 确认后才成 Ticket</li>
+          <li>没有 <code>feature_exec_*</code> 工具</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <p class="eyebrow">Execution</p>
+        <div class="card-header"><span class="card-dot muted"></span><h3>Worker · work Ticket</h3></div>
+        <p>每个 slice 一个持久 Session，真正改代码、开 PR。</p>
+        <ul>
+          <li>assignment 携带 alignment issue/slice 与验收标准</li>
+          <li>先 <code>feature_exec_start({flow:'execute'})</code>，再走 e1–e5</li>
+          <li>run 未启动时 <code>write</code> / <code>edit</code> 被 guard 拒绝</li>
+          <li>依赖未结束的 slice 由 <code>Later()</code> 延后，不占 slot</li>
+          <li>不重新讨论需求、不改已冻结的计划</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <p class="eyebrow">State &amp; transport</p>
+        <div class="card-header"><span class="card-dot ink"></span><h3>Engine · 唯一写入者</h3></div>
+        <p>所有角色都通过 Engine 的领域命令交互。</p>
+        <ul>
+          <li>Intake / Eval / Ticket / Assignment / Effects / Outbox</li>
+          <li><code>acceptPlan</code>：确认后按 slice 原子建 Ticket</li>
+          <li><code>Ticket.plan</code> 存 issue/slice/acceptance</li>
+          <li><code>Ticket.dependsOn</code> 是派发顺序的唯一依据</li>
+          <li>SQLite 持久化；重启后 trigger / ticket / effect 可恢复</li>
+        </ul>
+      </article>
+    </div>
+
+    <section class="matrix">
+      <h2>角色矩阵</h2>
+      <table>
+        <thead>
+          <tr><th>角色</th><th>载体</th><th>负责</th><th>不负责 / 硬边界</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>人</strong></td>
+            <td><span>Discuss 面板</span></td>
+            <td><span>提交需求、审阅对齐提案、确认或打回、中途提问</span></td>
+            <td><span>不直接编辑 slice；确认动作是唯一的派发许可</span></td>
+          </tr>
+          <tr>
+            <td><strong>Router</strong></td>
+            <td><span>主 Session · <code>orchestrator</code></span></td>
+            <td><span>研判 candidate、以 <code>mode=align</code> 接单、对外沟通、管理 Ticket</span></td>
+            <td><span>不写代码、不拆 slice、不直接调用 feature-exec；shell/job 等待上限 5 秒</span></td>
+          </tr>
+          <tr>
+            <td><strong>Aligner</strong></td>
+            <td><span>align Ticket · 每需求一个 Session</span></td>
+            <td><span>读仓库与需求，产出 summary + slices + acceptance + dependsOn</span></td>
+            <td><span>不实现、不开 PR；提案必须由人确认</span></td>
+          </tr>
+          <tr>
+            <td><strong>Worker</strong></td>
+            <td><span>work Ticket · 每 slice 一个 Session</span></td>
+            <td><span>启动 execute run，实现、测试、self-review、开 PR</span></td>
+            <td><span>不重新讨论需求、不改计划、不合并 PR；execute run 前不能改文件</span></td>
+          </tr>
+          <tr>
+            <td><strong>feature-exec run</strong></td>
+            <td><span>execute flow · e1–e5 状态机</span></td>
+            <td><span>执行接收 → 派发 → 评审 → PR → 沉淀</span></td>
+            <td><span>不是独立 Agent；不替代 Worker 的代码工作</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="binding">
+      <h2>当前实例绑定</h2>
+      <table>
+        <thead>
+          <tr><th>实例</th><th>状态</th><th>GitHub / 执行仓库</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>正式 · 8399</strong></td>
+            <td><span><code>local</code> ready</span></td>
+            <td><span><code>cinvymoe/rust_crane</code><br>intake: <code>cinvymoe/rust_crane_issues</code></span></td>
+            <td><span>当前 Discuss 确认的 slice 会在这里执行；prepare 复用 <code>/mnt/sdb1/workspace/rust_crane</code></span></td>
+          </tr>
+          <tr>
+            <td><strong>测试 · 3083</strong></td>
+            <td><span>已停止</span></td>
+            <td><span><code>deepseek-ai/dsh-superagent-prototype</code></span></td>
+            <td><span>之前 E2E 验证用；prepare 为 <code>git clone --depth 1</code></span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="note"><strong>注意：</strong>本地 issue 现在没有仓库字段，执行仓库来自 deployment 的默认 GitHub 链。因此“改 dsh-superagent 的需求”在正式实例里仍会去 <code>rust_crane</code>；要按需求选仓库，需要给 <code>LocalIssue</code> / <code>Ticket</code> 增加 repo 绑定。</p>
+    </section>
+
+    <footer class="footer">
+      <span>dsh-superagent · current architecture · 2026-11-11</span>
+      <span>roles: Human / Router / Aligner / Worker / Engine</span>
+    </footer>
+  </div>
+</body>
+</html>

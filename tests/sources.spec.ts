@@ -5,8 +5,8 @@ import { backfillChat, consumerRetry, feishuKind, feishuTriggerId, feishuRef, fe
 import { KV } from '../src/kv.ts'
 import { apply as applyFeishu, pollThreads as pollFeishuThreads } from '../src/sources/feishu.ts'
 import { runFeishu } from '../src/sources/feishu-loops.ts'
-import { commentTrigger, githubAddress, githubChannel, issueTrigger, type GithubComment, type GithubIssue } from '../src/sources/github-trigger.ts'
-import { claimPull, observePull, pullEndNotices, pullOf, ticketBranch, type Pull } from '../src/sources/github-pull.ts'
+import { commentTrigger, githubAddress, githubChannel, issueTrigger, threadChain, threadId, threadNumber, type GithubComment, type GithubIssue } from '../src/sources/github-trigger.ts'
+import { claimPull, observePull, pullDescriptionNotices, pullEndNotices, pullOf, pullReplyChannels, reportedPull, ticketBranch, type Pull } from '../src/sources/github-pull.ts'
 import { ciCounts, ciFact, ciSummary } from '../src/sources/github-read.ts'
 import { apply as applyGithub, githubKind, pollFailure, pollRound } from '../src/sources/github.ts'
 import { pollThreads as pollGithubThreads } from '../src/sources/github.ts'
@@ -16,6 +16,7 @@ import { Store } from '../src/app/store.ts'
 import { Commands, commandError } from '../src/infra/commands.ts'
 import { HealthBoard } from '../src/infra/health.ts'
 import { testDeployment } from './fixtures/deployment.ts'
+import { GithubConfigSchema } from '../src/deployment.ts'
 import { SettingsSchema, settingsPolicy } from '../src/policy.ts'
 import { sourceContextOf, type SourceContextDeps } from '../src/app/source-context.ts'
 import { SetupError, type SetupProblem } from '../src/setup.ts'
@@ -325,6 +326,29 @@ describe('feishu source', () => {
   })
 })
 describe('github source', () => {
+  it('qualifies non-default chain thread ids without changing the default shape', () => {
+    expect(threadId(true, 'acme/widgets', 7, 'alpha')).toBe('alpha:acme/widgets/7')
+    expect(threadId(false, 'acme/widgets', 7, 'alpha')).toBe('alpha:7')
+    expect(threadId(true, 'acme/widgets', 7)).toBe('acme/widgets/7')
+    expect(threadChain('alpha:acme/widgets/7')).toBe('alpha')
+    expect(threadChain('acme/widgets/7')).toBe('default')
+    expect(threadNumber('alpha:acme/widgets/7')).toBe(7)
+  })
+  it('polls each chain against its own intake repository', async () => {
+    const h = host()
+    const alpha = testDeployment({ chain: 'alpha', repository: 'acme/code-a', intakeRepository: 'acme/intake-a' })
+    const beta = testDeployment({ chain: 'beta', repository: 'acme/code-b', intakeRepository: 'acme/intake-b' })
+    const reads: string[] = []
+    vi.spyOn(h.commands, 'run').mockImplementation(async (_program, args) => {
+      reads.push(String(args[1]).split('?')[0]!)
+      return 'HTTP/2.0 200 OK\r\nX-Poll-Interval: 60\r\n\r\n[]'
+    })
+    const config = GithubConfigSchema.parse({})
+    await pollRound(h, config, { id: 'alpha', repository: '', intakeRepository: 'acme/intake-a', codeRepository: 'acme/code-a' }, alpha)
+    await pollRound(h, config, { id: 'beta', repository: '', intakeRepository: 'acme/intake-b', codeRepository: 'acme/code-b' }, beta)
+    expect(reads).toEqual(['repos/acme/intake-a/notifications', 'repos/acme/intake-b/notifications'])
+    h.store.close()
+  })
   it('normalizes comments and reviews into triggers with review-thread channels, and marks only GitHub Apps and machine accounts as automated', () => {
     const trigger = commentTrigger({ id: 5, body: 'nit', user: { login: 'review-bot[bot]', type: 'Bot' }, html_url: 'https://github.com/acme/widgets/pull/7#discussion_r5', updated_at: '2026-09-01T00:00:00Z' }, { number: 7, isPr: true, prAuthor: 'agent-bot' }, 'inline', 'agent-bot')
     expect(trigger).toMatchObject({ source: 'github', threads: [{ source: 'github', id: '7' }], human: false, channel: { address: { number: '7', url: 'https://github.com/acme/widgets/pull/7#discussion_r5' } }, meta: { commentId: 5, kind: 'inline', prAuthor: 'agent-bot' } })
@@ -475,6 +499,59 @@ describe('github source', () => {
     expect(await observePull(h, endedPull(12, '2026-09-02T00:00:00Z', false))).toBe(true)
     expect(pullEndNotices(h.store.tickets.get('t2')!, request.text, 'acme/widgets'))
       .toEqual([expect.objectContaining({ text: '[PR #12](https://github.com/acme/widgets/pull/12) was closed without merging.' })])
+    h.store.close()
+  })
+  it('reports the terminal notice to the PR in the code repository and to the conversation the ticket started from', () => {
+    const h = host()
+    const source = githubChannel('cinvymoe/rust_crane_issues/3', 'https://github.com/cinvymoe/rust_crane_issues/issues/3')
+    const ticket: Ticket = { ...openTicket('t6'), channels: [source],
+      follows: [{ thread: 'github:cinvymoe/rust_crane/8', own: true, closed: { at: '2026-11-04T00:00:00.000Z', outcome: 'merged' } }],
+      ended: { at: '2026-11-04T00:00:00.000Z', by: 'executor', outcome: 'merged' } }
+    const notices = pullEndNotices(ticket, '修一下标题', 'cinvymoe/rust_crane', source)
+    expect(notices.map(notice => notice.channel)).toEqual([
+      { source: 'github', thread: 'github:cinvymoe/rust_crane/8', address: { number: '8', url: 'https://github.com/cinvymoe/rust_crane/pull/8' } },
+      source])
+    expect(new Set(notices.map(notice => notice.id)).size).toBe(2)
+    expect(notices.map(notice => notice.text)).toEqual(Array(2).fill('[PR #8](https://github.com/cinvymoe/rust_crane/pull/8) 已合并。'))
+    // A ticket that started on the very PR it ended with hears about it once.
+    expect(pullEndNotices({ ...ticket, channels: [notices[0]!.channel] }, '修一下标题', 'cinvymoe/rust_crane', notices[0]!.channel))
+      .toHaveLength(1)
+    h.store.close()
+  })
+  it('finds the pull request a report names in the code repository and copies a result reply to it', () => {
+    const h = host()
+    const deployment = testDeployment({ repository: 'cinvymoe/rust_crane', intakeRepository: 'cinvymoe/rust_crane_issues' })
+    const ticket: Ticket = { ...openTicket('t8'), execution: execution('grabber'),
+      follows: [{ thread: 'github:cinvymoe/rust_crane/9', own: true }] }
+    expect(pullReplyChannels(ticket, deployment)).toEqual([{ source: 'github', thread: 'github:cinvymoe/rust_crane/9',
+      address: { number: '9', url: 'https://github.com/cinvymoe/rust_crane/pull/9' } }])
+    // A worker that only names its PR in the report still gets the reply copied there.
+    const reported: Ticket = { ...ticket, follows: [], assignments: [{ id: 'a', state: 'running', createdAt: '',
+      report: { state: 'ready', summary: 'done: https://github.com/cinvymoe/rust_crane/pull/9', at: '' } }] }
+    expect(reportedPull(reported.assignments[0]!.report!.summary, deployment)).toBe(9)
+    expect(pullReplyChannels(reported, deployment)).toEqual([{ source: 'github', thread: 'github:cinvymoe/rust_crane/9',
+      address: { number: '9', url: 'https://github.com/cinvymoe/rust_crane/pull/9' } }])
+    // A PR in another repository never matches.
+    expect(reportedPull('see https://github.com/cinvymoe/rust_crane_issues/pull/9', deployment)).toBeUndefined()
+    h.store.close()
+  })
+  it('mirrors the problem, change, and verification sections of a PR description into the intake conversation', () => {
+    const h = host()
+    const source = githubChannel(4, 'https://github.com/acme/widgets/issues/4')
+    const ticket: Ticket = { ...openTicket('t9'), channels: [source], execution: execution('fix-7') }
+    h.store.tickets.save(ticket)
+    const pr: Pull = { ...agentsPull(7, 'agent/fix-7'), title: 'Fix the margin',
+      body: 'This is by an automated agent, not a human.\n\n## 问题\n\nMargin is too small.\n\n## 修改\n\n- enlarge it\n\n## 验证\n\n- pnpm test\n\n## Before / After\n\n![shot](https://example.test/a.png)' }
+    expect(claimPull(h, 't9', pr)).toBeUndefined()
+    const waiting = h.store.receipts.waiting()
+    expect(waiting).toHaveLength(1)
+    expect(waiting[0]).toMatchObject({ kind: 'notice', channel: source, ticketId: 't9' })
+    expect(waiting[0]!.text).toContain('### PR #7 描述同步：Fix the margin（分支 `agent/fix-7`）')
+    expect(waiting[0]!.text).toContain('## 问题')
+    expect(waiting[0]!.text).toContain('## 修改')
+    expect(waiting[0]!.text).toContain('## 验证')
+    expect(waiting[0]!.text).not.toContain('Before / After')
+    expect(pullDescriptionNotices({ ...ticket, follows: [{ thread: 'github:7', own: true }] }, pr, h.deployment)).toHaveLength(1)
     h.store.close()
   })
   it('polls subscribed PR threads since their checkpoint and skips the bot\'s own comments', async () => {
@@ -1023,8 +1100,8 @@ it('reports GitHub as failing only after the configured number of consecutive fa
   expect(pollFailure(1, 3, eof)).toBeUndefined()
   expect(pollFailure(2, 3, eof)).toBeUndefined()
   expect(pollFailure(3, 3, eof)).toEqual({ state: 'error', detail: '3 consecutive failed polls; last: Error: Get "https://api.github.com/x": EOF', code: 'pollFailures', values: { count: '3', error: 'Error: Get "https://api.github.com/x": EOF' } })
-  expect(githubKind.schema.parse({})).toEqual({ repository: '', cli: '', pollSeconds: 60, failuresBeforeError: 3, observeIssues: false,
-    observePulls: false, observeComments: false, observeCi: false })
+  expect(githubKind.schema.parse({})).toEqual({ repository: '', intakeRepository: '', codeRepository: '', cli: '',
+    pollSeconds: 60, failuresBeforeError: 3, observeIssues: false, observePulls: false, observeComments: false, observeCi: false })
 })
 describe('feishu event consumer', () => {
   let dir: string
@@ -1242,6 +1319,41 @@ describe('observing the GitHub repository', () => {
     observe(h, {})
     await pollRound(h)
     expect(h.store.get('github-stream:issues')).toBeUndefined()
+    h.store.close()
+  })
+  it('reads Issues from the intake repository and PRs from the code repository without mixing their numbers', async () => {
+    const h = host({ deployment: testDeployment({ intakeRepository: 'acme/intake' }) })
+    observe(h, { observeIssues: true })
+    h.store.set('github-since', at(-24))
+    h.store.set('github-stream:issues', { since: at(0), started: { issues: at(0) } })
+    h.store.tickets.save({ ...openTicket('t9'), follows: [{ thread: 'github:acme/widgets/9', own: true }] })
+    h.store.threads.save({ key: 'github:acme/widgets/9', ref: { source: 'github', id: 'acme/widgets/9' }, createdAt: '',
+      subscriptions: ['t9'], correlated: [], pending: [], meta: { number: 9, isPr: true } })
+    const reads: string[][] = []
+    vi.spyOn(h.commands, 'run').mockImplementation(async (_program, args) => {
+      reads.push(args)
+      const path = args[1]!.split('?')[0]!
+      const value: unknown = path === 'repos/acme/intake/issues'
+        ? [{ ...issue(9), html_url: 'https://github.com/acme/intake/issues/9' }]
+        : path === 'repos/acme/widgets/pulls/9'
+          ? { ...openPull(9), user: { login: 'agent-bot' }, head: { sha: 'abc', ref: 'agent/t9', repo: { full_name: 'acme/widgets' } } }
+          : path === 'repos/acme/widgets/issues/9' ? { ...issue(9), title: 'Fix the margin', pull_request: { url: 'x' } }
+          : path === 'repos/acme/widgets/commits/abc/check-runs' ? { check_runs: [] } : []
+      if (args.includes('--include'))
+        return `HTTP/2.0 200 OK\r\n${path === 'notifications' ? 'X-Poll-Interval: 60\r\n' : 'ETag: "same"\r\n'}\r\n${JSON.stringify(value)}`
+      return JSON.stringify(args.includes('--slurp') ? [value] : value)
+    })
+    await pollRound(h)
+    // The intake Issue and the code PR share the number 9, yet land on separate repository-qualified threads.
+    const trigger = h.receive.mock.calls.map(([received]) => received).find(({ meta }) => meta.kind === 'issue')!
+    expect(trigger.threads).toEqual([{ source: 'github', id: 'acme/intake/9' }])
+    expect(trigger.channel).toMatchObject({ thread: 'github:acme/intake/9', address: { number: '9', url: 'https://github.com/acme/intake/issues/9' } })
+    expect(h.store.get('github-stream:issues')).toEqual({ since: at(0), started: { issues: at(0) }, etag: '"same"' })
+    expect(h.store.threads.get('github:acme/widgets/9')?.subscriptions).toEqual(['t9'])
+    expect(h.store.threads.get('github:9')).toBeUndefined()
+    const paths = reads.map(args => args[1]!.split('?')[0]!)
+    expect(paths.filter(path => path.includes('acme/intake'))).toEqual(['repos/acme/intake/notifications', 'repos/acme/intake/issues'])
+    expect(paths.some(path => path === 'repos/acme/widgets/pulls/9')).toBe(true)
     h.store.close()
   })
   it('takes in the repository\'s conversation and review comments, on the Issue or PR each is on', async () => {

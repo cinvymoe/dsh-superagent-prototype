@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import type { ThreadFact } from '../core/index.ts'
 import { validItems, type Commands, type Tally } from '../infra/commands.ts'
-import { CommentSchema, IssueSchema, isHumanLogin, reviewPlace, type GithubComment } from './github-trigger.ts'
+import { CommentSchema, githubRepository, IssueSchema, isHumanLogin, reviewPlace, type GithubComment } from './github-trigger.ts'
 import type { ContextMessage, ThreadContext } from './kind.ts'
 
 const CheckSchema = z.looseObject({ name: z.string(), status: z.string(), conclusion: z.string().nullable() })
@@ -99,7 +99,8 @@ function threadMessages(thread: GithubComment[], id: (comment: GithubComment) =>
  * Reads an Issue or PR, a page of its comments or reviews, a review thread, or a CI snapshot as model-facing
  * `{ id, from, at, text, reply_to?, path?, line?, url }` messages rather than raw GitHub API records.
  */
-export async function readGithub(commands: Commands, resource: string): Promise<unknown> {
+export async function readGithub(commands: Commands, resource: string, repository = commands.repository): Promise<unknown> {
+  commands = commands.withRepository(repository)
   // A commit's CI, such as the default branch's, which no PR names.
   const commit = /^github\/commits\/([0-9a-f]{7,40})\/checks$/.exec(resource)
   if (commit) return pullChecks(commands, commit[1]!)
@@ -164,6 +165,11 @@ export const githubThreadContext: ThreadContext<unknown> = {
       const message = { id: trigger.url ?? trigger.id, from: 'CI', at: trigger.at, text: trigger.text, bot: true as const }
       return { messages: [message], body: { status: 'branch_ci', messages: [message] }, status: 'branch_ci' }
     }
+    const chain = typeof trigger.meta.chain === 'string' ? trigger.meta.chain : 'default'
+    const deployment = commands.deploymentFor?.(chain) ?? commands.deployment
+    const repository = (typeof trigger.url === 'string' ? githubRepository(trigger.url) : undefined)
+      ?? (trigger.meta.isPr === true ? deployment.repository : deployment.intakeRepository)
+    commands = (commands.withDeployment?.(deployment) ?? commands).withRepository(repository)
     const number = Number(trigger.meta.number)
     if (trigger.meta.kind === 'inline' && typeof trigger.meta.commentId === 'number') {
       const thread = await reviewThread(commands, number, trigger.meta.commentId)

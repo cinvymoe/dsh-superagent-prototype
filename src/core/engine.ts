@@ -1,7 +1,7 @@
 /** The domain Engine: the single entry point of the core, and the role interfaces its callers receive. */
 import { UserError } from './errors.ts'
-import { isoTime, liveTicket } from './model.ts'
-import type { ChannelRef, Decision, PolicyEffect, ThreadRef, Ticket, Trigger } from './model.ts'
+import { isoTime, liveTicket, threadKey } from './model.ts'
+import type { ActorRef, ChannelRef, Decision, PlanSlice, PolicyEffect, ThreadRef, Ticket, Trigger } from './model.ts'
 import type { Candidate, Repositories } from './ports.ts'
 import type { EngineOptions } from './part.ts'
 import { Assignments, type WorkerReport } from './assignments.ts'
@@ -88,6 +88,17 @@ export class Engine {
 
   /** The candidate of the Eval that holds a Trigger, as its assessor sees it; undefined while no Eval holds it. */
   candidate(triggerId: string): Candidate | undefined { return this.evals.candidate(triggerId) }
+  /**
+   * Dispatch a confirmed requirement plan: create one execution ticket per slice, keyed by issue and slice, and start it. A
+   * repeated call reuses the tickets it made, and a slice's ticket waits for its dependencies to end before it launches.
+   */
+  acceptPlan(thread: ThreadRef, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[] }): Ticket[] {
+    return this.repo.atomic(() => {
+      const stored = this.repo.threads.get(threadKey(thread))
+      if (!stored) throw new UserError('unknownTrigger')
+      return this.evals.acceptPlan(stored, input)
+    })
+  }
   /**
    * Decide a Trigger: the Eval that holds it, or a direct Eval of it alone when none does, such as a person's explicit
    * request the main Session routes. A proactive candidate is accepted only in `auto` mode with enabled rules its assessment
