@@ -141,7 +141,9 @@ function healthOf(name: string): Health {
 const problemOf_ = (id: string) => [server.setup.problem, server.setup.feishuProblem].find(item => item?.place === id) ?? undefined
 function sourceSettings(): SourceView[] {
   return KINDS.map(kind => {
-    const config = kind.schema.parse(server.settings.sources[kind.kind]?.config ?? {})
+    const raw = server.settings.sources[kind.kind]?.config ?? {}
+    // Read stored configuration the way the host does: normalize a legacy shape before validating it.
+    const config = kind.schema.parse(kind.normalizeConfig ? kind.normalizeConfig(raw) : raw)
     const problem = problemOf_(kind.kind)
     const { admission: _admission, ...part } = server.settings.policy.sources[kind.kind] ?? { allowed: [], admission: {} }
     const sync = kind.policy?.sync && { label: kind.policy.sync.label, ready: kind.policy.sync.ready(kind.policy.schema.parse(part)),
@@ -252,7 +254,7 @@ function initial(): PanelServer {
       rules: [{ id: 'copy', name: '文案修改', enabled: true, instruction: '修正明确的文案错误' }] },
     sources: { feishu: { enabled: true, config: { cli: 'lark-bot', chats: [{ chatId: 'oc_team', listen: 'mentions' }],
       directMessages: true } },
-      github: { enabled: true, config: { repository: 'acme/widgets', cli: 'gh-agent' } } },
+      github: { enabled: true, config: { chains: [{ id: 'default', intakeRepository: 'acme/widgets', codeRepository: 'acme/widgets' }], cli: 'gh-agent' } } },
     executor: { blockedCommands: ['gh-personal'] },
   })
   const ended = ticketSummary({ id: 't0', title: '旧工单', state: 'ended', actions: { retry: false, stop: false },
@@ -431,7 +433,13 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     else if (block === 'eval') server.settings = { ...server.settings, eval: EvalConfigSchema.parse(body.value) }
     else if (source) {
       const { enabled, config: value } = SourceSave.parse(body.value)
-      const config = source.schema.parse(value)
+      let config: Record<string, unknown>
+      try { config = source.schema.parse(value) }
+      // As the host does, an invalid configuration is refused with 400 rather than thrown.
+      catch (error) {
+        if (error instanceof z.ZodError) return refuse(400, `Invalid settings: ${error.issues.map(issue => issue.path.join('.')).join(', ')}`)
+        throw error
+      }
       // As on the server, a changed CLI that fails its check refuses the save with the setup problem.
       if (config.cli === 'lark-broken') {
         const refused = new SetupError('feishuCliFailed', { output: 'lark-cli: app secret missing' })

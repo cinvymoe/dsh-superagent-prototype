@@ -43,25 +43,23 @@ export function machineOf(config: DeploymentConfig): Machine {
 }
 
 const REPOSITORY = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?$/
+/** A repository the Source requires: `owner/name`, never blank. */
+const REQUIRED_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const CHAIN = /^[a-z][a-z0-9-]*$/
-export const GithubAccountsSchema = z.object({
-  /** Legacy single-repository field: both repositories fall back to it. */
-  repository: z.string().trim().regex(REPOSITORY, 'owner/name').default(''),
-  /** Repository whose Issues, notifications and comments the Source receives; defaults to `codeRepository`. */
+/** One independent intake repository -> code repository chain. The Source-level `cli` is shared by every chain. */
+export const GithubChainSchema = z.object({
+  /** Stable chain id in lowercase kebab-case; it identifies threads and tickets that come from this chain. */
+  id: z.string().trim().regex(CHAIN, 'lowercase kebab-case'),
+  /** Repository whose Issues, notifications and comments the Source receives; resolves to `codeRepository` when blank. */
   intakeRepository: z.string().trim().regex(REPOSITORY, 'owner/name').default(''),
   /** Repository workers check out, push branches to, and open pull requests in. */
-  codeRepository: z.string().trim().regex(REPOSITORY, 'owner/name').default(''),
-  cli: z.string().trim().default(''),
-})
-export type GithubAccounts = z.infer<typeof GithubAccountsSchema>
-/** One independent intake repository -> code repository chain. The Source-level `cli` is shared by every chain. */
-export const GithubChainSchema = GithubAccountsSchema.omit({ cli: true }).extend({
-  id: z.string().trim().regex(CHAIN, 'lowercase kebab-case').default('default'),
-}).strict()
+  codeRepository: z.string().trim().regex(REQUIRED_REPOSITORY, 'owner/name'),
+}).strict().transform(chain => ({ ...chain, intakeRepository: chain.intakeRepository || chain.codeRepository }))
 export type GithubChain = z.infer<typeof GithubChainSchema>
-export const GithubConfigSchema = GithubAccountsSchema.extend({
-  /** Independent repository pairs handled by this Source. Empty means the legacy single pair in the fields above. */
-  chains: z.array(GithubChainSchema).optional(),
+export const GithubConfigSchema = z.object({
+  /** Independent repository pairs handled by this Source; setup needs at least one. */
+  chains: z.array(GithubChainSchema).default([]),
+  cli: z.string().trim().default(''),
   pollSeconds: z.number().int().min(60).max(3600).default(60),
   failuresBeforeError: z.number().int().min(1).max(20).default(3),
   observeIssues: z.boolean().default(false),
@@ -71,22 +69,30 @@ export const GithubConfigSchema = GithubAccountsSchema.extend({
 }).strict()
 export type GithubConfig = z.infer<typeof GithubConfigSchema>
 /**
- * Resolve the two GitHub repositories, treating the legacy `repository` field as the code repository and
- * defaulting an unset intake repository to the code repository.
+ * Normalize a stored GitHub Source configuration. A configuration without `chains` that still names the legacy
+ * single-repository fields becomes one `default` chain; the legacy fields are dropped either way. Only reading uses
+ * this: saving through the panel validates with the strict schema, so the stored configuration then holds `chains`.
  */
-export function githubRepositories(accounts: Pick<GithubAccounts, 'repository' | 'intakeRepository' | 'codeRepository'>):
-  { intake: string; code: string } {
-  const code = accounts.codeRepository || accounts.repository
-  return { code, intake: accounts.intakeRepository || code }
+export function normalizeGithubConfig(stored: unknown): Record<string, unknown> {
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
+  const { repository, intakeRepository, codeRepository, ...rest } = stored as Record<string, unknown>
+  if ('chains' in rest) return rest
+  const code = typeof codeRepository === 'string' && codeRepository ? codeRepository : typeof repository === 'string' ? repository : ''
+  const intake = typeof intakeRepository === 'string' ? intakeRepository : ''
+  return { ...rest, chains: code ? [{ id: 'default', intakeRepository: intake, codeRepository: code }] : [] }
 }
-/** The configured chains, or the one legacy pair when no `chains` array was supplied. */
-export function githubChains(config: Pick<GithubAccounts, 'repository' | 'intakeRepository' | 'codeRepository'> & { chains?: readonly GithubChain[] }): GithubChain[] {
-  if (config.chains?.length) return [...config.chains]
-  return [{ id: 'default', repository: config.repository, intakeRepository: config.intakeRepository, codeRepository: config.codeRepository }]
+/** Resolve a chain's repositories, defaulting an unset intake repository to the code repository. */
+export function githubRepositories(chain: Pick<GithubChain, 'intakeRepository' | 'codeRepository'>): { intake: string; code: string } {
+  const code = chain.codeRepository
+  return { code, intake: chain.intakeRepository || code }
+}
+/** The configured chains. */
+export function githubChains(config: { chains?: readonly GithubChain[] }): GithubChain[] {
+  return config.chains ? [...config.chains] : []
 }
 export const FeishuBotSchema = z.object({ cli: z.string().trim().default('') })
 /** Source configuration keys that affect deployment setup and trigger a restart when changed. */
-export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { github: ['chains', ...Object.keys(GithubAccountsSchema.shape)], feishu: Object.keys(FeishuBotSchema.shape) }
+export const SETUP_FIELDS: Readonly<Record<string, readonly string[]>> = { github: ['chains', 'cli'], feishu: Object.keys(FeishuBotSchema.shape) }
 
 export interface DeploymentTarget extends Machine {
   /** Chain id; absent for legacy callers that construct a single deployment by hand. */
@@ -133,7 +139,7 @@ function parsed<T>(schema: z.ZodType<T>, text: string): T | undefined {
 /** Verify the agent's GitHub CLI identity, push access to every code repository, and read access to every intake repository. */
 export async function resolveDeployment(machine: Machine, github: unknown, probe: Probe, path = process.env.PATH ?? ''): Promise<Deployment> {
   const { stateDir } = machine
-  const config = GithubConfigSchema.parse(github ?? {})
+  const config = GithubConfigSchema.parse(normalizeGithubConfig(github ?? {}))
   const chains = githubChains(config)
   if (!chains.length) throw new SetupError('repositoryUnset')
   if (!config.cli) throw new SetupError('agentCliUnset')

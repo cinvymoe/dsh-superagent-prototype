@@ -53,13 +53,13 @@
 | 5 | 「需求列表」页按当前项目列出需求（新到旧，含状态/对齐标签、时间、切片数）；点击一行进入详情，详情可返回需求列表而不是概览 | PASS | `panel-discuss` 列表用例断言顺序、开放/已关闭、待对齐/待审阅、切片数、项目过滤与取数 query；详情用例断言页头返回按钮文本为「返回需求列表」，点击后页头回到项目名且页签仍为需求列表；`after-detail.png` / `after-detail-back.png` |
 | 6 | 在「新建需求」或「需求列表」切换项目时停留在当前页签并按新项目重新取数；从其他页签切换项目落到「需求列表」；新建项目成功后落在新项目的「需求列表」 | PASS | `panel-projects` 用例覆盖：需求列表切换保持页签并请求 `local/issues?project=p-other`；新建需求切换保持页签、项目 Tag 更新、提交 body 指向新项目；从概览切换落到需求列表；新建项目后页签为需求列表并请求新项目需求；`after-list-billing.png` |
 | 7 | 会话里保存的旧路由（page=discuss，含 id/create）重载后打开对应的新页面，不白屏 | PASS | `tests/navigation.spec.ts` 覆盖 `discuss` + id/create/无参三种映射；`panel-discuss` 用 `at({page:'discuss', id})` 与 `at({page:'discuss'})` 重载后分别打开需求详情与需求列表，均有内容、无白屏 |
-| 8 | `pnpm check` 通过；`docs/005-panel.md` 已描述两个页签与新文案；PR 含同场景 Before/After 截图 | PASS（截图待 PR 描述） | `pnpm check`：typecheck 0，63 files / 1259 tests，build 完成（`docs/issues/evidence/c1-check.log`）；`docs/005-panel.md` 新增 New requirement 与 Requirements 两行及新文案；Before/After 见下方视觉证据，PR 描述逐对标注 |
+| 8 | `pnpm check` 通过；`docs/005-panel.md` 已描述两个页签与新文案；PR 含同场景 Before/After 截图 | PASS（截图待 PR 描述） | `pnpm check`：typecheck 0，63 files / 1259 tests，build 完成（`docs/issues/evidence/c1-requirement-tabs-check.log`）；`docs/005-panel.md` 新增 New requirement 与 Requirements 两行及新文案；Before/After 见下方视觉证据，PR 描述逐对标注 |
 
 ## 测试证据
 
 - `pnpm typecheck`：exit 0，无诊断。
-- `pnpm vitest run tests/panel-discuss.spec.tsx tests/panel-projects.spec.tsx tests/panel-overview.spec.tsx tests/panel-panel.spec.tsx tests/navigation.spec.ts tests/local.spec.ts tests/locales.spec.ts tests/docs.spec.ts tests/styles.spec.ts`：9 files / 75 tests passed（`docs/issues/evidence/c1-targeted.log`）。
-- `env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check`：typecheck exit 0；63 files / 1259 tests passed；build complete；exit 0（`docs/issues/evidence/c1-check.log`）。
+- `pnpm vitest run tests/panel-discuss.spec.tsx tests/panel-projects.spec.tsx tests/panel-overview.spec.tsx tests/panel-panel.spec.tsx tests/navigation.spec.ts tests/local.spec.ts tests/locales.spec.ts tests/docs.spec.ts tests/styles.spec.ts`：9 files / 75 tests passed（`docs/issues/evidence/c1-requirement-tabs-targeted.log`）。
+- `env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check`：typecheck exit 0；63 files / 1259 tests passed；build complete；exit 0（`docs/issues/evidence/c1-requirement-tabs-check.log`）。
 - `env -u … LC_ALL=C pnpm test`：63 files / 1259 tests passed（`docs/issues/evidence/c1-full.log`）。
 - `pnpm build`：Build complete，exit 0。
 - `git diff --check`：无输出。

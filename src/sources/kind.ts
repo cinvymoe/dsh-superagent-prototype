@@ -93,6 +93,11 @@ export interface SourceKind<C extends Record<string, unknown> = Record<string, u
   facts?(deployment: Deployment | undefined): Record<string, Localized | string>
   /** Validates stored and submitted configuration and fills defaults. */
   schema: z.ZodType<C>
+  /**
+   * Normalizes a stored configuration before `schema` validates it when reading it (panel GET and runtime polls).
+   * Not used to validate a panel save, so the stored configuration is always written in the current shape.
+   */
+  normalizeConfig?(stored: unknown): unknown
   fields: FieldSpec[]
   /** Health entry names owned by this kind under `health[...]`; no other kind or core loop may report them. */
   health: string[]
