@@ -1,0 +1,19 @@
+# C1 pending-close screenshot seed — identical data for the Before and After panels
+# script: docs/issues/evidence/c1-pending-close-seed.mjs (one-shot SQLite seed, schema 11)
+# tickets: q-close-done C1 executor/completed, C2 human/stopped; q-close-live C1 executor/completed, C2 live;
+#          q-close-closed C1 executor/merged, C2 executor/completed
+# command: node docs/issues/evidence/c1-pending-close-seed.mjs /root/.dsh/state/<profile>
+# date: 2026-11-13T00:43:00+08:00
+
+$ node docs/issues/evidence/c1-pending-close-seed.mjs /root/.dsh/state/c1close-before
+(node:1496882) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+seeded /root/.dsh/state/c1close-before: 1 project, 4 requirements, 6 tickets (q-close-done finished, q-close-live live)
+(node:1496882) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+$ node docs/issues/evidence/c1-pending-close-seed.mjs /root/.dsh/state/c1close-after
+(node:1496892) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+seeded /root/.dsh/state/c1close-after: 1 project, 4 requirements, 6 tickets (q-close-done finished, q-close-live live)
+(node:1496892) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+
+# Both temp servers were stopped after the captures: no listener on 10.126.126.6:3131 or :3132.

@@ -306,6 +306,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 ## Modules
 
+The requirement view also documents its derived state: the requirement state tag shows Open, Pending close or Closed from the view's `slicesFinished` while the alignment tag beside it is unchanged; the derived requirement completion view (`slicesFinished`) over the HTTP routes, for both end kinds and anomalous alignments; and the Pending close state tag beside the unchanged Confirmed tag on the list row and detail head.
+
 | Path | Responsibility |
 | --- | --- |
 | `src/index.ts` | The main plugin entry: reads the machine settings, starts the Runtime, and gives it the restart that a save of a Source's account uses |
