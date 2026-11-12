@@ -9,6 +9,7 @@ import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
 import type { LocalImageInput, LocalIssue, LocalProject, LocalSlice } from '../sources/local-format.ts'
+import type { ExecutionMode } from '../core/model.ts'
 import type { Receipt } from './store.ts'
 
 export const TICKET_FILTERS = ['open', 'person', 'working', 'idle', 'ended'] as const
@@ -43,6 +44,7 @@ export interface Api {
   'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssue } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssue } }
   'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string }; response: { issue: LocalIssue; tickets: { id: string; title: string }[] } }
+  'POST local/issues/:id/execution': { body: { mode: ExecutionMode }; response: { issue: LocalIssue } }
   'POST local/issues/:id/close': { response: { issue: LocalIssue } }
   'POST tickets/:id/retry': { response: { retried: true } }
   'POST tickets/:id/stop': { response: { stopped: true } }
