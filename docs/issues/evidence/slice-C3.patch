@@ -1,0 +1,200 @@
+diff --git a/docs/003-execution.md b/docs/003-execution.md
+index a4e96e9..8096791 100644
+--- a/docs/003-execution.md
++++ b/docs/003-execution.md
+@@ -22,7 +22,7 @@ An `idle` Ticket has finished its turn without an outstanding question. A Trigge
+ 
+ ## The Executor
+ 
+-Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under one root, chosen in this order: the local project's `worktreeRoot`, the Executor's `directory`, then `<stateDir>/work`. The chosen root is recorded on the Ticket as `execution.worktreeRoot` only when it was configured explicitly; a later settings change does not move an accepted Ticket. A Ticket created from a confirmed alignment slice starts the feature-exec `execute` flow, which ends at an open PR; review and merge stay with a person.
++Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under one root, chosen in this order: the local project's `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`. The panel labels `executor.directory` **Ticket directory root**. When the chosen root was configured explicitly, it is recorded on the Ticket as `execution.worktreeRoot`; a later settings change does not move an accepted Ticket. A Ticket created from a confirmed alignment slice starts the feature-exec `execute` flow, which ends at an open PR; review and merge stay with a person.
+ 
+ Executor Sessions run commands without approval as the operator's OS user. Their `dsh-superagent-worker` preset contains the tools needed for work and moves foreground shell commands to background jobs after 5 seconds. This lets a worker receive new messages at the next step instead of waiting for a long command to finish.
+ 
+@@ -48,9 +48,9 @@ Worker subagents, including nested ones, use DeepSeek Harness's `standard` prese
+ 
+ ### Preparing a Ticket directory
+ 
+-Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` in the chosen root. It has ten minutes to finish. Without a prepare command, the worker starts in an empty directory.
++Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` and the chosen root as its working directory. It has ten minutes to finish. The command creates the checkout; it does not choose the root. Without a prepare command, the worker starts in an empty directory.
+ 
+-An explicitly configured root (a project's `worktreeRoot` or the Executor's non-empty `directory`) is checked before anything is created: it must exist, be a directory and accept a write. A missing, non-directory or read-only root fails the Ticket with the absolute path and the reason; no directory is created and the launch never falls back to the default root. Fix the root, then retry the Ticket or write on its Thread. The default `<stateDir>/work` is still created when missing.
++An explicitly configured root (a project's `worktreeRoot` or a non-empty `executor.directory`) is checked before anything is created: it must exist, be a directory and accept a write. A missing, non-directory or read-only root fails the Ticket with the absolute path and the reason; the launch never creates that root, never creates the Ticket directory under the default root, and never falls back. Fix the root, then retry the Ticket or write on its Thread: preparation runs again. The default `<stateDir>/work` is different: it is still created when missing.
+ 
+ A failed command fails the Ticket and records its output. A retry or a person's message on one of the Ticket's Threads tries preparation again. A typical command uses `git worktree` to create a checkout. A pull request belongs to the Ticket when its branch's last path segment matches the Ticket's short name.
+ 
+diff --git a/docs/005-panel.md b/docs/005-panel.md
+index 688a205..cc5c749 100644
+--- a/docs/005-panel.md
++++ b/docs/005-panel.md
+@@ -17,7 +17,7 @@ The tabs follow the workflow: **Overview**, **Discuss**, **Source**, **Trigger**
+ | Tab | Shows |
+ | --- | --- |
+ | Overview | Tickets needing action, system problems, activity counts for the last 24 hours, and Executor load. Each block links to its detailed page |
+-| Discuss | Local projects and requirements: create a project with its own execution repository and optional absolute `worktreeRoot`, submit requirements into it, follow the discussion, review the alignment proposal, and confirm or send it back. Confirming dispatches one Ticket per slice |
++| Discuss | Local projects and requirements: create a project with its name, its own execution repository, and an optional absolute `worktreeRoot` (empty means unconfigured), submit requirements into it, follow the discussion, review the alignment proposal, and confirm or send it back. Confirming dispatches one Ticket per slice |
+ | Source | Source state, setup problems and non-zero counts. Filtered Triggers and dropped messages cover the same 24-hour window as Overview |
+ | Trigger | Threads filtered by Subscribed, Evaluating, New Triggers in 24 h, or All Threads. Each Thread shows its Triggers newest first, Decisions and Subscriptions |
+ | Eval | Decisions with their reason and matched rules |
+@@ -34,9 +34,9 @@ Ticket details show the originating Trigger, Decision and reason, scope and Poli
+ 
+ ## Settings groups
+ 
+-- **Sources:** one card per Source with its switch, fields and verified account facts. The local source backs the Discuss board; its projects, issues and replies stay in this installation, each project's repository is the execution target for its requirements, and its `worktreeRoot` (when set) is the directory root for their Tickets. GitHub also offers receive-all switches for new Issues, pull requests, comments and default-branch CI. Polling and read limits are under Advanced.
++- **Sources:** one card per Source with its switch, fields and verified account facts. The local source backs the Discuss board; its projects, issues and replies stay in this installation, each project's repository is the execution target for its requirements, and its `worktreeRoot` (when set; empty keeps the Execution root) is the directory root for their Tickets. GitHub also offers receive-all switches for new Issues, pull requests, comments and default-branch CI. Polling and read limits are under Advanced.
+ - **Eval:** the Policy version and rules, followed by **On each Source** and the Eval settings. Each Source tab contains its allowed list, membership sync, admission table and bot list. Sync runs at startup and on **Sync now**. The admission table distinguishes receiving scope, sender membership and whether the message addresses the agent. Eval settings select the accept mode, timeout and assessment model.
+-- **Execution:** worker model, concurrency, directory root, prepare command and blocked commands. Clicking an available variable inserts it into the prepare command.
++- **Execution:** worker model, concurrency, the Ticket directory root, prepare command and blocked commands. A local project's `worktreeRoot` takes precedence over the Ticket directory root; an explicitly set root must already exist and be writable, or its Tickets fail to launch instead of falling back. The prepare command runs in the selected root. Clicking an available variable inserts it into the prepare command.
+ - **Prompts:** **Edit** changes team sections, built-in parts and skills. **Full prompt** shows the assembled text and compares it with saved text or defaults. **History** lists versions. Edited built-in parts are marked changed and can be reset; templates list their required placeholders.
+ 
+   An upgrade that changes an overridden default marks it **Default updated** (默认内容已更新). The panel compares the old and new defaults above the team's text. If the old default was not recorded, it compares the team's text with the new default instead. Choose **Keep my text** or **Use the new default**. Overrides for removed parts are listed below the tab bar and dropped on the next save.
+diff --git a/docs/006-deployment.md b/docs/006-deployment.md
+index 90972ff..db6705a 100644
+--- a/docs/006-deployment.md
++++ b/docs/006-deployment.md
+@@ -146,7 +146,7 @@ Setup must succeed before polling or work starts. Overview lists missing require
+ 
+ 1. **Sources.** Set the GitHub agent CLI, for example `/home/me/.local/bin/gh-agent`, and add one row per chain in **Chains**: a lowercase kebab-case chain id, the intake repository that receives Issues (`owner/name`), and the code repository that Tickets execute against (`owner/name`). A chain with one repository uses the same repository for both. Chains share the Source's agent CLI and GitHub account. For backward compatibility, a Source with no **Chains** rows uses the legacy `repository`/`intakeRepository`/`codeRepository` fields as one `default` chain. Requests normally arrive through the agent account's notifications. A new Issue or comment mentioning the account arrives on the next poll; adding a mention by editing an existing Issue body does not. Post a new comment instead. For Feishu, set the bot CLI, chats, each chat's receive-all or mentions-only mode, and whether to receive direct messages.
+ 2. **Policy.** The two example rules can be edited or removed. Under **On each Source**, add the GitHub accounts and Feishu users who may ask for work; until a list has someone, no request can become a Ticket. With Feishu, a chat can be chosen to sync the list from, at startup and on **Sync now**.
+-3. **Execution.** The directory root and a prepare command. A local project can override the root with its optional `worktreeRoot`; otherwise this setting, then `<stateDir>/work`, applies. An explicitly configured root must already exist and be writable, or the Ticket fails before a worker starts. To give each Ticket a checkout of the repository:
++3. **Execution.** The Ticket directory root and a prepare command. A new Ticket's directory is created under one root, chosen in this order: a local project's optional absolute `worktreeRoot`, then the Ticket directory root (`executor.directory`), then `<stateDir>/work`. The prepare command runs with that root as its working directory; it creates the repository checkout at `$DSH_SUPERAGENT_DIR` but does not choose the root. An explicitly configured root must already exist, be a directory and be writable, or the Ticket fails before a worker starts, without creating the root or falling back to the default root; after fixing it, retry the Ticket or write on its Thread. To give each Ticket a checkout of the repository:
+ 
+    ```sh
+    git -C /home/me/src/widgets fetch --no-tags "https://github.com/$DSH_SUPERAGENT_GITHUB_REPOSITORY.git" "${DSH_SUPERAGENT_GITHUB_PR_HEAD:-HEAD}:refs/dsh-superagent/$DSH_SUPERAGENT_TICKET" &&
+@@ -202,7 +202,7 @@ The blocks:
+ - `source:github`, `source:feishu`: `{"enabled": true, "config": {…}}`. GitHub's config has `chains` as `[{"id": "alpha", "intakeRepository": "acme/widgets-issues", "codeRepository": "acme/widgets"}]` (legacy `repository`, `intakeRepository` and `codeRepository` form a single `default` chain when `chains` is absent), `cli`, plus the switches `observeIssues`, `observePulls`, `observeComments` and `observeCi`, off by default. Observing repository-wide Issues and comments reads each chain's intake repository, while pull requests and the default branch's CI stay on its code repository; Feishu's has `cli`, `chats` as `[{"chatId": "oc_…", "name": "…", "listen": "mentions"}]` (or `"all"`), `directMessages`, and `otherChats` as `"none"` or `"mentions"`.
+ - `policy`: `{"rules": […], "sources": {"github": {"allowed": [{"id": "<login>"}], "bots": [{"id": "dependabot[bot]"}]}, "feishu": {"allowed": [{"id": "ou_…", "name": "…"}], "syncChat": "oc_…", "admission": {"oc_…": {"unlistedAddressed": "explicit"}}}}}`. `bots` lists the bots whose messages may become inferred candidates. An `admission` row is keyed by chat id, `other` or `direct` for Feishu, and by `issues`, `pulls`, `comments` or `ci` for GitHub; an unset cell takes its default (see [002 Authorization](002-authorization.md)).
+ - `eval`: `mode`, `timeoutSeconds` and `model`.
+-- `executor`: `model`, `maxWorkers`, `directory`, `prepare` and `blockedCommands`. The processing pause is a setting of its own, `paused`, which `POST executor/pause` sets. A local project's `worktreeRoot` takes precedence over `directory`; both are explicit roots and are validated before a launch creates a Ticket directory.
++- `executor`: `model`, `maxWorkers`, `directory`, `prepare` and `blockedCommands`. The processing pause is a setting of its own, `paused`, which `POST executor/pause` sets. `directory` is the Ticket directory root; a local project's `worktreeRoot` takes precedence over it, and either explicitly configured root must already exist, be a directory and be writable when a Ticket launches. `prepare` runs with the chosen root as its working directory; a missing, non-directory or unwritable explicit root fails the Ticket without creating anything or falling back to `<stateDir>/work`.
+ 
+ Changing a repository or CLI runs the corresponding setup check first. A failed check returns 400 with details in `setup`. A successful account change, or any save while setup is pending, returns `restarting: true`. The API is temporarily unavailable while the application restarts.
+ 
+@@ -257,6 +257,7 @@ Setup problems appear on the overview with a link to the fix, in the panel's lan
+ | `@… cannot read …` or `@… cannot push to …` | Give the agent account write access to the repository |
+ | `The GitHub Source names no repository.` | Set the repository, `owner/name`, on the GitHub card |
+ | A Ticket fails with `The prepare command failed: …` | The output names the cause, such as a wrong clone path; fix the command, then retry the Ticket |
++| A Ticket fails with `The worktree root … does not exist`, `is not a directory` or `is not writable` | The explicit root, a project's `worktreeRoot` or the Ticket directory root, is not usable: create it, make it writable, or point the setting at a usable directory, then retry the Ticket or write on its Thread. The launch creates nothing and does not fall back to `<stateDir>/work` |
+ | `git does not read the github.com credential configuration dsh-superagent writes` | Install git 2.32 or later |
+ | A Ticket fails with `The git configuration of the repository in … sets …` | Remove the named credential or `http.*.extraheader` settings from the clone's `.git/config` |
+ | `… was not written by dsh-superagent` | Move the named file out of `<stateDir>/worker-bin` or `<stateDir>/worker-gitconfig`, or choose another `stateDir` |
+diff --git a/docs/007-architecture.md b/docs/007-architecture.md
+index 406f592..c99d481 100644
+--- a/docs/007-architecture.md
++++ b/docs/007-architecture.md
+@@ -200,7 +200,7 @@ That context supplies deployment and commands, setup readiness (`ready`, `config
+ 
+ `prepare(ticket, outcome)` supplies the Engine's `prepareTicket` hook: short name, directory and `ticketExecution` assignment text. It resolves the directory root from the local project's `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`, and records an explicitly configured root on the Ticket's Execution so a later settings change cannot move it. `workerSessionId(ticket.id)` derives the Session id.
+ 
+-`prepareDirectory` validates an explicit root before creating anything: it must exist, be a directory and accept a write. A failure throws `PrepareFailed` with the absolute path and reason, without creating a directory or falling back to the default root; the default root is still created when missing.
++`prepareDirectory` validates an explicit root before creating anything: it must exist, be a directory and accept a write. A failure throws `PrepareFailed` with the absolute path and reason, without creating a directory or falling back to the default root; the default root is still created when missing. The prepare command runs with the selected root as its working directory, so it creates only the checkout at `$DSH_SUPERAGENT_DIR` and does not choose the root.
+ 
+ `WorkerSlots` reserves capacity before a launch or a delivery that wakes an idle worker. A human message can use one slot beyond `maxWorkers`, and wakes have priority over launches. `activeCount` supplies panel load.
+ 
+@@ -300,7 +300,7 @@ Some generic modules still refer directly to GitHub or Feishu:
+ | `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer |
+ | `src/kv.ts` | `KV`: every family of `kv` records with its key, its value's type and its owner, and the `Key` and `Family` types the Store and `SourceContext.state` take |
+ | `src/navigation.ts` | Opens a DeepSeek Harness Session from the panel once the host's catalog lists it |
+-| `src/core/model.ts` | The domain types, among them the typed Ticket and `MandateBasis`, with `threadKey`, `ticketOutcome`, `reached`, `followupOwners`, `settled`, `waitsForPerson`, `liveTicket`, `runningAssignment`, `latestAssignment` and `latestReport` |
++| `src/core/model.ts` | The domain types, among them the typed Ticket, `Execution` with its optional explicit `worktreeRoot`, and `MandateBasis`, with `threadKey`, `ticketOutcome`, `reached`, `followupOwners`, `settled`, `waitsForPerson`, `liveTicket`, `runningAssignment`, `latestAssignment` and `latestReport` |
+ | `src/core/ports.ts` | The ports: `Repositories`, `Policy`, `SourceScope`, `Assessor`, `Executor`, `Outbox`, and the domain events |
+ | `src/core/engine.ts` | The Engine, the core's entry point, and the role interfaces `EngineForSources`, `EngineForMainSession`, `EngineForPeople`, `EngineForSettings` and `EngineForExecutor` |
+ | `src/core/part.ts` | `EnginePart`, the base of the Engine's parts, and `EngineOptions` |
+@@ -339,7 +339,7 @@ Some generic modules still refer directly to GitHub or Feishu:
+ | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory-root resolution (project `worktreeRoot` > `executor.directory` > `<stateDir>/work`) and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
+ | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
+ | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
+-| `src/app/local.ts` | `LocalIssues`: local projects, the issue records bound to them, their comments as human Triggers, and the read-only alignment proposal a person confirms or sends back |
++| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, the issue records bound to them, their comments as human Triggers, and the read-only alignment proposal a person confirms or sends back |
+ | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
+ | `src/app/resources.ts` | `RESOURCES` and `readResource`: what `orchestrator_read` reads, for each role |
+ | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
+@@ -354,7 +354,7 @@ Some generic modules still refer directly to GitHub or Feishu:
+ | `src/app/views/sources.ts` | The Source status: each Source instance's state, its last day's counts, and what it filtered and dropped in that day |
+ | `src/app/views/settings.ts` | The settings page's view: each block with its revision, each Source's settings with its kind's form, and the execution environment |
+ | `src/app/views/overview.ts` | The overview: Tickets that need a person, problems, the last day's flow and the Executor's load |
+-| `src/executor/dsh.ts` | The DshExecutor, `WorkerSlots`, `ticketExecution`, `inputMessage` and `mandateInstructions` |
++| `src/executor/dsh.ts` | The DshExecutor, its `prepareDirectory` validation of an explicit worktree root, `WorkerSlots`, `ticketExecution`, `inputMessage` and `mandateInstructions` |
+ | `src/executor/background.ts` | A worker's background work in DeepSeek Harness, the shell jobs its Session owns (`ctx.jobs`) and its subagents (`ctx.subagents`): `runningJobs`, `untilQuiet`, `killJobs`, `collectJobs`, `stopSubagents`, `stopBackground`, `until`, and `cancelled`, the workers whose turn a stop of their subagents cancelled |
+ | `src/infra/commands.ts` | `Commands`, the CLI transport: `run`; `api` and `pages`, limited to the configured repository and validated; `lark` as the bot; `git`. `CliError` carries the code a command's output reports, such as a GitHub HTTP status, and a command that prints nothing fails with how it ended, never with its arguments; `validItems` skips and counts the malformed items of a list |
+ | `src/infra/environment.ts` | The agent's process environment: command shims, the git configuration and credential helper, `runAsWorker`, and the checks of the environment and of a Ticket's directory |
+@@ -372,7 +372,7 @@ Some generic modules still refer directly to GitHub or Feishu:
+ | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
+ | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
+ | `src/sources/local.ts` | The local panel kind and plugin entry, exported as `./local-watch`: human Triggers, a Channel that needs no transport, and the default local policy |
+-| `src/sources/local-format.ts` | The local project, issue, slices and alignment proposal, shared by the host and the panel |
++| `src/sources/local-format.ts` | The local project (with its optional worktree root), issue, slices and alignment proposal, shared by the host and the panel |
+ | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
+ | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
+ | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
+@@ -384,7 +384,7 @@ Some generic modules still refer directly to GitHub or Feishu:
+ | `src/client/app.tsx` | The panel: header, search, glossary, tabs and the page of the current route |
+ | `src/client/provider.tsx` | What every page reads from its host: copy, calls, navigation, notices, the state poll, and `restart`, which reads the state quickly while dsh-superagent restarts |
+ | `src/client/api.ts` | Calls and polls of the management API, typed by `src/app/api.ts`, and the Decision filters of the Eval status |
+-| `src/client/discuss.tsx` | The local project and issue board: create a project with its repository, submit a requirement, read its discussion, and confirm or send back the Aligner's proposal |
++| `src/client/discuss.tsx` | The local project and issue board: create a project with its name, repository and optional worktree root, submit a requirement, read its discussion, and confirm or send back the Aligner's proposal |
+ | `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads, and the route memory with the settings group opened last |
+ | `src/client/overview.tsx` | The overview |
+ | `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
+@@ -412,8 +412,8 @@ Some generic modules still refer directly to GitHub or Feishu:
+ | --- | --- |
+ | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
+ | `tests/stage.spec.ts` | The Ticket stages, row by row |
+-| `tests/local.spec.ts` | The local issue board: projects, a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
+-| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, and dispatching a confirmed plan's slices as tickets |
++| `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
++| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, dispatching a confirmed plan's slices as tickets, and project worktree roots |
+ | `tests/panel-discuss.spec.tsx` | The Discuss board: project creation with an optional worktree root, requirement submission, and project tags |
+ | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
+ | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |
+diff --git a/tests/docs.spec.ts b/tests/docs.spec.ts
+index f41b456..eb20cf9 100644
+--- a/tests/docs.spec.ts
++++ b/tests/docs.spec.ts
+@@ -9,6 +9,8 @@ const numbered = readdirSync(join(ROOT, 'docs')).filter(name => NUMBERED.test(na
+ const entries = ['README.md', 'SETUP.md']
+ const documents = [...entries, ...readdirSync(join(ROOT, 'docs')).filter(name => name.endsWith('.md')).map(name => `docs/${name}`)]
+ const read = (path: string): string => readFileSync(join(ROOT, path), 'utf8')
++/** A document's text with every run of whitespace collapsed, so a sentence can be matched across line wrapping. */
++const prose = (path: string): string => read(path).replace(/\s+/g, ' ')
+ function links(file: string): string[] {
+   return [...readFileSync(file, 'utf8').matchAll(/\]\(([^)\s]+)\)/g)].map(match => match[1]!.split('#')[0]!).filter(target => target && !/^[a-z]+:/.test(target))
+ }
+@@ -66,3 +68,37 @@ describe('documentation', () => {
+     expect(tests.filter(path => !existsSync(join(ROOT, path)))).toEqual([])
+   })
+ })
++
++describe('worktree root documentation', () => {
++  it('states the directory root priority and that the prepare command runs in the chosen root', () => {
++    const execution = prose('docs/003-execution.md')
++    expect(execution).toContain('chosen in this order: the local project\'s `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`')
++    expect(execution).toContain('the prepare command runs once with `sh` and the chosen root as its working directory')
++  })
++  it('states that an explicit root failure does not fall back and can be retried after it is fixed', () => {
++    const execution = prose('docs/003-execution.md')
++    expect(execution).toContain('fails the Ticket with the absolute path and the reason')
++    expect(execution).toContain('never falls back')
++    expect(execution).toContain('Fix the root, then retry the Ticket or write on its Thread: preparation runs again.')
++  })
++  it('covers the same semantics in the deployment Execution step and executor block', () => {
++    const deployment = prose('docs/006-deployment.md')
++    expect(deployment).toContain('a local project\'s optional absolute `worktreeRoot`, then the Ticket directory root (`executor.directory`), then `<stateDir>/work`')
++    expect(deployment).toContain('The prepare command runs with that root as its working directory; it creates the repository checkout at `$DSH_SUPERAGENT_DIR` but does not choose the root.')
++    expect(deployment).toContain('a local project\'s `worktreeRoot` takes precedence over it')
++    expect(deployment).toContain('either explicitly configured root must already exist, be a directory and be writable when a Ticket launches')
++    expect(deployment).toContain('without creating anything or falling back to `<stateDir>/work`')
++  })
++  it('names the Discuss project worktree root field and its precedence in the panel document', () => {
++    const panel = prose('docs/005-panel.md')
++    expect(panel).toContain('an optional absolute `worktreeRoot` (empty means unconfigured)')
++    expect(panel).toContain('A local project\'s `worktreeRoot` takes precedence over the Ticket directory root')
++    expect(panel).toContain('The prepare command runs in the selected root.')
++  })
++  it('describes the worktree root in the module table entries this feature touches', () => {
++    const architecture = prose('docs/007-architecture.md')
++    expect(architecture).toContain('its `prepareDirectory` validation of an explicit worktree root')
++    expect(architecture).toContain('create a project with its name, repository and optional worktree root')
++    expect(architecture).toContain('`Execution` with its optional explicit `worktreeRoot`')
++  })
++})

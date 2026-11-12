@@ -1,0 +1,6 @@
+ docs/003-execution.md    |  6 +++---
+ docs/005-panel.md        |  6 +++---
+ docs/006-deployment.md   |  5 +++--
+ docs/007-architecture.md | 16 ++++++++--------
+ tests/docs.spec.ts       | 36 ++++++++++++++++++++++++++++++++++++
+ 5 files changed, 53 insertions(+), 16 deletions(-)
