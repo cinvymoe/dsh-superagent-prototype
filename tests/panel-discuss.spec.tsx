@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
-import { usePanel, mount, remount, all, click, settle, type, text, at, tab } from './fixtures/panel.tsx'
+import { usePanel, mount, remount, all, click, find, settle, type, text, at, tab } from './fixtures/panel.tsx'
 import { localComment, localIssue, localReply, server, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
 
 usePanel()
@@ -612,4 +612,81 @@ it('reads each requirement image through the management API with the same-origin
   expect(calls[0]![1]).toMatchObject({ headers: { 'x-orchestrator-request': '1' } })
   expect(createObjectURL).toHaveBeenCalled()
   expect(all('.dt-image-card img')[0]!.getAttribute('src')).toBe('blob:requirement-image')
+})
+
+/** Two alignment rounds of one requirement: the first was sent back with a reason, the second awaits review. */
+const twoRounds = () => {
+  const round = (roundId: string, status: 'rejected' | 'proposed', label: string, at: string, extra: object = {}) => ({ roundId, status,
+    summary: `${label}摘要`, slices: [{ id: `${roundId}-slice`, title: `${label}切片`, outcome: '', inScope: [], outOfScope: [],
+      acceptance: [], dependsOn: [], lane: 'full' as const }], acceptance: [`${label}验收`], proposedAt: at, ...extra })
+  return { first: round('al-1', 'rejected', '第一轮', '2026-09-22T00:00:00Z',
+    { decidedAt: '2026-09-22T01:00:00Z', reason: '范围太大，请拆分' }), second: round('al-2', 'proposed', '第二轮', '2026-09-23T00:00:00Z') }
+}
+
+it('shows the alignment round count on a requirement row only when it has rounds', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Two rounds'), id: 'q-rounds', alignment: second, alignments: [first, second] },
+    { ...localIssue('No rounds'), id: 'q-plain' }]
+  at({ page: 'requirements' })
+  await mount()
+  const metas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
+  expect(metas[0]).toContain(zh['discuss.roundsCount'].replace('{count}', '2'))
+  expect(metas[0]).toContain('1 个切片')
+  expect(metas[1]).not.toContain(zh['discuss.roundsCount'].replace('{count}', '0'))
+  expect(text()).not.toContain(zh['discuss.roundsCount'].replace('{count}', '0'))
+})
+
+it('renders every alignment round, expands only the current one and lets a person open an earlier round', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Two rounds'), alignment: second, alignments: [first, second] }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  // The current round carries its summary, its slice and the acceptance criteria, and names itself current.
+  const current = document.querySelector<HTMLElement>('.dt-round-current')!
+  expect(current.textContent).toContain('第二轮摘要')
+  expect(current.textContent).toContain('第二轮切片')
+  expect(current.textContent).toContain('第二轮验收')
+  expect(current.textContent).toContain(zh['discuss.roundCurrent'])
+  expect(current.textContent).toContain(zh['discuss.roundLabel'].replace('{round}', '2'))
+  // The earlier round is collapsed: its status, time and rejection reason stay visible, its body does not.
+  const earlier = all('[data-disclosure-row]')[0]!
+  expect(earlier.getAttribute('aria-expanded')).toBe('false')
+  expect(earlier.textContent).toContain(zh['discuss.rejected'])
+  expect(earlier.textContent).toContain(`${zh['discuss.reason']}：范围太大，请拆分`)
+  expect(earlier.querySelector('time')).not.toBe(null)
+  expect(document.body.textContent).not.toContain('第一轮摘要')
+  expect(document.body.textContent).not.toContain('第一轮切片')
+  expect(document.body.textContent).not.toContain('第一轮验收')
+  // Expanding it renders that round's summary, slice and acceptance criteria.
+  await click(earlier)
+  const opened = all('[data-disclosure-row]')[0]!
+  expect(opened.getAttribute('aria-expanded')).toBe('true')
+  expect(document.body.textContent).toContain('第一轮摘要')
+  expect(document.body.textContent).toContain('第一轮切片')
+  expect(document.body.textContent).toContain('第一轮验收')
+  // English names the same round history.
+  await remount(en)
+  expect(text()).toContain(en['discuss.roundCurrent'])
+  expect(text()).toContain(en['discuss.roundLabel'].replace('{round}', '2'))
+  expect(all('[data-disclosure-row]')[0]!.textContent).toContain(en['discuss.reason'])
+})
+
+it('offers Confirm and Send back only on the current proposed round and names that round in the decision', async () => {
+  server.localProjects = [PROJECT]
+  const { first, second } = twoRounds()
+  server.localIssues = [{ ...localIssue('Two rounds'), alignment: second, alignments: [first, second] }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const buttons = all('.dt-actions button').filter(button => button.textContent?.trim() === zh['discuss.confirm']
+    || button.textContent?.trim() === zh['discuss.reject'])
+  expect(buttons.map(button => button.textContent?.trim())).toEqual([zh['discuss.confirm'], zh['discuss.reject']])
+  expect(buttons.every(button => button.closest('.dt-round-current') !== null)).toBe(true)
+  expect(document.querySelector('.dt-rounds-history .dt-actions')).toBe(null)
+  await click(find(zh['discuss.confirm']))
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/alignment/decision')!
+  expect(posted).toMatchObject({ method: 'POST', body: { decision: 'confirm', roundId: 'al-2' } })
+  // The fixture dispatches the current round only, so the decision above confirmed the round this page named.
+  expect(server.dispatchedIssues.has('q-fixture')).toBe(true)
 })

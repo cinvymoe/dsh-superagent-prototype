@@ -139,3 +139,20 @@ describe('requirement message timeline documentation', () => {
     expect(architecture).toContain('its newest-first message timeline with the follow-up box above the list (a post appears first and clears the box)')
   })
 })
+
+describe('requirement alignment history documentation', () => {
+  it('states that a list row shows its alignment round count and the detail expands only the current round', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('slice count, alignment round count and image count')
+    expect(panel).toContain('The detail expands the current round with its summary, slices, acceptance criteria and decision time, and keeps every earlier round collapsed until a person expands it, where that round\'s status, time and rejection reason stay readable')
+  })
+  it('states that Confirm alignment and Send back act only on the current proposed round and name that round', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('**Confirm alignment** and **Send back** appear only on the current round while it is proposed and the decision names that round')
+  })
+  it('names the round history in the panel module row and the panel test row', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('the alignment round history renders the current round expanded with earlier rounds collapsed until opened, and every decision names the current round')
+    expect(architecture).toContain('the alignment round history (a list row\'s round count, the expanded current round, an earlier round opened on demand and a decision naming the current round)')
+  })
+})

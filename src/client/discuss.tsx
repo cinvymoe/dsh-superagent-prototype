@@ -1,9 +1,10 @@
 /** Requirement pages: submit a requirement, list the project's requirements, and review the Aligner's proposal. */
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { REQUIREMENT_IMAGES } from '../limits.ts'
-import { projectRepositories, requirementExecutionMode, type LocalImage, type LocalIssue } from '../sources/local-format.ts'
+import { alignmentRounds, currentAlignment, projectRepositories, requirementExecutionMode, type LocalAlignment, type LocalImage,
+  type LocalIssue } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
-import { Button, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
+import { Button, DisclosureRow, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
@@ -50,13 +51,60 @@ function RequirementImages({ issue }: { issue: LocalIssue }) {
 const stateTag = (t: T, issue: LocalIssue) => issue.state === 'closed'
   ? <Tag tone="quiet">{t('discuss.closed')}</Tag> : <Tag tone="success">{t('discuss.open')}</Tag>
 
-function statusTag(t: T, issue: LocalIssue) {
-  const alignment = issue.alignment
-  if (!alignment) return <Tag tone="neutral">{t('discuss.pending')}</Tag>
-  if (alignment.status === 'proposed') return <Tag tone="warning">{t('discuss.proposed')}</Tag>
-  if (alignment.status === 'confirmed') return <Tag tone="success">{t('discuss.confirmed')}</Tag>
-  if (alignment.status === 'superseded') return <Tag tone="neutral">{t('discuss.superseded')}</Tag>
+/** The tag of one alignment round, or the "not aligned" tag of a requirement that has none yet. */
+function statusTag(t: T, round: LocalAlignment | undefined) {
+  if (!round) return <Tag tone="neutral">{t('discuss.pending')}</Tag>
+  if (round.status === 'proposed') return <Tag tone="warning">{t('discuss.proposed')}</Tag>
+  if (round.status === 'confirmed') return <Tag tone="success">{t('discuss.confirmed')}</Tag>
+  if (round.status === 'superseded') return <Tag tone="neutral">{t('discuss.superseded')}</Tag>
   return <Tag tone="danger">{t('discuss.rejected')}</Tag>
+}
+
+/** The summary, task slices and acceptance criteria of one alignment round. */
+function AlignmentBody({ round }: { round: LocalAlignment }) {
+  const { t } = usePanel()
+  return <>
+    {round.summary && <MarkdownLite text={round.summary} />}
+    {round.slices.length > 0 && <ul className="dt-list">{round.slices.map(slice => <li key={slice.id} className="dt-row">
+      <Tag tone="outline">{slice.id}</Tag>
+      <div className="dt-row-main">
+        <div className="dt-row-title dt-line">{slice.title}</div>
+        <div className="dt-row-meta"><Tag tone="neutral">{slice.lane === 'light' ? 'light' : 'full'}</Tag>
+          {slice.dependsOn.length > 0 && <span>{t('discuss.dependsOn')}：{slice.dependsOn.join(', ')}</span>}
+          {slice.acceptance.length > 0 && <span>{t('discuss.acceptanceCount', { count: slice.acceptance.length })}</span>}
+        </div>
+      </div>
+    </li>)}</ul>}
+    {round.acceptance.length > 0 && <div>
+      <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.acceptance')}</h3></div>
+      <ul className="dt-list">{round.acceptance.map((item, index) => <li key={index} className="dt-row">
+        <span className="dt-count">{index + 1}</span><span>{item}</span></li>)}</ul>
+    </div>}
+  </>
+}
+
+/** When one round was proposed and decided, with the round's status and the reason a person sent it back. */
+function AlignmentRoundMeta({ round, tag = false }: { round: LocalAlignment; tag?: boolean }) {
+  const { t } = usePanel()
+  return <div className="dt-row-meta">{tag && statusTag(t, round)}<When at={round.proposedAt} />
+    {round.decidedAt && <When at={round.decidedAt} />}
+    {round.reason && <span>{t('discuss.reason')}：{round.reason}</span>}</div>
+}
+
+/**
+ * One earlier round of an alignment: collapsed by default, so the page leads with the current round, while its status,
+ * time and rejection reason stay readable; expanding it shows the summary, slices and acceptance criteria of that round.
+ */
+function EarlierAlignmentRound({ round, ordinal }: { round: LocalAlignment; ordinal: number }) {
+  const { t } = usePanel()
+  const [open, setOpen] = useState(false)
+  return <DisclosureRow open={open} onToggle={() => setOpen(!open)} icon={<Icon name="history" size={14} />}
+    title={<span className="dt-round-label">{t('discuss.roundLabel', { round: ordinal })}</span>}
+    collapsedContent={<span className="dt-round-note">{statusTag(t, round)}<When at={round.proposedAt} />
+      {round.decidedAt && <When at={round.decidedAt} />}
+      {round.reason && <span>{t('discuss.reason')}：{round.reason}</span>}</span>}>
+    <div className="dt-disclosure-body"><AlignmentBody round={round} /><AlignmentRoundMeta round={round} tag /></div>
+  </DisclosureRow>
 }
 
 /** The execution mode a requirement's slice Tickets run under: the person's choice, or native when they made none. */
@@ -156,7 +204,7 @@ export function NewRequirementPage() {
 /** The processing bucket of one requirement: closed wins, then a confirmed open alignment, then everything else open. */
 const requirementBucket = (issue: LocalIssue): Exclude<RequirementFilter, 'all'> =>
   issue.state === 'closed' ? 'closed'
-    : issue.alignment?.status === 'confirmed' ? 'confirmed' : 'pending'
+    : currentAlignment(issue)?.status === 'confirmed' ? 'confirmed' : 'pending'
 
 /** Requirement list of the current project, newest first and filtered by its processing status; a row opens the detail. */
 export function RequirementList({ filter }: { filter: RequirementFilter }) {
@@ -190,16 +238,23 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
         <Section title={t('discuss.requirements')} count={shown.length}>
           {data && issues.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
           {data && issues.length > 0 && shown.length === 0 && <p className="dt-hint">{t('discuss.emptyFilter')}</p>}
-          <ul className="dt-list dt-cards">{shown.map(issue => <li key={issue.id} className="dt-row">
-            <Icon name="message" size={14} />
-            <div className="dt-row-main">
-              <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
-                onClick={() => open(issue.id)}>{issue.title}</button></div>
-              <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}{executionTag(t, issue)}
-                <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span>
-                {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}</div>
-            </div>
-          </li>)}</ul>
+          <ul className="dt-list dt-cards">{shown.map(issue => {
+            const rounds = alignmentRounds(issue)
+            const current = rounds.at(-1)
+            return <li key={issue.id} className="dt-row">
+              <Icon name="message" size={14} />
+              <div className="dt-row-main">
+                <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
+                  onClick={() => open(issue.id)}>{issue.title}</button></div>
+                <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, current)}{executionTag(t, issue)}
+                  <When at={issue.createdAt} />
+                  <span>{t('discuss.slicesCount', { count: current?.slices.length ?? 0 })}</span>
+                  {/* The round count tells a reviewer how many alignment proposals this requirement went through. */}
+                  {rounds.length > 0 && <span>{t('discuss.roundsCount', { count: rounds.length })}</span>}
+                  {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}</div>
+              </div>
+            </li>
+          })}</ul>
         </Section>
       </>}
     </div>
@@ -228,8 +283,9 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   }
   const decide = (decision: 'confirm' | 'reject') => act(async () => {
     // The decision names the round this page showed, so a page left open cannot confirm a newer proposal.
+    const round = issue && currentAlignment(issue)
     const answer = await call('POST local/issues/:id/alignment/decision', { id, body: { decision,
-      ...(alignment?.roundId ? { roundId: alignment.roundId } : {}),
+      ...(round ? { roundId: round.roundId } : {}),
       ...(decision === 'reject' && reason.trim() ? { reason: reason.trim() } : {}) } })
     // Confirming is the authorization to dispatch: the slices became tickets, which the list below shows.
     if (decision === 'confirm') notify(t('discuss.dispatched', { count: answer.tickets.length }))
@@ -238,7 +294,10 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   })
   if (error) return <p className="dt-error" role="alert">{error.message}</p>
   if (!issue) return <p className="dt-hint">{t('loading')}</p>
-  const alignment = issue.alignment
+  // Every round an Aligner proposed, oldest first: the last one is current and earlier ones stay readable below it.
+  const rounds = alignmentRounds(issue)
+  const current = rounds.at(-1)
+  const earlier = rounds.slice(0, -1).reverse()
   // A requirement that already produced Tickets keeps the execution mode they were dispatched under.
   const dispatched = data!.thread.tickets.length > 0
   const timeline = data!.thread.timeline
@@ -258,7 +317,7 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   return <>
     <PageHead title={issue.title} back={{ label: t('discuss.back'), onClick: () => navigate(filter === 'pending'
       ? { page: 'requirements' } : { page: 'requirements', query: { filter } }, true) }}>
-      <span className="dt-hint">{t('discuss.detail')}</span>{stateTag(t, issue)}{statusTag(t, issue)}</PageHead>
+      <span className="dt-hint">{t('discuss.detail')}</span>{stateTag(t, issue)}{statusTag(t, current)}</PageHead>
     <div className="dt-column dt-form">
       <section className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.requirement')}</span></div>
@@ -271,46 +330,41 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
       </section>
 
       <section className="dt-card">
-        <div className="dt-card-head"><span className="dt-card-title">{t('discuss.alignment')}</span>{statusTag(t, issue)}</div>
-        {!alignment && <p className="dt-hint">{t('discuss.notAligned')}</p>}
-        {alignment && <>
-          {alignment.summary && <MarkdownLite text={alignment.summary} />}
-          {alignment.slices.length > 0 && <ul className="dt-list">{alignment.slices.map(slice => <li key={slice.id} className="dt-row">
-            <Tag tone="outline">{slice.id}</Tag>
-            <div className="dt-row-main">
-              <div className="dt-row-title dt-line">{slice.title}</div>
-              <div className="dt-row-meta"><Tag tone="neutral">{slice.lane === 'light' ? 'light' : 'full'}</Tag>
-                {slice.dependsOn.length > 0 && <span>{t('discuss.dependsOn')}：{slice.dependsOn.join(', ')}</span>}
-                {slice.acceptance.length > 0 && <span>{t('discuss.acceptanceCount', { count: slice.acceptance.length })}</span>}
-              </div>
-            </div>
-          </li>)}</ul>}
-          {alignment.acceptance.length > 0 && <div>
-            <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.acceptance')}</h3></div>
-            <ul className="dt-list">{alignment.acceptance.map((item, index) => <li key={index} className="dt-row">
-              <span className="dt-count">{index + 1}</span><span>{item}</span></li>)}</ul>
-          </div>}
-          <div className="dt-row-meta"><When at={alignment.proposedAt} />
-            {alignment.decidedAt && <When at={alignment.decidedAt} />}
-            {alignment.reason && <span>{t('discuss.reason')}：{alignment.reason}</span>}</div>
-          {dispatched
-            ? <div className="dt-row-meta">{executionTag(t, issue)}<span>{t('discuss.executionLocked')}</span></div>
-            : alignment.status === 'proposed' && <div className="dt-switch-row">
-              <span className="dt-field-head">{t('discuss.executionSwitch')}<InfoTip text={t('discuss.executionHint')} /></span>
-              <Switch checked={requirementExecutionMode(issue) === 'feature-exec'} label={t('discuss.executionSwitch')}
-                onChange={next => { void act(() => call('POST local/issues/:id/execution', { id,
-                  body: { mode: next ? 'feature-exec' : 'native' } })) }} />
+        <div className="dt-card-head"><span className="dt-card-title">{t('discuss.alignment')}</span>{statusTag(t, current)}</div>
+        {!current && <p className="dt-hint">{t('discuss.notAligned')}</p>}
+        {current && <>
+          {/* The current round is always expanded; every earlier round stays collapsed until a person opens it. */}
+          <div className="dt-round dt-round-current" data-round={current.roundId}>
+            <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.roundLabel', { round: rounds.length })}</h3>
+              <Tag tone="info">{t('discuss.roundCurrent')}</Tag></div>
+            <AlignmentBody round={current} />
+            <AlignmentRoundMeta round={current} />
+            {dispatched
+              ? <div className="dt-row-meta">{executionTag(t, issue)}<span>{t('discuss.executionLocked')}</span></div>
+              : current.status === 'proposed' && <div className="dt-switch-row">
+                <span className="dt-field-head">{t('discuss.executionSwitch')}<InfoTip text={t('discuss.executionHint')} /></span>
+                <Switch checked={requirementExecutionMode(issue) === 'feature-exec'} label={t('discuss.executionSwitch')}
+                  onChange={next => { void act(() => call('POST local/issues/:id/execution', { id,
+                    body: { mode: next ? 'feature-exec' : 'native' } })) }} />
+              </div>}
+            {/* A decision applies to the current round only, so an older round never offers the buttons. */}
+            {current.status === 'proposed' && <div className="dt-actions">
+              <Button variant="primary" size="sm" disabled={busy} onClick={() => { void decide('confirm') }}>{t('discuss.confirm')}</Button>
+              {!rejecting && <Button variant="outline" size="sm" disabled={busy}
+                onClick={() => setRejecting(true)}>{t('discuss.reject')}</Button>}
+              {rejecting && <>
+                <input className="dt-text-input" value={reason} maxLength={4000} placeholder={t('discuss.rejectReason')}
+                  onChange={event => setReason(event.target.value)} />
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => { void decide('reject') }}>{t('discuss.reject')}</Button>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setRejecting(false); setReason('') }}>{t('cancel')}</Button>
+              </>}
             </div>}
-          {alignment.status === 'proposed' && <div className="dt-actions">
-            <Button variant="primary" size="sm" disabled={busy} onClick={() => { void decide('confirm') }}>{t('discuss.confirm')}</Button>
-            {!rejecting && <Button variant="outline" size="sm" disabled={busy}
-              onClick={() => setRejecting(true)}>{t('discuss.reject')}</Button>}
-            {rejecting && <>
-              <input className="dt-text-input" value={reason} maxLength={4000} placeholder={t('discuss.rejectReason')}
-                onChange={event => setReason(event.target.value)} />
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => { void decide('reject') }}>{t('discuss.reject')}</Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setRejecting(false); setReason('') }}>{t('cancel')}</Button>
-            </>}
+          </div>
+          {earlier.length > 0 && <div className="dt-rounds-history">
+            <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.roundsEarlier')}</h3>
+              <span className="dt-count">{earlier.length}</span></div>
+            {earlier.map((round, index) => <EarlierAlignmentRound key={round.roundId} round={round}
+              ordinal={earlier.length - index} />)}
           </div>}
         </>}
       </section>
