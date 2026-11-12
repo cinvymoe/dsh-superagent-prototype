@@ -142,6 +142,9 @@ export class LocalIssues {
 
   get(id: string): LocalIssue | undefined { return this.host.store.get(KV.local.issue(id)) }
 
+  /** Store a requirement record, replacing any earlier one with the same id; the caller owns every field it changes. */
+  putIssue(issue: LocalIssue): void { this.host.store.set(KV.local.issue(issue.id), issue) }
+
   /**
    * The HTTP view of a requirement: its stored record plus whether every slice Ticket of its confirmed alignment ended.
    * Derived here, on read, so no migration or extra store field exists. A requirement without a confirmed alignment, one
