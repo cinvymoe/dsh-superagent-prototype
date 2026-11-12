@@ -1,0 +1,17 @@
+$ pnpm typecheck (post-merge)
+(node:1509311) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ tsc --noEmit
+tests/panel-discuss.spec.tsx(204,25): error TS2322: Type '{ id: string; alignment: { status: "confirmed"; summary: string; slices: never[]; acceptance: never[]; proposedAt: string; }; title: string; body: string; author: string; project?: string; images?: LocalImage[]; ... 4 more ...; alignments?: LocalAlignment[]; }' is not assignable to type 'LocalIssue'.
+  Types of property 'alignment' are incompatible.
+    Property 'roundId' is missing in type '{ status: "confirmed"; summary: string; slices: never[]; acceptance: never[]; proposedAt: string; }' but required in type 'LocalAlignment'.
+tests/panel-discuss.spec.tsx(408,66): error TS2741: Property 'roundId' is missing in type '{ decidedAt?: string | undefined; status: "proposed" | "confirmed"; summary: string; acceptance: never[]; slices: { id: string; title: string; outcome: string; inScope: never[]; outOfScope: never[]; acceptance: never[]; dependsOn: never[]; lane: "full"; }[]; proposedAt: string; }' but required in type 'LocalAlignment'.
+tests/panel-discuss.spec.tsx(428,5): error TS2741: Property 'roundId' is missing in type '{ decidedAt?: string | undefined; status: "proposed" | "confirmed"; summary: string; acceptance: never[]; slices: { id: string; title: string; outcome: string; inScope: never[]; outOfScope: never[]; acceptance: never[]; dependsOn: never[]; lane: "full"; }[]; proposedAt: string; }' but required in type 'LocalAlignment'.
+tests/panel-projects.spec.tsx(39,25): error TS2322: Type '{ alignment: { status: "confirmed"; summary: string; slices: never[]; acceptance: never[]; proposedAt: string; }; id: string; project: string; title: string; body: string; author: string; images?: LocalImage[]; ... 4 more ...; alignments?: LocalAlignment[]; }' is not assignable to type 'LocalIssue'.
+  Types of property 'alignment' are incompatible.
+    Property 'roundId' is missing in type '{ status: "confirmed"; summary: string; slices: never[]; acceptance: never[]; proposedAt: string; }' but required in type 'LocalAlignment'.
+tests/panel-projects.spec.tsx(40,5): error TS2322: Type '{ alignment: { status: "confirmed"; summary: string; slices: never[]; acceptance: never[]; proposedAt: string; }; id: string; project: string; title: string; body: string; author: string; images?: LocalImage[]; ... 4 more ...; alignments?: LocalAlignment[]; }' is not assignable to type 'LocalIssue'.
+  Types of property 'alignment' are incompatible.
+    Property 'roundId' is missing in type '{ status: "confirmed"; summary: string; slices: never[]; acceptance: never[]; proposedAt: string; }' but required in type 'LocalAlignment'.
+[ELIFECYCLE] Command failed with exit code 2.
+exit=2

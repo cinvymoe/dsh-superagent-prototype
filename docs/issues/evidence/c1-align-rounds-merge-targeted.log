@@ -1,0 +1,37 @@
+$ pnpm vitest run tests/local.spec.ts tests/local-align.spec.ts tests/locales.spec.ts tests/panel-discuss.spec.tsx tests/http.spec.ts tests/docs.spec.ts (post-merge)
+(node:1509320) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1509351) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-9e69570faa5d
+
+(node:1509420) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1509427) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1509440) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1509422) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1509428) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1509439) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (16 tests) 48ms
+ ✓ tests/locales.spec.ts (6 tests) 14ms
+(node:1509427) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1509420) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/http.spec.ts (4 tests) 35ms
+ ✓ tests/local.spec.ts (16 tests) 987ms
+ ✓ tests/panel-discuss.spec.tsx (29 tests) 1412ms
+ ✓ tests/local-align.spec.ts (28 tests) 5644ms
+   ✓ dispatches the confirmed slices as tickets, one per slice, and only after the person confirms  316ms
+   ✓ lets only the create-requirement route carry a body above the management limit  351ms
+
+ Test Files  6 passed (6)
+      Tests  99 passed (99)
+   Start at  00:46:43
+   Duration  7.60s (transform 4.48s, setup 0ms, import 6.94s, tests 8.14s, environment 966ms)
+
+exit=0

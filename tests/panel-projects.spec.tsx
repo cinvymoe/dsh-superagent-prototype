@@ -12,6 +12,9 @@ const project = (id: string, name: string, intakeRepository: string, codeReposit
 const WIDGETS = { ...project('p-widgets', 'Widgets', 'acme/intake', 'acme/widgets'), worktreeRoot: '/srv/worktrees' }
 const OTHER = project('p-other', 'Other', 'acme/intake', 'acme/other')
 const issue = (id: string, projectId: string, title: string) => ({ ...localIssue(title), id, project: projectId })
+/** An open requirement whose alignment was confirmed, so it belongs to the 已确认 bucket rather than 待处理. */
+const confirmed = (row: ReturnType<typeof issue>) => ({ ...row, alignment: { roundId: 'al-1', status: 'confirmed' as const, summary: '',
+  slices: [], acceptance: [], proposedAt: '2026-09-23T00:00:00Z' } })
 const posts = () => server.requests.filter(request => request.path === 'local/projects' && request.method === 'POST')
 const openCreate = async () => {
   const button = document.querySelector<HTMLElement>('.dt-project-bar .dt-project-new')
@@ -33,8 +36,9 @@ const selectedPageTab = () => document.querySelector('.dt-tabs [role="tab"][aria
 
 it('keeps the requirement list when switching projects there and refetches it', async () => {
   server.localProjects = [WIDGETS, OTHER]
-  server.localIssues = [issue('q-widgets', 'p-widgets', 'Widgets requirement'), issue('q-other', 'p-other', 'Other requirement')]
-  at({ page: 'requirements' })
+  server.localIssues = [confirmed(issue('q-widgets', 'p-widgets', 'Widgets requirement')), issue('q-widgets-open', 'p-widgets', 'Widgets pending'),
+    confirmed(issue('q-other', 'p-other', 'Other requirement')), issue('q-other-open', 'p-other', 'Other pending')]
+  at({ page: 'requirements', query: { filter: 'confirmed' } })
   await mount()
   const projectTabs = all('.dt-project-strip [role="tab"]')
   expect(projectTabs.map(item => item.textContent)).toEqual(['Widgets', 'Other'])
@@ -45,16 +49,21 @@ it('keeps the requirement list when switching projects there and refetches it', 
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
   expect(text()).toContain('acme/intake → acme/widgets')
   expect(text()).toContain('/srv/worktrees')
+  // The list opens on the non-default 已确认 filter, so only the confirmed and not the pending row shows.
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false', 'false'])
   expect(requirementTitles()).toEqual(['Widgets requirement'])
   expect(server.requests.some(request => request.path === 'local/issues?project=p-widgets')).toBe(true)
-  // Switching the project keeps the requirement list and refetches it for the new project.
+  // Switching the project keeps that filter, refetches the new project and shows only its confirmed rows.
   await click(tab('Other'))
   expect(all('.dt-project-strip [role="tab"]').map(item => item.getAttribute('aria-selected'))).toEqual(['false', 'true'])
   expect(selectedPageTab()).toBe(zh['tab.requirements'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Other')
   expect(text()).toContain('acme/intake → acme/other')
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false', 'false'])
   expect(requirementTitles()).toEqual(['Other requirement'])
   expect(server.requests.some(request => request.path === 'local/issues?project=p-other')).toBe(true)
+  expect((JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown }).route)
+    .toEqual({ page: 'requirements', query: { filter: 'confirmed' } })
 })
 
 it('keeps the New requirement tab when switching projects there and targets the new project', async () => {
