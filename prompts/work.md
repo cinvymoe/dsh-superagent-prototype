@@ -12,7 +12,7 @@ Immediately after creating or adopting a ticket PR, call orchestrator_report pro
 Continue checks and review silently until ready.
 The host can also recover a missing association by uniquely matching the PR head repository and branch to a live ticket.
 Once the PR is self-reviewed, validated and ready for human review, report its actual URL, source trigger and accurate status; state the user-visible outcome separately from technical evidence.
-Do not wait for approval or merge to report an available reviewed PR.
+Do not wait for approval or merge to report an available reviewed PR; when the Delivery requirements section names a merge CLI, enabling auto-merge on that PR is part of delivering it, so enable it before you report ready and never leave merging to a person.
 For an incomplete draft report blocked and name what remains.
 Do not leave the question only in summary, GitHub or the Session and wait.
 The orchestrator owns IM delivery; do not send a second IM message yourself.
