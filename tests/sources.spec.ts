@@ -344,8 +344,8 @@ describe('github source', () => {
       return 'HTTP/2.0 200 OK\r\nX-Poll-Interval: 60\r\n\r\n[]'
     })
     const config = GithubConfigSchema.parse({})
-    await pollRound(h, config, { id: 'alpha', repository: '', intakeRepository: 'acme/intake-a', codeRepository: 'acme/code-a' }, alpha)
-    await pollRound(h, config, { id: 'beta', repository: '', intakeRepository: 'acme/intake-b', codeRepository: 'acme/code-b' }, beta)
+    await pollRound(h, config, { id: 'alpha', intakeRepository: 'acme/intake-a', codeRepository: 'acme/code-a' }, alpha)
+    await pollRound(h, config, { id: 'beta', intakeRepository: 'acme/intake-b', codeRepository: 'acme/code-b' }, beta)
     expect(reads).toEqual(['repos/acme/intake-a/notifications', 'repos/acme/intake-b/notifications'])
     h.store.close()
   })
@@ -863,7 +863,7 @@ describe('github source', () => {
         if (!outcomes[round++]) throw refused(502, 'Bad Gateway')
         return 'HTTP/2.0 200 OK\r\n\r\n[]'
       })
-      const flaky = await start({}, { enabled: true, config: { failuresBeforeError: 2 } })
+      const flaky = await start({}, { enabled: true, config: { failuresBeforeError: 2, chains: [{ id: 'default', codeRepository: 'acme/widgets' }] } })
       // Each round reads its notifications once, then waits a minute for the next.
       const until = async (count: number) => {
         while (round < count) {
@@ -1100,7 +1100,7 @@ it('reports GitHub as failing only after the configured number of consecutive fa
   expect(pollFailure(1, 3, eof)).toBeUndefined()
   expect(pollFailure(2, 3, eof)).toBeUndefined()
   expect(pollFailure(3, 3, eof)).toEqual({ state: 'error', detail: '3 consecutive failed polls; last: Error: Get "https://api.github.com/x": EOF', code: 'pollFailures', values: { count: '3', error: 'Error: Get "https://api.github.com/x": EOF' } })
-  expect(githubKind.schema.parse({})).toEqual({ repository: '', intakeRepository: '', codeRepository: '', cli: '',
+  expect(githubKind.schema.parse({})).toEqual({ chains: [], cli: '',
     pollSeconds: 60, failuresBeforeError: 3, observeIssues: false, observePulls: false, observeComments: false, observeCi: false })
 })
 describe('feishu event consumer', () => {

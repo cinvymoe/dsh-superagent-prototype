@@ -270,8 +270,8 @@ it('renames the variables a stored prepare command reads from earlier project na
 })
 
 it('reads a stored GitHub Source configuration that names a merge account without it', () => {
-  const settings = SettingsSchema.parse(migrateSettings({ sources: { github: { enabled: true, config: { repository: 'acme/widgets', cli: 'gh-agent', mergeCli: 'gh-merge-account', pollSeconds: 120 } } } }))
-  expect(settings.sources.github!.config).toEqual({ repository: 'acme/widgets', cli: 'gh-agent', pollSeconds: 120 })
+  const settings = SettingsSchema.parse(migrateSettings({ sources: { github: { enabled: true, config: { chains: [{ id: 'default', codeRepository: 'acme/widgets' }], cli: 'gh-agent', mergeCli: 'gh-merge-account', pollSeconds: 120 } } } }))
+  expect(settings.sources.github!.config).toEqual({ chains: [{ id: 'default', codeRepository: 'acme/widgets' }], cli: 'gh-agent', pollSeconds: 120 })
 })
 
 describe('assessment outcomes', () => {
@@ -411,7 +411,7 @@ describe('bots and events without a sender', () => {
   const observing = (config: Record<string, unknown>, part: Record<string, unknown> = {},
     mode: 'auto' | 'off' = 'auto') => SettingsSchema.parse({
     policy: { sources: { github: { allowed: [{ id: 'Alice' }], bots: [{ id: 'dependabot[bot]' }], ...part } } }, eval: { mode },
-    sources: { github: { enabled: true, config } } })
+    sources: { github: { enabled: true, config: { chains: [{ id: 'default', codeRepository: 'acme/widgets' }], ...config } } } })
   const comment: Trigger = { id: 'b', source: 'github', threads: [{ source: 'github', id: '1' }],
     actor: { source: 'github', id: 'dependabot[bot]' }, human: false, at: '', text: 'Bump lodash',
     meta: { number: 1, isPr: true, kind: 'conversation' } }

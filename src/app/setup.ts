@@ -16,7 +16,6 @@ export interface SetupHost {
 const setupFields = (settings: Settings) =>
   JSON.stringify(Object.entries(SETUP_FIELDS).map(([id, keys]) => keys.map(key => {
     const value = settings.sources[id]?.config[key]
-    // An empty chain list and an absent legacy chain list mean the same single-chain deployment.
     return key === 'chains' ? value ?? [] : value ?? ''
   })))
 export const setupChanged = (before: Settings, after: Settings): boolean => setupFields(before) !== setupFields(after)

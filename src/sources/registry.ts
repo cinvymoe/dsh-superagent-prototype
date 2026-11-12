@@ -130,9 +130,10 @@ export class SourceRegistry implements SourceScope {
     if (!instance.enabled) return { listened: false, reason: 'source_disabled' }
     return kind.scope ? kind.scope({ meta: input.meta }, instance.config) : { listened: true, observed: false }
   }
-  /** Falls back to schema defaults and disables the instance when stored configuration fails validation. */
+  /** Normalizes then validates stored configuration, falling back to schema defaults and disabling the instance when it fails validation. */
   private resolve(kind: SourceKind, stored: { enabled: boolean; config: Record<string, unknown> } | undefined): SourceInstance {
-    const parsed = kind.schema.safeParse(stored?.config ?? {})
+    const raw = stored?.config ?? {}
+    const parsed = kind.schema.safeParse(kind.normalizeConfig ? kind.normalizeConfig(raw) : raw)
     return { id: kind.kind, kind: kind.kind, enabled: parsed.success && (stored?.enabled ?? true), config: parsed.success ? parsed.data : kind.schema.parse({}) }
   }
 }

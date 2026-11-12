@@ -2,7 +2,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { key, type Thread } from '../core/index.ts'
 import { sameName } from '../infra/text.ts'
-import { GithubConfigSchema, githubChains, type Deployment, type GithubChain, type GithubConfig } from '../deployment.ts'
+import { GithubConfigSchema, githubChains, normalizeGithubConfig, type Deployment, type GithubChain, type GithubConfig } from '../deployment.ts'
 import { CliError, validItems, type Tally } from '../infra/commands.ts'
 import { ciCounts, ciFact, ciFailures, ciSummary, githubThreadContext, pullChecks } from './github-read.ts'
 import { branchCiTrigger, ciTrigger, commentTrigger, CommentSchema, githubAddress, githubRepository, issueTrigger, IssueSchema, pullTrigger,
@@ -36,20 +36,15 @@ export const githubKind: SourceKind<GithubConfig> = {
   title: { zh: 'GitHub', en: 'GitHub' },
   description: { zh: '智能体的 GitHub 账号；每条链路从一个 Issue 仓库接收通知，在对应的执行仓库执行代码并接收 PR 讨论与 CI 状态。所有链路共用本卡的账号与 CLI。', en: 'The agent\'s GitHub account; each chain receives notifications from its intake repository and executes code, PR discussion, and CI in its code repository. All chains share this card\'s account and CLI.' },
   schema: GithubConfigSchema,
+  normalizeConfig: normalizeGithubConfig,
   fields: [
     { key: 'chains', type: 'rows', label: { zh: '仓库链路（一个 Issue 仓库 → 一个执行仓库）', en: 'Repository chains (one intake repository → one code repository)' },
-      hint: { zh: '每个链路独立轮询、独立执行。id 用 lowercase-kebab-case，作为线程与工单的来源标识；留空时使用下面的旧版单链路字段。所有链路共用本卡的 GitHub CLI 与账号。', en: 'Each chain polls and executes independently. Use lowercase-kebab-case ids; they identify threads and tickets from this chain. When empty, the legacy single chain below is used. Every chain shares this card\'s GitHub CLI and account.' },
+      hint: { zh: '至少配置一条链路。每行一个链路：id 用 lowercase-kebab-case，id 与执行代码的仓库必填，接收 Issue 的仓库留空即使用同一个执行仓库。每个链路独立轮询、独立执行，所有链路共用本卡的 GitHub CLI 与账号。', en: 'Configure at least one chain. One row per chain: id is lowercase-kebab-case, id and code repository are required, and an empty intake repository uses the same code repository. Each chain polls and executes independently; every chain shares this card\'s GitHub CLI and account.' },
       columns: [
         { key: 'id', type: 'text', label: { zh: '链路 ID', en: 'Chain id' }, pattern: '[a-z][a-z0-9-]*' },
-        { key: 'intakeRepository', type: 'text', label: { zh: '接收 Issue 的仓库', en: 'Intake repository' }, pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+' },
+        { key: 'intakeRepository', type: 'text', label: { zh: '接收 Issue 的仓库', en: 'Intake repository' }, pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+', optional: true },
         { key: 'codeRepository', type: 'text', label: { zh: '执行代码的仓库', en: 'Code repository' }, pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+' },
       ] },
-    { key: 'intakeRepository', type: 'text', pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+', label: { zh: '接收 Issue 的仓库（旧版单链路）', en: 'Issue intake repository (legacy single chain)' },
-      hint: { zh: '写作 owner/name。这个仓库的 Issue、通知和讨论会进入来源；留空时与执行代码的仓库相同。', en: 'Written owner/name. The Source receives this repository\'s Issues, notifications, and discussion; leave empty to use the code repository.' } },
-    { key: 'codeRepository', type: 'text', pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+', label: { zh: '执行代码的仓库（旧版单链路）', en: 'Code repository (legacy single chain)' },
-      hint: { zh: '写作 owner/name。执行器在这里检出代码、推送分支并开 PR；保存时检查智能体账号能否推送到它。留空时使用旧版 repository。', en: 'Written owner/name. The Executor checks out code, pushes branches, and opens pull requests here; saving checks that the agent account can push to it. Empty uses the legacy repository.' } },
-    { key: 'repository', type: 'text', advanced: true, pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+', label: { zh: '旧版仓库（兼容）', en: 'Legacy repository (compatibility)' },
-      hint: { zh: '旧版单仓库配置；上面两个字段都留空时作为两者的回退值。', en: 'Legacy single-repository setting; used as the fallback for both fields above when they are empty.' } },
     { key: 'cli', type: 'text', label: { zh: '智能体的 GitHub CLI', en: 'Agent GitHub CLI' },
       hint: { zh: '命令名或绝对路径，通常是用 GH_CONFIG_DIR 登录智能体账号的 gh 包装脚本。智能体以它登录的账号行事，执行器以 gh 调用它。保存时检查它登录的账号能否推送到仓库，然后重启 dsh-superagent。', en: 'A command name or absolute path, usually a gh wrapper signed in to the agent account through GH_CONFIG_DIR. The agent acts as the account it is signed in to, and the Executor calls it as gh. Saving checks that this account can push to the repository, then restarts dsh-superagent.' } },
     { key: 'pollSeconds', type: 'number', advanced: true, min: 60, max: 3600, label: { zh: '轮询间隔 / 秒', en: 'Polling interval / seconds' }, hint: { zh: 'GitHub 要求更长间隔时以 GitHub 为准。', en: 'A longer interval requested by GitHub wins.' } },
@@ -75,8 +70,8 @@ export const githubKind: SourceKind<GithubConfig> = {
   find: (query, config) => {
     const number = (/^#?(\d+)$/.exec(query.trim()) ?? /github\.com\/[^/]+\/[^/]+\/(?:pull|issues)\/(\d+)/.exec(query))?.[1]
     if (!number) return { threads: [], terms: [] }
-    const chains = config ? githubChains(config) : [{ id: 'default' }]
-    return { threads: chains.map(chain => `${SOURCE}:${chain.id === 'default' ? number : `${chain.id}:${number}`}`), terms: [] }
+    const ids = config ? githubChains(config).map(chain => chain.id) : []
+    return { threads: (ids.length ? ids : ['default']).map(id => `${SOURCE}:${id === 'default' ? number : `${id}:${number}`}`), terms: [] }
   },
   policy: {
     schema: z.object({ allowed: z.array(z.object({ id: z.string().regex(/^[A-Za-z0-9-]+$/) }).strict()).default([]),
@@ -88,7 +83,7 @@ export const githubKind: SourceKind<GithubConfig> = {
       columns: [{ key: 'id', type: 'text', label: { zh: '账号', en: 'Account' }, pattern: '[A-Za-z0-9\\-]+(\\[bot\\])?' }] }],
     explicit: { zh: '名单里的账号在 Issue 或评论里 @ 智能体的账号。', en: 'An account on the list mentions the agent\'s account in an Issue or a comment.' },
     rows(stored) {
-      const config = GithubConfigSchema.partial().parse(stored)
+      const config = GithubConfigSchema.partial().parse(normalizeGithubConfig(stored))
       const note = (observed: boolean | undefined) => observed ? { zh: '全部', en: 'All' } : { zh: '仅 @', en: '@ only' }
       const row = (id: Scope, label: { zh: string; en: string }) => ({ id, label, note: note(config[OBSERVED[id]]),
         cells: { listedUnaddressed: !!config[OBSERVED[id]], unlistedAddressed: true, unlistedUnaddressed: !!config[OBSERVED[id]] } })
@@ -316,7 +311,8 @@ export async function pollRound(ctx: SourceContext, config: GithubConfig, chain:
 export async function pollRound(ctx: SourceContext, configOrSignal?: GithubConfig | AbortSignal, chain?: GithubChain, deployment?: Deployment, signal?: AbortSignal): Promise<number> {
   const legacy = configOrSignal === undefined || configOrSignal instanceof AbortSignal
   const config = legacy ? ctx.config<GithubConfig>(SOURCE) ?? GithubConfigSchema.parse({}) : configOrSignal
-  const selected = chain ?? githubChains(config)[0]!
+  // A caller that builds one deployment by hand (the single-argument overload) has no chain row to select; its deployment is the default chain.
+  const selected = chain ?? githubChains(config)[0] ?? { id: 'default', intakeRepository: '', codeRepository: '' }
   const target = deployment ?? ctx.deploymentFor?.(selected.id) ?? ctx.deployment
   const abort = legacy ? configOrSignal as AbortSignal | undefined : signal
   const round = newRound(abort)

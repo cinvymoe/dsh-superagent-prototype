@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Config, executable, machineOf, resolveDeployment, resolveFeishuBot, type Machine, type Probe } from '../src/deployment.ts'
+import { Config, executable, GithubConfigSchema, machineOf, normalizeGithubConfig, resolveDeployment, resolveFeishuBot, type Machine,
+  type Probe } from '../src/deployment.ts'
 import { gitEnv } from './fixtures/git.ts'
 
 const exec = promisify(execFile)
@@ -58,48 +59,46 @@ describe('configuration schema', () => {
 
 describe('setup', () => {
   it('reads the repository from the GitHub Source and the accounts from their CLIs, skipping the worker shims', async () => {
-    const deployment = await resolveDeployment(machine(), { repository: 'acme/widgets', cli: 'gh' }, probe, path)
+    const deployment = await resolveDeployment(machine(), { chains: [{ id: 'default', codeRepository: 'acme/widgets' }], cli: 'gh' }, probe, path)
     expect(deployment).toMatchObject({ repository: 'acme/widgets', github: { cli: join(dir, 'bin', 'gh'), login: 'Agent-Bot', noreply: '7+Agent-Bot@users.noreply.github.com' } })
     expect(deployment.github).toEqual({ cli: join(dir, 'bin', 'gh'), login: 'Agent-Bot', noreply: '7+Agent-Bot@users.noreply.github.com' })
     expect(deployment).not.toHaveProperty('feishu')
     // A renamed repository is still resolved by its old name; notifications carry GitHub's current full_name.
-    expect((await resolveDeployment(machine(), { repository: 'acme/gadgets', cli: 'gh' }, probe, path)).repository).toBe('acme/widgets')
+    expect((await resolveDeployment(machine(), { chains: [{ id: 'default', codeRepository: 'acme/gadgets' }], cli: 'gh' }, probe, path)).repository).toBe('acme/widgets')
   })
   it('names what setup needs and where it is set', async () => {
     const needs = (place: string, code: string, values: Record<string, unknown>, github: unknown) =>
       expect(resolveDeployment(machine(), github, probe, path)).rejects.toEqual(setupError(place, code, values))
-    const repository = 'acme/widgets'
+    const chain = (codeRepository = 'acme/widgets') => ({ chains: [{ id: 'default', codeRepository }], cli: 'gh' })
     await needs('github', 'repositoryUnset', {}, { cli: 'gh' })
-    await needs('github', 'agentCliUnset', {}, { repository })
-    await needs('github', 'agentCliMissing', { output: `${join(dir, 'missing')} is not an executable file` }, { repository, cli: join(dir, 'missing') })
-    await needs('github', 'agentCliMissing', { output: 'bin/gh must be a command name or an absolute path' }, { repository, cli: 'bin/gh' })
-    await needs('github', 'agentCliSignedOut', {}, { repository, cli: program(join(dir, 'bin', 'gh-broken'), 'exit 1') })
-    await needs('github', 'repositoryReadOnly', { account: 'Agent-Bot', repository: 'acme/widgets' }, { repository, cli: gh(join(dir, 'bin', 'gh-reader'), 'Agent-Bot', false) })
+    await needs('github', 'agentCliUnset', {}, { chains: [{ id: 'default', codeRepository: 'acme/widgets' }] })
+    await needs('github', 'agentCliMissing', { output: `${join(dir, 'missing')} is not an executable file` }, { ...chain(), cli: join(dir, 'missing') })
+    await needs('github', 'agentCliMissing', { output: 'bin/gh must be a command name or an absolute path' }, { ...chain(), cli: 'bin/gh' })
+    await needs('github', 'agentCliSignedOut', {}, { ...chain(), cli: program(join(dir, 'bin', 'gh-broken'), 'exit 1') })
+    await needs('github', 'repositoryReadOnly', { account: 'Agent-Bot', repository: 'acme/widgets' }, { ...chain(), cli: gh(join(dir, 'bin', 'gh-reader'), 'Agent-Bot', false) })
     // Signed in, but the account cannot read the repository, or the CLI names no account.
     const unreadable = program(join(dir, 'bin', 'gh-outsider'),
       `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  *) echo 'HTTP 404' >&2; exit 1 ;;\nesac`)
     const output = expect.stringContaining('HTTP 404') as unknown
-    await needs('github', 'repositoryUnreadable', { account: 'Agent-Bot', repository: 'acme/widgets', output }, { repository, cli: unreadable })
-    await needs('github', 'agentCliNoAccount', {}, { repository, cli: program(join(dir, 'bin', 'gh-anonymous'), `echo '{}'`) })
+    await needs('github', 'repositoryUnreadable', { account: 'Agent-Bot', repository: 'acme/widgets', output }, { ...chain(), cli: unreadable })
+    await needs('github', 'agentCliNoAccount', {}, { ...chain(), cli: program(join(dir, 'bin', 'gh-anonymous'), `echo '{}'`) })
     expect(() => executable('nothing-here', join(dir, 'bin'))).toThrow('nothing-here is not an executable file on PATH')
   })
-  it('resolves separate intake and code repositories, falling back to the legacy repository when a field is blank', async () => {
+  it('resolves separate intake and code repositories, defaulting a blank intake repository to the code repository', async () => {
     // The intake repository needs read access only, so its access report may name a repository the account cannot push to.
     program(join(dir, 'bin', 'gh-split'), `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  "api repos/acme/widgets"*) echo '{"name":"acme/widgets","push":true}' ;;\n  "api repos/acme/intake"*) echo '{"name":"acme/intake","push":false}' ;;\n  *) exit 1 ;;\nesac`)
-    const split = { codeRepository: 'acme/widgets', intakeRepository: 'acme/intake', cli: 'gh-split' }
+    const split = { chains: [{ id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets' }], cli: 'gh-split' }
     expect(await resolveDeployment(machine(), split, probe, path)).toMatchObject({ repository: 'acme/widgets', intakeRepository: 'acme/intake' })
-    // A blank code repository falls back to the legacy repository; a blank intake repository falls back to the code repository.
-    expect(await resolveDeployment(machine(), { repository: 'acme/widgets', intakeRepository: 'acme/intake', cli: 'gh-split' }, probe, path))
-      .toMatchObject({ repository: 'acme/widgets', intakeRepository: 'acme/intake' })
-    expect(await resolveDeployment(machine(), { repository: 'acme/widgets', cli: 'gh-split' }, probe, path))
+    // A blank intake repository falls back to the chain's code repository.
+    expect(await resolveDeployment(machine(), { chains: [{ id: 'default', codeRepository: 'acme/widgets' }], cli: 'gh-split' }, probe, path))
       .toMatchObject({ repository: 'acme/widgets', intakeRepository: 'acme/widgets' })
     // The intake lookup is skipped when it names the code repository, and an unreadable separate intake repository fails setup.
     program(join(dir, 'bin', 'gh-code'), `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  "api repos/acme/widgets"*) echo '{"name":"acme/widgets","push":true}' ;;\n  *) exit 1 ;;\nesac`)
-    expect(await resolveDeployment(machine(), { repository: 'acme/widgets', cli: 'gh-code' }, probe, path)).toMatchObject({ intakeRepository: 'acme/widgets' })
-    await expect(resolveDeployment(machine(), { repository: 'acme/widgets', intakeRepository: 'acme/intake', cli: 'gh-code' }, probe, path))
+    expect(await resolveDeployment(machine(), { chains: [{ id: 'default', codeRepository: 'acme/widgets' }], cli: 'gh-code' }, probe, path)).toMatchObject({ intakeRepository: 'acme/widgets' })
+    await expect(resolveDeployment(machine(), { chains: [{ id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets' }], cli: 'gh-code' }, probe, path))
       .rejects.toEqual(setupError('github', 'repositoryUnreadable', { repository: 'acme/intake' }))
   })
-  it('resolves every configured repository chain and keeps the legacy single chain as the default', async () => {
+  it('resolves every configured repository chain, and setup needs at least one chain', async () => {
     program(join(dir, 'bin', 'gh-chains'), `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  "api repos/acme/code-a"*) echo '{"name":"acme/code-a","push":true}' ;;\n  "api repos/acme/intake-a"*) echo '{"name":"acme/intake-a","push":false}' ;;\n  "api repos/acme/code-b"*) echo '{"name":"acme/code-b","push":true}' ;;\n  "api repos/acme/intake-b"*) echo '{"name":"acme/intake-b","push":false}' ;;\n  *) exit 1 ;;\nesac`)
     const deployment = await resolveDeployment(machine(), { cli: 'gh-chains', chains: [
       { id: 'alpha', intakeRepository: 'acme/intake-a', codeRepository: 'acme/code-a' },
@@ -110,9 +109,30 @@ describe('setup', () => {
       alpha: { chain: 'alpha', repository: 'acme/code-a', intakeRepository: 'acme/intake-a' },
       beta: { chain: 'beta', repository: 'acme/code-b', intakeRepository: 'acme/intake-b' },
     })
+    // A legacy single-chain configuration is read as one default chain.
     expect(await resolveDeployment(machine(), { repository: 'acme/widgets', cli: 'gh' }, probe, path)).toMatchObject({
       chains: { default: { chain: 'default', repository: 'acme/widgets', intakeRepository: 'acme/widgets' } },
     })
+    // An explicit empty chain list is not a fallback: setup reports the missing repository even when a legacy field is present.
+    await expect(resolveDeployment(machine(), { chains: [], cli: 'gh' }, probe, path)).rejects.toEqual(setupError('github', 'repositoryUnset'))
+    await expect(resolveDeployment(machine(), { chains: [], repository: 'acme/widgets', cli: 'gh' }, probe, path))
+      .rejects.toEqual(setupError('github', 'repositoryUnset'))
+  })
+  it('normalizes a stored legacy single-chain configuration into one default chain and rejects incomplete chains', () => {
+    expect(normalizeGithubConfig({ repository: 'acme/widgets', intakeRepository: 'acme/intake', codeRepository: 'acme/code', cli: 'gh' }))
+      .toEqual({ cli: 'gh', chains: [{ id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/code' }] })
+    // An empty or explicit chain list is kept as-is, and the legacy fields are dropped either way.
+    expect(normalizeGithubConfig({ chains: [], repository: 'acme/widgets', cli: 'gh' })).toEqual({ chains: [], cli: 'gh' })
+    expect(normalizeGithubConfig({ repository: 'acme/widgets', intakeRepository: 'acme/intake', codeRepository: '' }))
+      .toEqual({ chains: [{ id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets' }] })
+    expect(normalizeGithubConfig({ repository: '', intakeRepository: 'acme/intake' })).toEqual({ chains: [] })
+    expect(normalizeGithubConfig(null)).toEqual({})
+    expect(() => GithubConfigSchema.parse({ chains: [{ codeRepository: 'acme/widgets' }] })).toThrow()
+    expect(() => GithubConfigSchema.parse({ chains: [{ id: 'alpha' }] })).toThrow()
+    expect(() => GithubConfigSchema.parse({ repository: 'acme/widgets' })).toThrow()
+    // A blank intake repository resolves to the chain's code repository when parsed.
+    expect(GithubConfigSchema.parse({ chains: [{ id: 'alpha', codeRepository: 'acme/widgets' }] }).chains[0])
+      .toMatchObject({ id: 'alpha', intakeRepository: 'acme/widgets', codeRepository: 'acme/widgets' })
   })
   it('reads the Feishu bot from a bot-only lark-cli, or finds none when the Feishu Source names no CLI', async () => {
     expect(await resolveFeishuBot(machine(), {}, probe, path)).toBeUndefined()

@@ -99,17 +99,22 @@ it('shows the account each CLI signs in as, and keeps a saved CLI on screen whil
   const github = all('.dt-card')[1]!
   expect(github.textContent).toContain('当前账号 @agent-bot')
   const labels = () => [...github.querySelectorAll('label')].map(label => label.textContent)
-  expect(labels()).toEqual(['接收 Issue 的仓库（旧版单链路）', '执行代码的仓库（旧版单链路）', '智能体的 GitHub CLI'])
-  expect(field<HTMLInputElement>('接收 Issue 的仓库（旧版单链路）').value).toBe('')
-  expect(field<HTMLInputElement>('执行代码的仓库（旧版单链路）').value).toBe('')
+  // The chains are rows, so only the CLI is an ordinary field.
+  expect(labels()).toEqual(['智能体的 GitHub CLI'])
+  expect(github.textContent).not.toContain('旧版单链路')
+  expect(github.textContent).not.toContain('旧版仓库（兼容）')
+  const chains = () => github.querySelectorAll('.dt-rows-item')
+  expect(chains()).toHaveLength(1)
+  expect(chains()[0]!.textContent).toContain('default')
+  expect(field<HTMLInputElement>('接收 Issue 的仓库').value).toBe('acme/widgets')
+  expect(field<HTMLInputElement>('执行代码的仓库').value).toBe('acme/widgets')
   // A fact describes the saved value, so an edited CLI shows none until it is saved.
   await type(field<HTMLInputElement>('智能体的 GitHub CLI'), 'gh-other')
   expect(github.textContent).not.toContain('当前账号 @agent-bot')
   await click(zh.discard)
   expect(github.textContent).toContain('当前账号 @agent-bot')
   await click([...github.querySelectorAll<HTMLElement>('[data-disclosure-row]')].find(row => row.textContent?.includes('高级'))!)
-  expect(labels()).toEqual(['接收 Issue 的仓库（旧版单链路）', '执行代码的仓库（旧版单链路）', '智能体的 GitHub CLI', '旧版仓库（兼容）', '轮询间隔 / 秒', '连续失败几次后报告异常'])
-  expect(field<HTMLInputElement>('旧版仓库（兼容）').value).toBe('acme/widgets')
+  expect(labels()).toEqual(['智能体的 GitHub CLI', '轮询间隔 / 秒', '连续失败几次后报告异常'])
   expect(all('.dt-card')[0]!.textContent).toContain('当前机器人 Widgets Bot')
   await type(field<HTMLInputElement>('智能体的 GitHub CLI'), '/opt/bin/gh-agent')
   expect(github.textContent).toContain('保存会重启 dsh-superagent：2 个进行中的派工会中断，并带恢复说明重新开始。')
@@ -120,6 +125,70 @@ it('shows the account each CLI signs in as, and keeps a saved CLI on screen whil
   expect(field<HTMLInputElement>('智能体的 GitHub CLI').value).toBe('/opt/bin/gh-agent')
   expect(field('智能体的 GitHub CLI').matches(':disabled')).toBe(true)
   expect(sessionStorage.getItem('dsh-superagent/draft/master/source:github')).toBeNull()
+})
+
+it('edits repository chain rows and stores only the explicit chains with no legacy fields', async () => {
+  await mount()
+  await click(tab(zh['tab.settings']))
+  const github = all('.dt-card')[1]!
+  // Editing the saved default chain changes its repositories in place.
+  await type(field<HTMLInputElement>('接收 Issue 的仓库'), 'acme/intake')
+  await type(field<HTMLInputElement>('执行代码的仓库'), 'acme/widgets-next')
+  // A new row starts blank; its id and code repository are required, and a blank intake uses the code repository.
+  await click([...github.querySelectorAll('button')].find(button => button.textContent === '添加')!)
+  const rows = github.querySelectorAll('.dt-rows-item')
+  expect(rows).toHaveLength(2)
+  const input = (row: Element, name: string) => row.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!
+  await type(input(rows[1]!, '链路 ID'), 'tools')
+  await type(input(rows[1]!, '执行代码的仓库'), 'acme/tools')
+  await act(async () => { github.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
+  const saved = server.settings.sources.github!.config
+  expect(saved.chains).toEqual([
+    { id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets-next' },
+    { id: 'tools', intakeRepository: 'acme/tools', codeRepository: 'acme/tools' },
+  ])
+  expect(saved).not.toHaveProperty('repository')
+  expect(saved).not.toHaveProperty('intakeRepository')
+  expect(saved).not.toHaveProperty('codeRepository')
+})
+
+it('reads an old single-chain configuration as the default chain and saves it once as chains only', async () => {
+  server.settings.sources.github = { enabled: true, config: { repository: 'acme/widgets', intakeRepository: 'acme/intake',
+    codeRepository: 'acme/widgets', cli: 'gh-agent', pollSeconds: 120 } }
+  await mount()
+  await click(tab(zh['tab.settings']))
+  const github = all('.dt-card')[1]!
+  const rows = github.querySelectorAll('.dt-rows-item')
+  expect(rows).toHaveLength(1)
+  expect(rows[0]!.textContent).toContain('default')
+  expect(field<HTMLInputElement>('接收 Issue 的仓库').value).toBe('acme/intake')
+  expect(field<HTMLInputElement>('执行代码的仓库').value).toBe('acme/widgets')
+  expect(github.textContent).not.toContain('旧版仓库（兼容）')
+  // Any edit saves the normalized draft, and the stored configuration drops the old fields.
+  await type(field<HTMLInputElement>('智能体的 GitHub CLI'), 'gh-agent-next')
+  await act(async () => { github.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
+  const saved = server.settings.sources.github!.config
+  expect(saved.chains).toEqual([{ id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets' }])
+  expect(saved.cli).toBe('gh-agent-next')
+  expect(saved).not.toHaveProperty('repository')
+  expect(saved).not.toHaveProperty('intakeRepository')
+  expect(saved).not.toHaveProperty('codeRepository')
+})
+
+it('refuses a chain row without its id or code repository', async () => {
+  await mount()
+  await click(tab(zh['tab.settings']))
+  const github = all('.dt-card')[1]!
+  await click([...github.querySelectorAll('button')].find(button => button.textContent === '添加')!)
+  const row = github.querySelectorAll('.dt-rows-item')[1]!
+  await type(row.querySelector<HTMLInputElement>('input[aria-label="链路 ID"]')!, 'tools')
+  // The code repository stays blank, so the strict schema refuses the save and the stored configuration stays as it was.
+  await act(async () => { github.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
+  expect(server.requests.find(request => request.path === 'settings/source:github' && request.method === 'PUT')).toMatchObject({
+    body: { value: { config: { chains: [{ id: 'default', intakeRepository: 'acme/widgets', codeRepository: 'acme/widgets' },
+      { id: 'tools', intakeRepository: '', codeRepository: '' }] } } } })
+  expect(server.settings.sources.github!.config.chains).toEqual([{ id: 'default', intakeRepository: 'acme/widgets', codeRepository: 'acme/widgets' }])
+  expect(github.querySelector('.dt-savebar [role="alert"]')?.textContent).toContain('Invalid settings')
 })
 
 it('points a setup problem at the settings that fix it', async () => {
