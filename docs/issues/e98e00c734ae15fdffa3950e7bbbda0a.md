@@ -1,6 +1,7 @@
 ---
 arch_impact: local
-pr_status: pending
+pr_status: open
+pr_url: https://github.com/cinvymoe/dsh-superagent-prototype/pull/11
 pr_arch_impact: local
 worktrees: []
 ---
@@ -67,4 +68,9 @@ worktrees: []
 
 ## 交付记录
 
-（e4 回填）
+- 提交：`71670bad`（分支 `agent/github-source-e98e00c734ae`，基线 deployment `main` @ `04cb0449`），commit body 含 `slice-C1` trailer；作者 `cinvymoe-superagent`。
+- PR：https://github.com/cinvymoe/dsh-superagent-prototype/pull/11（`pr_status: open`，`pr_arch_impact: local`）。
+- 测试证据：`docs/issues/evidence/c1-check.log`（`pnpm check` exit 0，63 files / 1252 tests，Build complete）、`docs/issues/evidence/c1-targeted.log`（6 files / 530 tests）。
+- 评审：`docs/issues/review.md`（Standards approve，无 must-fix；Spec 5/5 PASS）。
+- 视觉证据：`docs/evidence/c1-github-chains/before-source.png` / `after-source.png`（同场景、1440×1100、浅色、zh-CN；Before = `04cb0449` 真实面板，After = 本分支 head）。
+- 未启用 auto-merge，PR 由人复核合并。
