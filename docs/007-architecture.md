@@ -652,6 +652,8 @@ Every plugin configuration key except `stateDir` is volatile. The panel's Deploy
 
 A settings save that changes a Source field setup reads, such as an account's CLI, and any save while setup waits, restarts dsh-superagent. DeepSeek Harness's settings service does not serve the entry during that restart, so after its own restart dsh-superagent asks it to read the entry again, and an open form becomes editable again.
 
+Code differs from configuration. A rebuilt checkout takes effect only when the process that loaded it restarts: dsh-superagent loads its built files at startup, Node caches those modules, and re-mounting the plugin does not reload them, so the plugin never restarts the process that loaded it. [006 Deployment](006-deployment.md) covers the flow from a merged pull request to a running version, for a dedicated profile this script manages and for a host profile another supervisor restarts.
+
 ## Reviewing a change against real data
 
 Point `DSH_HOME` at a temporary directory and create a new profile there. Copy the database from a backup, disable every Source, pause processing and remove the main Session id. Give the GitHub and Feishu CLIs read-only stand-ins.
