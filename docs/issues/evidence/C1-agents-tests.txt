@@ -16,15 +16,16 @@ Full log: docs/issues/evidence/C1-agents-targeted-tests.log
 Command: pnpm typecheck  (tsc --noEmit)
 Exit: 0 (no diagnostics)
 
-3) PR 前全量门禁
+3) PR 前全量门禁（合并 deployment main 422a21a4 之后重跑）
 Command (clean host env, see note):
   env -u GIT_ASKPASS -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_PAGER \
       -u GIT_TERMINAL_PROMPT -u LANGUAGE LANG=C.UTF-8 LC_ALL=C.UTF-8 pnpm check
 Exit: 0  (typecheck + full vitest + tsdown build)
-Build tail: "[CJS] lib/client.js 424.22 kB ... ✔ Build complete", "[ESM] lib/index.js 507.89 kB ... ✔ Build complete"
-Full vitest within the same change set (separate run, durable log):
-  Test Files 65 passed (65) / Tests 1331 passed (1331), duration 22.23s
-Full log: docs/issues/evidence/C1-agents-full-tests.log
+Result: Test Files 66 passed (66) / Tests 1352 passed (1352); build "✔ Build complete" (CJS and ESM)
+Full log: docs/issues/evidence/C1-agents-check.log
+Merge note: the branch was 14 commits behind deployment main, so main was merged in; the only
+conflict was src/app/sessions.ts (main's new Q&A Session ANSWER_TOOLS vs this slice moving the role
+tool lists into src/app/agent-tools.ts) and was resolved by keeping ANSWER_TOOLS and importing the rest.
 
 Environment note (honest record)
 - The ticket worker shell exports GIT_CONFIG_GLOBAL=/root/.dsh/state/superagent/worker-gitconfig, GIT_CONFIG_NOSYSTEM=1
@@ -35,8 +36,8 @@ Environment note (honest record)
 - Re-running those two files with the host git/locale variables unset passed: Test Files 2 passed (2) /
   Tests 108 passed (108). The clean-env `pnpm check` above is therefore the faithful full-gate result, and the
   3 failures are host-environment artifacts, not caused by this slice (they are reproducible on the baseline).
-- No test was skipped, deleted or weakened; the full suite count grew from 1288 (main) to 1331 with this slice's
-  5 new agent-config cases and the added assertions in policy/settings/http/locales/tools.
+- No test was skipped, deleted or weakened; the post-merge full suite is 1352 tests, this slice adding
+  5 new agent-config cases and assertions in policy/settings/http/locales/tools.
 
 Acceptance mapping (details in docs/issues/review.md)
 1. SettingsSchema.parse({}) / old settings / migrateSettings  → tests/policy.spec.ts "agent settings" (2 cases)
