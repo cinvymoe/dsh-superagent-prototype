@@ -69,21 +69,24 @@ describe('the local issue board', () => {
     expect(() => issues.createProject({ name: 'Demo', repository: 'acme/other' })).toThrow('already exists')
   })
 
-  it('stores an optional absolute worktree root and refuses relative or blank values', () => {
+  it('stores an optional absolute worktree root, treats blank values as unconfigured, and refuses relative ones', () => {
     const { issues } = setup()
     const rooted = issues.createProject({ name: 'Rooted', repository: 'acme/widgets', worktreeRoot: '/tmp/worktrees' })
     expect(rooted.worktreeRoot).toBe('/tmp/worktrees')
     expect(issues.project(rooted.id)?.worktreeRoot).toBe('/tmp/worktrees')
     expect(issues.createProject({ name: 'Trimmed', repository: 'acme/widgets', worktreeRoot: '  /tmp/spaced  ' }).worktreeRoot).toBe('/tmp/spaced')
-    // Omitted and exactly empty mean unconfigured, and the record carries no field for either.
+    // Omitted, exactly empty and whitespace-only all mean unconfigured, and the record carries no field for any of them.
     expect(issues.createProject({ name: 'Omitted', repository: 'acme/widgets' })).not.toHaveProperty('worktreeRoot')
     expect(issues.createProject({ name: 'Empty', repository: 'acme/widgets', worktreeRoot: '' })).not.toHaveProperty('worktreeRoot')
+    const blank = issues.createProject({ name: 'Blank', repository: 'acme/widgets', worktreeRoot: '   ' })
+    expect(blank).not.toHaveProperty('worktreeRoot')
+    expect(issues.project(blank.id)).not.toHaveProperty('worktreeRoot')
     const code = (worktreeRoot: string): unknown => {
       try { issues.createProject({ name: `Bad ${worktreeRoot}`, repository: 'acme/widgets', worktreeRoot }) } catch (error) { return (error as { code?: unknown }).code }
       return undefined
     }
     expect(code('relative/root')).toBe('projectWorktreeRoot')
-    expect(code('   ')).toBe('projectWorktreeRoot')
+    expect(code('  relative/root  ')).toBe('projectWorktreeRoot')
   })
 
   it('closes an issue without deleting its record', () => {
