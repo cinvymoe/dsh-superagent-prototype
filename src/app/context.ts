@@ -10,6 +10,8 @@ export const workerPrompt = promptFile('worker')
 /** Appended to a worker's prompt when its ticket aligns a requirement instead of implementing it. */
 export const alignPrompt = promptFile('align')
 export const executePrompt = promptFile('execute')
+/** A one-question Session's prompt: it reads the worker's inherited context and answers without changing anything. */
+export const answerPrompt = promptFile('answer')
 /** Built-in policy sections referenced by role prompts; a team may override them. */
 export const guides: Readonly<Record<string, string>> = Object.fromEntries(['subscriptions', 'replies', 'dispatch', 'work']
   .map(name => [name, promptFile(name)]))
