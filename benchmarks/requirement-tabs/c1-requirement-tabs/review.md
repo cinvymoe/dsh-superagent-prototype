@@ -88,3 +88,4 @@
 - 实现 lane `lane-C1-1` 一次完成实现、测试与两篇文档，并报告 typecheck、定向 9 files / 75 tests、全量 63 files / 1259 tests、build 与 `git diff --check` 全部通过。
 - worker 复核 diff，补充/校正：把 `src/sources/local.ts` 的来源描述从「提交需求、讨论…」改为与新页签一致的「提交需求并审阅…」，并补齐两个测试文件的末尾换行；随后重跑定向、全量 check 与 `git diff --check`。
 - 截图环境为一次性 profile 与 stateDir；截图完成后停止两个临时服务。
+- PR 冲突修复：deployment `main` 已前进到 `afab266e`，把 `main` 合入本分支并解决 `docs/issues/review.md` 与证据日志同名冲突（本切片评审为 `docs/issues/review-C1-requirement-tabs.md`，main 的 C1 评审保留 `review.md`；本切片日志为 `c1-requirement-tabs-*.log`）。合并后重跑 `pnpm check`：63 files / 1263 tests + build 通过。
