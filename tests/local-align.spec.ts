@@ -599,6 +599,9 @@ describe('requirement slice completion', () => {
     // The stored records carry no derived field at all.
     expect(h.runtime.local.get(id)).not.toHaveProperty('slicesFinished')
     expect(h.runtime.local.list().some(issue => 'slicesFinished' in issue)).toBe(false)
+    // Every local route that answers with a requirement returns the view, not only the two GETs.
+    const commented = await h.api('POST', `local/issues/${id}/comments`, { text: 'Starting the first slice' })
+    expect((commented.body.issue as { slicesFinished?: boolean }).slicesFinished).toBe(false)
     // An executor's ready report ends one slice; the requirement is still unfinished.
     const first = tickets.find(ticket => ticket.plan!.sliceId === 'C1')!
     const second = tickets.find(ticket => ticket.plan!.sliceId === 'C2')!
@@ -634,6 +637,10 @@ describe('requirement slice completion', () => {
     const rejected = await anomalous('Rejected alignment', id => ({ ...fields(), id, title: 'Rejected alignment', body: '',
       alignment: alignment('rejected') }))
     const unaligned = await anomalous('No alignment', id => ({ ...fields(), id, title: 'No alignment', body: '' }))
+    // The execution-mode route answers through the view too, and an anomalous requirement stays unfinished.
+    const executed = await h.api('POST', `local/issues/${zero}/execution`, { mode: 'feature-exec' })
+    expect(executed.status).toBe(200)
+    expect((executed.body.issue as { slicesFinished?: boolean }).slicesFinished).toBe(false)
     const issues = await listView()
     for (const id of [zero, missing, proposed, rejected, unaligned]) {
       expect(issues.find(issue => issue.id === id)!.slicesFinished).toBe(false)

@@ -37,7 +37,7 @@ $ tsdown
 (node:1533353) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
 (Use `node --trace-warnings ...` to show where the warning was created)
 ℹ tsdown v0.22.14 powered by rolldown v1.2.7
-ℹ config file: /data/project/workspace/dsh-worktrees/slice-687169eff807/tsdown.config.ts 
+ℹ config file: /data/project/workspace/dsh-worktrees/slice-687169eff807/tsdown.config.ts
 ℹ entry: src/index.ts, src/sources/github.ts, src/sources/feishu.ts, src/sources/local.ts, src/worker-shell.ts
 ℹ target: es2024
 ℹ tsconfig: tsconfig.json
@@ -87,7 +87,7 @@ EXIT=0
 ## final gate: env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check
  Test Files  64 passed (64)
       Tests  1324 passed (1324)
-ℹ config file: /data/project/workspace/dsh-worktrees/slice-687169eff807/tsdown.config.ts 
+ℹ config file: /data/project/workspace/dsh-worktrees/slice-687169eff807/tsdown.config.ts
 ✔ Build complete in 3316ms
 ✔ Build complete in 3756ms
 EXIT=0

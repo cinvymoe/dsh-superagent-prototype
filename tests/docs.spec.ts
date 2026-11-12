@@ -139,3 +139,24 @@ describe('requirement message timeline documentation', () => {
     expect(architecture).toContain('its newest-first message timeline with the follow-up box above the list (a post appears first and clears the box)')
   })
 })
+
+describe('requirement state documentation', () => {
+  it('states the three requirement states, both end kinds and the derived, unstored label', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('The state is Open, Pending close once every slice Ticket of a confirmed alignment has ended, or Closed; the alignment tag stays Confirmed')
+    expect(panel).toContain('Both ways a slice Ticket ends count — an Executor\'s result report and a person\'s stop — so Pending close means execution has stopped and only closing is left, not that every slice succeeded')
+    expect(panel).toContain('The label is derived when the panel reads the requirement, not stored: if a Ticket resumes, the label returns to Open')
+  })
+  it('names the derived view and the shared slice-ticket id in the module rows', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('`planTicketId` is the one source of a slice Ticket\'s id, shared by plan dispatch and the requirement view')
+    expect(architecture).toContain('`view()`, the derived requirement view whose `slicesFinished` holds once a confirmed alignment has slices and every slice\'s Ticket exists and ended (zero slices or a missing Ticket reports false)')
+    expect(architecture).toContain('every local route that returns a requirement answers with `LocalIssues.view()` rather than the stored record')
+  })
+  it('names the requirement state tag and the completion view in the module and test rows', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('the requirement state tag shows Open, Pending close or Closed from the view\'s `slicesFinished` while the alignment tag beside it is unchanged')
+    expect(architecture).toContain('the derived requirement completion view (`slicesFinished`) over the HTTP routes, for both end kinds and anomalous alignments')
+    expect(architecture).toContain('the Pending close state tag beside the unchanged Confirmed tag on the list row and detail head')
+  })
+})

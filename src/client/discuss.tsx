@@ -47,7 +47,7 @@ function RequirementImages({ issue }: { issue: LocalIssue }) {
   </figure>)}</div>
 }
 
-// 待关闭 is the requirement's own state, derived from its slice Tickets; the alignment tag beside it is unchanged.
+// Pending close is the requirement's own state, derived from its slice Tickets; the alignment tag beside it is unchanged.
 const stateTag = (t: T, issue: LocalIssueView) => issue.state === 'closed'
   ? <Tag tone="quiet">{t('discuss.closed')}</Tag>
   : issue.slicesFinished ? <Tag tone="info">{t('discuss.pendingClose')}</Tag> : <Tag tone="success">{t('discuss.open')}</Tag>
