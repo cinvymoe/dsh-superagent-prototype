@@ -1,0 +1,10 @@
+== C4 before-change snapshot 2026-11-12T21:25:40+08:00
+deployment HEAD: 31cc2fb772e403f46fa4174ccec22a364b69c952
+deployment/main: 31cc2fb772e403f46fa4174ccec22a364b69c952
+
+-- local projects (kv)
+{"key":"local-project:p-0d3a3830","name":"superagent","repository":"cinvymoe/dsh-superagent-prototype","chain":null,"intakeRepository":null,"codeRepository":null,"worktreeRoot":null}
+{"key":"local-project:p-bac24269","name":"rust_crane","repository":"cinvymoe/rust_crane","chain":null,"intakeRepository":null,"codeRepository":null,"worktreeRoot":"/mnt/sdb1/workspace/dsh-worktrees"}
+
+-- latest settings
+{"revision":15,"savedAt":"2026-11-12T06:54:18.276Z","github":{"repository":"cinvymoe/rust_crane","intakeRepository":"cinvymoe/rust_crane_issues","codeRepository":"cinvymoe/rust_crane","cli":"/root/.local/bin/gh-agent","pollSeconds":60,"failuresBeforeError":3,"observeIssues":true,"observePulls":true,"observeComments":false,"observeCi":false}}
