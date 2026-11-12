@@ -6,6 +6,7 @@
 - 实现：e2 派 `lane-T1-1`（subagent spawn，childId `089d05d5-c3bc-4864-8449-ddd6e973fedd`）在 ticket worktree 完成实现与定向自测；主会话负责复验、评审与证据落盘。
 - 评审日期：2026-11-12
 - 分支已 merge deployment `main` @ `32262807`（含 PR #24/#25/#26 的面板过滤、执行模式开关与消息倒序）；仅 `docs/005`、`docs/007` 冲突手工合并，merge 后按 main 的新夹具补 `roundId` 并重跑定向与全量。
+- 分支随后又 merge deployment `main` @ `934a1f07`（PR #23 的关联工单 Open Session 行）；仅 `docs/005` 冲突手工合并，merge 后重跑 typecheck 与定向测试。
 
 ## 变更范围
 
