@@ -12,4 +12,4 @@ env -u GIT_ASKPASS -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_PAGER \
 - 依赖安装：`pnpm install --offline --frozen-lockfile`（lockfile 未改）。
 - 测试数据库：每个用例在临时目录建独立 `orchestrator.sqlite`；`tests/fixtures/host.ts` 与 `tests/runtime.spec.ts` 的假宿主全部打桩（`Commands`、`llm.resolveCallConfig`、`subprocess`、`sessionController`、`agentPresets`）。
 - 网络 / 凭据：不需要 GitHub / Feishu 凭据；PR 门禁只有本地命令。
-- 基线：deployment `main` @ `72b4c4a8`（合并 C1 PR #34 的 `agent/agent-api-9326a1747b59` 之后）。
+- 基线：deployment `main` @ `72b4c4a8`；本分支先并入 C1 分支 `agent/agent-api-9326a1747b59`（PR #34，提供 `agents` 块），再合并 `72b4c4a8`（merge `410f1d0d`）。
