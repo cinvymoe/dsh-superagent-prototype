@@ -1,0 +1,26 @@
+$ env -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM LC_ALL=C LANG=C pnpm vitest run tests/runtime.spec.ts tests/bundle-patch.spec.ts
+(node:1368226) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1368283) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/session-billion-context-6f94b843ab41
+
+(node:1368336) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1368337) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1368336) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/bundle-patch.spec.ts (2 tests) 62ms
+ ✓ tests/runtime.spec.ts (95 tests) 12829ms
+   ✓ records worker reports, binds the task PR, ends the ticket on ready without a PR, and relays attention  321ms
+   ✓ leaves waiting and blocked assignments alone after a restart and keeps blocked workers paused  312ms
+   ✓ rewrites the blocked-command shims when the Executor settings change them, without a restart  326ms
+   ✓ resumes several ended tickets on one thread from one message without the launch waiting on itself  303ms
+
+ Test Files  2 passed (2)
+      Tests  97 passed (97)
+   Start at  23:19:39
+   Duration  14.49s (transform 1.84s, setup 0ms, import 2.56s, tests 12.89s, environment 0ms)
+
+exit=0
