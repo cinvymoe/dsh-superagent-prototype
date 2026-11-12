@@ -53,8 +53,11 @@ export function ProjectBar({ route }: { route: Route }) {
   const select = useCallback((id: string) => {
     if (id === current) return
     setProject(id)
-    // A switch inside Discuss replaces the entry so browsing projects or leaving the create page does not grow the back stack.
-    navigate({ page: 'discuss' }, route.page === 'discuss')
+    // A switch on one of the two requirement tabs keeps that tab; every other tab lands on the requirement list. These
+    // switches replace the entry so browsing projects does not grow the back stack.
+    if (route.page === 'newRequirement') navigate({ page: 'newRequirement' }, true)
+    else if (route.page === 'requirements' && route.id === undefined && !route.create) navigate({ page: 'requirements' }, true)
+    else navigate({ page: 'requirements' })
   }, [current, setProject, navigate, route])
   // Arrow keys, Home and End move the selection with the roving tab, as the page tabs do.
   const walk = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -86,7 +89,8 @@ export function ProjectBar({ route }: { route: Route }) {
       </div>}
     </div>}
     <Button variant="primary" size="sm" className="dt-project-new" icon={<Icon name="plus" size={14} />}
-      onClick={() => navigate({ page: 'discuss', create: true }, 'create' in route && route.create === true)}>{t('discuss.newProject')}</Button>
+      onClick={() => navigate({ page: 'requirements', create: true },
+        route.page === 'requirements' && 'create' in route && route.create === true)}>{t('discuss.newProject')}</Button>
   </div>
 }
 
@@ -108,7 +112,7 @@ export function NewProjectPage() {
         ...(root ? { worktreeRoot: root } : {}) } })
       await reloadProjects()
       setProject(project.id)
-      navigate({ page: 'discuss' }, true)
+      navigate({ page: 'requirements' }, true)
     } catch (failure) {
       notify(errorText(failure))
     } finally {
@@ -116,7 +120,7 @@ export function NewProjectPage() {
     }
   }
   return <>
-    <PageHead title={t('discuss.newProject')} />
+    <PageHead title={t('discuss.newProject')} back={{ label: t('discuss.requirements'), onClick: () => navigate({ page: 'requirements' }, true) }} />
     <div className="dt-column">
       <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.newProject')}</span></div>
@@ -131,7 +135,7 @@ export function NewProjectPage() {
         <div className="dt-actions">
           <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim() || !repository.trim()}>
             {t('discuss.createProject')}</Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => navigate({ page: 'discuss' }, true)}>{t('cancel')}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => navigate({ page: 'requirements' }, true)}>{t('cancel')}</Button>
         </div>
       </form>
     </div>

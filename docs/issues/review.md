@@ -1,28 +1,31 @@
-# P1 评审与测试证据 · 顶部项目 Tab、更多菜单与独立新建项目界面
+# C1 评审与测试证据 · 拆分新建需求与需求列表两个页签，精简提交页
 
-- Run: `run-mwd2vazl-5`（execute，policy A1），issue `q-539e143e:P1`
-- Ticket: `72eef87fa22817c7628e4a74ecffb1a0`
-- 分支：`agent/tab-72eef87fa228`，基线 `3b8c6a8`（deployment `main`，已合并 PR #9）
-- 实现 lane：`lane-T1-project-tabs-1`（subagent `80c7e4b7-2b69-456a-be6c-375a79850660`，T2 / high，完成并报告全部验证通过）
+- Run: `run-mwd8n3ey-2`（execute，policy A1），issue `q-612052e8:C1`
+- Ticket: `de236aab51cc140a2178fc3fe96f2d3c`
+- 分支：`agent/slice-de236aab51cc`，基线 `04cb0449`（deployment `main`，已合并 PR #10）
+- 实现 lane：`lane-C1-1`（subagent `268cf49c-f89f-4887-92cd-9a4f8464863d`，T2 / high，完成并报告全部验证通过）
 - 评审日期：2026-11-12
 
 ## 变更范围
 
 | 文件 | 变更 |
 | --- | --- |
-| `src/client/projects.tsx`（新增） | 面板顶部项目栏：项目 chip Tab、溢出「更多」菜单、顶部新建项目按钮；独立的新建项目页（三个字段、校验、取消/返回、提交后设为当前项目并回到 Discuss） |
-| `src/client/app.tsx` | 项目栏置于 Header 与页面 Tab 之间；`{ page: 'discuss', create: true }` 渲染独立创建页；`Location.project` 与 `setProject`；navigate/back/openTab 保留当前项目 |
-| `src/client/provider.tsx` | `PanelContext.project` / `setProject`；轮询 `GET local/projects`，暴露 `projects` / `reloadProjects` |
-| `src/client/discuss.tsx` | 需求列表、页头、新建需求目标按当前项目作用域；显示执行仓库与可选 `worktreeRoot`；无项目提示；移除项目列表、内嵌创建表单、项目筛选与「只看/全部」链接 |
-| `src/client/route.ts` | Discuss 的 `create` 子路由、`routeLabel`、`Location.project` 的解析与持久化 |
-| `src/client/locales.ts` | 新增 `project.more` / `project.menu`；移除不再使用的 `discuss.useProject` / `discuss.allProjects` / `discuss.projectRequired` |
-| `src/client/client.css` | 项目 chip / 滚动条隐藏 / 更多菜单 / 新建按钮样式，窄屏换行 |
-| `tests/fixtures/panel-server.ts` | `POST local/projects` 唯一 id；`GET local/issues?project=` 过滤；`POST local/issues` 落 `body.project` |
-| `tests/panel-discuss.spec.tsx` | 独立创建页、提交后当前项目与 Discuss 作用域、空值与相对路径拒绝 |
-| `tests/panel-projects.spec.tsx`（新增） | Tab 切换与 Discuss 作用域、页面 Tab 仍可用、新建需求目标；溢出「更多」出现/菜单/选择；独立创建、取消与返回、空值省略、提交后当前 Tab |
-| `docs/005-panel.md`、`docs/007-architecture.md` | 项目栏、「更多」菜单、独立创建流程；模块表与测试表 |
+| `src/client/route.ts` | 页签顺序改为 概览、新建需求、需求列表、来源、触发、评估、执行、设置；`newRequirement` / `requirements`（列表、详情、`create`）路由；旧 `discuss` 路由迁移为对应需求页；`routeLabel` 的详情术语 |
+| `src/client/app.tsx` | 两个页签的页面分派：`NewRequirementPage`、`RequirementList`、`RequirementDetail`、独立新建项目页 |
+| `src/client/discuss.tsx` | 拆出只含描述表单的 `NewRequirementPage`、按当前项目取数的 `RequirementList`、`RequirementDetail`；详情页显式返回需求列表；详情消息记录不再重复需求原文 |
+| `src/client/projects.tsx` | 项目切换停留在当前需求页签（新建需求/需求列表根），其它页签落到需求列表；新建项目成功落到新项目的需求列表；创建页返回/取消不创建 |
+| `src/client/widgets.tsx` | `PageHead` 支持 `back={false}` 与显式返回目标 |
+| `src/client/locales.ts` | 两个页签、描述输入、列表/详情新文案；移除标题输入与旧「讨论」文案；`discuss.timeline` 改为「消息记录」 |
+| `src/app/local.ts` | `requirementTitle` 从描述首个非空行派生标题（折叠空白、截断 200）；`title` 变为可选；派生标题时线程首个 Trigger 只取完整描述；`issueEmpty` 拒绝空需求 |
+| `src/app/http.ts`、`src/app/api.ts` | `POST local/issues` 的 `title` 可选、`body` trim；请求类型同步 |
+| `src/core/errors.ts` | 新增 `issueEmpty` 用户错误 |
+| `src/sources/local.ts` | 本地来源描述去掉「讨论」字样，与新页签一致 |
+| `tests/fixtures/panel-server.ts` | `POST local/issues` 镜像服务端标题派生；`localThread` 的时间线带上原始需求 Trigger |
+| `tests/local.spec.ts`、`tests/navigation.spec.ts` | 标题派生、空描述拒绝、旧 `discuss` 路由迁移 |
+| `tests/panel-discuss.spec.tsx`、`tests/panel-projects.spec.tsx`、`tests/panel-overview.spec.tsx`、`tests/panel-panel.spec.tsx` | 新页签、提交、列表、详情返回、项目切换、旧路由与英文页签 |
+| `docs/005-panel.md`、`docs/007-architecture.md` | 页签、两个需求页与模块/测试表 |
 
-范围外且未改动：`src/app/**`、宿主 API/schema、`worktreeRoot` 语义、其他面板页面布局。
+范围外且未改动：提交需求支持图片（同一 alignment 的其它切片）、对齐/派发/执行语义、其它面板页面布局、项目编辑/删除。
 
 ## 双轴评审
 
@@ -30,55 +33,58 @@
 
 结论：**通过（approve）**。
 
-- **模块边界**：项目栏与独立创建页集中在新增 `projects.tsx`；`provider.tsx` 只负责共享项目列表与当前项目上下文；`discuss.tsx` 只负责当前项目需求；路由记忆仍集中在 `route.ts`。没有新增第二套项目数据源或把展示逻辑塞进宿主。
-- **数据流**：当前项目是 `Location.project`（随路由记忆持久化），选择项目只写该字段并进入 Discuss；Discuss 使用既有 `GET local/issues?project=` 取数，没有客户端全量拉取再过滤；切换项目会重新订阅请求，`usePoll` 的依赖包含 `active?.id`，旧响应不会被误用。
-- **导航语义**：项目切换在 Discuss 内使用 replace，避免来回切换堆积历史；创建成功与取消同样 replace，离开创建页的返回按钮不会回到已失效的创建页；`move` 先展开当前 location，保证 navigate/back/openTab 不丢当前项目。
-- **可访问性**：项目栏是独立的 `role=tablist`（`aria-label` 为「项目」），每项 `role=tab` 且当前项 `aria-selected`，与页面 Tab 的 `role=tablist`/分段样式语义和视觉均可区分；「更多」按钮 `aria-haspopup="menu"` + `aria-expanded`，菜单项 `role=menuitemradio` + `aria-checked`，Escape/外部点击关闭；溢出时选中项 `scrollIntoView` 保持可见。
-- **样式规范**：只使用现有 DSH token；项目 chip、菜单与按钮样式一行一条规则；`tests/styles.spec.ts` 通过。
-- **测试质量**：断言可观察行为（`aria-selected`、请求 query、POST body、页面标题、列表行、`role=menuitemradio`）而非实现细节；溢出测试用实例级可恢复的布局桩，不依赖 jsdom 的 0 尺寸；未削弱既有断言。
-- **仓库规范**：无新依赖；`git diff --check` 干净；`pnpm check` 全绿；`docs/007` 模块/测试表由 `tests/docs.spec.ts` 完整性校验通过。
-- **独立评审 lane**：本运行时未再派生独立 review lane，由 worker 按上述清单完成自审并留证；实现 lane 的验证结果与本次复跑一致。
+- **模块边界**：两个需求页仍在 `discuss.tsx`；项目栏的导航规则留在 `projects.tsx`；路由与旧路由迁移集中在 `route.ts`；标题派生与线程文本在 `src/app/local.ts`（服务端单一来源），客户端只提交描述。没有新增第二套项目/需求数据源。
+- **数据流**：新建需求页只提交 `{ body, project }`，服务端派生标题并保存完整描述；需求列表用既有 `GET local/issues?project=`；详情用既有 `GET local/issues/:id`。派生标题不再前置到线程消息，避免完整文本重复。
+- **路由与返回**：`parseRoute` 把旧 `discuss`（含 `id`/`create`）映射到需求详情/新建项目/需求列表，旧会话不白屏；详情页头返回显式指向需求列表（replace），不依赖历史栈，因此深链或重载后也不会回到概览；新建需求页与需求列表页作为页签根不渲染返回按钮。
+- **导航语义**：项目切换在「新建需求」或「需求列表」根上 replace，避免堆叠历史；从其它页签切换项目 push 并落到需求列表；新建项目成功 replace 到新项目需求列表。
+- **可访问性**：页签仍是 `role=tablist`/`role=tab` 且当前项 `aria-selected`；`PageHead` 的返回按钮可缺省、可指定目标；行标题仍是可聚焦按钮。
+- **测试质量**：断言可观察行为（页签文本与顺序、`aria-selected`、请求 query/body、行顺序与标签、返回后的页头、旧路由重载）；覆盖空描述禁用、标题派生与截断、完整文本只出现一次、时间线去重、项目切换三种落点、新建项目落点；未削弱既有断言。
+- **仓库规范**：无新依赖；`git diff --check` 干净；`pnpm check` 全绿；`tests/docs.spec.ts` 的模块/测试表完整性通过。
+- **独立评审 lane**：本运行时未再派生独立 review lane，由 worker 按上述清单完成自审并逐条留证；实现 lane 的验证结果与本次复跑一致。
 
 ### Spec 轴（按冻结验收标准逐条）
 
 | # | 验收标准 | 结果 | 证据 |
 | --- | --- | --- | --- |
-| 1 | 面板顶部为每个本地项目显示项目 Tab（`role=tab`，当前 `aria-selected`），页面 Tab 仍可用；两者视觉/语义可区分 | PASS | `tests/panel-projects.spec.tsx` 第一例断言项目 tablist 2 个 Tab、`aria-selected` 为 `true/false`、页面 tablist 7 个且 Discuss 仍选中；切到「概览」再回「讨论」后当前项目保持；独立 `role=tablist` + chip 样式（截图 `after-discuss.png` / `after-overflow.png`） |
-| 2 | 选择项目 Tab 后 Discuss 需求列表、页头、新建需求目标同步；切换不串数据 | PASS | 第一例切换后页头为 `Other`、只显示 `Other requirement`、请求 `local/issues?project=p-other`；随后提交新需求 POST body 为 `{title:'Other target', project:'p-other'}`；页头显示 `项目：Other · acme/other` |
-| 3 | 放不下时 Tab 行末尾出现「更多」；可从未显示项目中选择；选中后可识别；所有项目始终可达，不出现只有横向滚动而无「更多」 | PASS | 第二例：无溢出时 `.dt-project-more` 为空；布局桩使 `scrollWidth=640 > clientWidth=320` 后「更多」出现，菜单列出全部 6/2 个项目、当前项 `aria-checked=true`，选择后项目变为 `aria-selected=true` 且 Discuss 重新取数；真实面板 900×1100 截图 `after-overflow.png` 与 `after-more-menu.png`、选择隐藏项目后的 `after-more-selected.png`（strip 已滚动、页头为 Search） |
-| 4 | 顶部「新建项目」按钮不在 Discuss 页内；点击打开独立创建界面；取消/返回不创建；提交成功后新项目出现在项目 Tab 并成为当前项目，Discuss 回到其需求列表；校验与空值处理保持 | PASS | 第三例：按钮位于 `.dt-project-bar` 且 `#dt-page` 内不存在；独立页无 `.dt-cards`/需求 textarea/标题输入；取消与页头返回均无 POST；提交后 `Posts[0]` body 含 `worktreeRoot`，新项目为当前 Tab、页头为项目名、请求 `local/issues?project=p-fixture`；空根省略且第二个项目 id 为 `p-fixture-2`；相对路径拒绝与停留创建页由 `panel-discuss` 用例覆盖 |
-| 5 | Discuss 不再包含项目列表、内嵌创建表单、「只看/全部」链接；显示当前项目执行仓库与可选 `worktreeRoot`；无项目时顶部可创建、Discuss 提示先创建；需求详情仍显示项目 | PASS | 第一例断言 Discuss 只有「需求列表」Section、只有「新建需求」卡片、无 `.dt-select`；第三例断言无「只看这个项目/查看全部项目」；页头显示 `acme/widgets` 与 `/srv/worktrees`（截图 `after-discuss.png`）；无项目截图 `after-no-projects.png` 顶部按钮仍在、正文为「还没有项目…」；`panel-discuss` 详情用例仍断言 `项目：Widgets · acme/widgets` |
-| 6 | `pnpm check`（typecheck + vitest + build）通过；新增/更新测试覆盖 Tab 切换、溢出「更多」、独立创建、Discuss 作用域 | PASS | `docs/issues/evidence/p1-check.log`：`pnpm typecheck` exit 0；63 files / 1248 tests passed；build complete；`git diff --check` 无输出；定向 6 files / 38 tests（`p1-targeted.log`） |
-| 7 | PR 附同一视口/主题的 before/after 截图，baseline 为 main，after 为本分支 | PASS | `docs/evidence/p1-project-tabs/`：before 来自 deployment `main` @ `3b8c6a8` 的真实面板（1440×1100 / 900×1100，浅色，zh-CN），after 来自本分支同一场景；详见下方视觉证据与 PR 描述 |
-| 8 | `docs/005-panel.md` 与 `docs/007-architecture.md` 已更新，描述项目栏、「更多」菜单与独立创建流程 | PASS | 005 新增项目栏段落并重写 Discuss/Projects；007 更新 app/provider/discuss/route 行、新增 projects 行与 panel-projects 测试行；`tests/docs.spec.ts` 11/11 |
+| 1 | 页面页签依次为 概览、新建需求、需求列表、来源、触发、评估、执行、设置（英文对应），页面中不再出现「讨论」 | PASS | `tests/panel-overview.spec.tsx` 断言 8 个页签中英文本与顺序；`tests/panel-panel.spec.tsx` 断言英文 8 项；`src/client/locales.ts` 已无 `tab.discuss`/标题输入文案且 `grep 讨论` 在 client 无命中；语言切换截图与 DOM 均未见「讨论」 |
+| 2 | 「新建需求」页只显示当前项目的提交表单与项目信息（项目名、执行仓库、可选 worktreeRoot），没有需求列表，也没有标着「概览」的返回按钮 | PASS | `panel-discuss` 用例断言页头为项目名、仓库可见、无 `#dt-page input`、无 `.dt-cards`、无 `.dt-page-head button`；`after-new-requirement.png` 中表单同时带项目 Tag |
+| 3 | 「新建需求」页没有「一句话说明要做什么」的标题输入；只有需求描述输入，描述为空时不能提交 | PASS | 表单只有一个 `textarea`（`discuss.descriptionPlaceholder`），无标题 `input`；`panel-discuss` 用例断言空串/纯空白时提交按钮 disabled，填写后 enabled |
+| 4 | 提交成功后需求标题取自描述首个非空行（折叠空白、超长截断），正文保存完整描述，详情与线程记录里完整文本只出现一次 | PASS | `src/app/local.ts` `requirementTitle`；`tests/local.spec.ts` 覆盖空行、折叠、200 截断、只提交描述时的标题/正文/Trigger 文本；`panel-discuss` 用例断言 POST body 不含 `title`、详情标题为首行、完整描述在页面出现 1 次且时间线不含该文本；`after-detail-derived.png` 显示需求原文一次、「消息记录 0」 |
+| 5 | 「需求列表」页按当前项目列出需求（新到旧，含状态/对齐标签、时间、切片数）；点击一行进入详情，详情可返回需求列表而不是概览 | PASS | `panel-discuss` 列表用例断言顺序、开放/已关闭、待对齐/待审阅、切片数、项目过滤与取数 query；详情用例断言页头返回按钮文本为「返回需求列表」，点击后页头回到项目名且页签仍为需求列表；`after-detail.png` / `after-detail-back.png` |
+| 6 | 在「新建需求」或「需求列表」切换项目时停留在当前页签并按新项目重新取数；从其他页签切换项目落到「需求列表」；新建项目成功后落在新项目的「需求列表」 | PASS | `panel-projects` 用例覆盖：需求列表切换保持页签并请求 `local/issues?project=p-other`；新建需求切换保持页签、项目 Tag 更新、提交 body 指向新项目；从概览切换落到需求列表；新建项目后页签为需求列表并请求新项目需求；`after-list-billing.png` |
+| 7 | 会话里保存的旧路由（page=discuss，含 id/create）重载后打开对应的新页面，不白屏 | PASS | `tests/navigation.spec.ts` 覆盖 `discuss` + id/create/无参三种映射；`panel-discuss` 用 `at({page:'discuss', id})` 与 `at({page:'discuss'})` 重载后分别打开需求详情与需求列表，均有内容、无白屏 |
+| 8 | `pnpm check` 通过；`docs/005-panel.md` 已描述两个页签与新文案；PR 含同场景 Before/After 截图 | PASS（截图待 PR 描述） | `pnpm check`：typecheck 0，63 files / 1259 tests，build 完成（`docs/issues/evidence/c1-check.log`）；`docs/005-panel.md` 新增 New requirement 与 Requirements 两行及新文案；Before/After 见下方视觉证据，PR 描述逐对标注 |
 
 ## 测试证据
 
 - `pnpm typecheck`：exit 0，无诊断。
-- `pnpm vitest run tests/panel-discuss.spec.tsx tests/panel-projects.spec.tsx tests/panel-panel.spec.tsx tests/locales.spec.ts tests/docs.spec.ts tests/styles.spec.ts`：6 files / 38 tests passed。
-- `env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check`：typecheck exit 0；63 files / 1248 tests passed；build complete；exit 0。原始输出 `docs/issues/evidence/p1-check.log`，定向输出 `docs/issues/evidence/p1-targeted.log`。
+- `pnpm vitest run tests/panel-discuss.spec.tsx tests/panel-projects.spec.tsx tests/panel-overview.spec.tsx tests/panel-panel.spec.tsx tests/navigation.spec.ts tests/local.spec.ts tests/locales.spec.ts tests/docs.spec.ts tests/styles.spec.ts`：9 files / 75 tests passed（`docs/issues/evidence/c1-targeted.log`）。
+- `env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check`：typecheck exit 0；63 files / 1259 tests passed；build complete；exit 0（`docs/issues/evidence/c1-check.log`）。
+- `env -u … LC_ALL=C pnpm test`：63 files / 1259 tests passed（`docs/issues/evidence/c1-full.log`）。
+- `pnpm build`：Build complete，exit 0。
 - `git diff --check`：无输出。
-- 实现 lane 自己的验证：typecheck 0；定向 5 files / 36 tests；全量 63 files / 1248 tests；build 0；`git diff --check` 干净。本次 worker 在加入额外断言与导航 replace 后全部复跑。
 
 ## 视觉证据
 
-同一场景、同一视口、同一主题（浅色）、同一语言（zh-CN）；Before 为 deployment `main` @ `3b8c6a8` 的真实面板构建，After 为本分支 head 的真实面板构建。
+同一场景、同一视口（1440×1100）、同一主题（浅色）、同一语言（zh-CN）；Before 为 deployment `main` @ `04cb0449` 的真实面板构建，After 为本分支 head 的真实面板构建。截图使用隔离 profile（`c1-before` 端口 3095 / `c1-after` 端口 3096）与一次性 stateDir（`/root/.dsh/state/c1-before`、`/root/.dsh/state/c1-after`），种子数据为两个项目（Widgets 带 `/srv/worktrees`、Billing）和四条需求（待对齐、待审阅 3 切片、已确认 2 切片、Billing 待对齐），未使用线上真实工单或飞书内容。
 
-| 场景 | Before（main @ `3b8c6a8`） | After（本分支） |
+| 场景 | Before（main @ `04cb0449`） | After（本分支） |
 | --- | --- | --- |
-| 1440×1100，Widgets + Billing 两个项目、三个需求 | `docs/evidence/p1-project-tabs/before-discuss.png`：Discuss 内项目列表 + 全量需求 + 项目筛选 | `docs/evidence/p1-project-tabs/after-discuss.png`：顶部项目 chip Tab + 当前项目页头（仓库/worktreeRoot）+ 仅当前项目需求 |
-| 1440×1100，同上，新建项目入口 | `before-new-project.png`：Discuss 内嵌「新建项目」表单 | `after-new-project.png`：顶部按钮打开的独立创建页（Discuss 页无表单） |
-| 900×1100，6 个长项目名 | `before-overflow.png`：Discuss 内项目行（无「更多」概念） | `after-overflow.png`：项目 Tab 行末尾出现「更多」；`after-more-menu.png`：菜单列出全部项目并标记当前；`after-more-selected.png`：选择未显示项目后 strip 滚动、页头/需求切换 |
-| 1440×1100，无项目 | `before-no-projects.png`：Discuss 内嵌创建表单 | `after-no-projects.png`：顶部「新建项目」按钮仍可用，Discuss 只显示先创建提示 |
-| 创建成功后（补充，无 before 对照） | — | `after-created.png`：新项目成为当前 Tab，Discuss 回到该项目的空需求列表 |
+| 1440×1100，Widgets 项目的提交页 | `docs/evidence/c1-requirement-tabs/before-discuss.png`：讨论页同时有标题输入、正文输入与需求列表 | `docs/evidence/c1-requirement-tabs/after-new-requirement.png`：新建需求页只有项目信息与一个描述框，无标题输入、无列表、无返回按钮 |
+| 1440×1100，Widgets 项目的需求列表 | `before-discuss.png` 同上（列表与表单同页） | `docs/evidence/c1-requirement-tabs/after-requirements.png`：需求列表页单独列出 3 条需求及状态/对齐标签、时间、切片数 |
+| 1440×1100，需求详情与返回 | `before-detail.png`：讨论页内的需求详情，底部「返回需求列表」、页头返回「讨论」 | `docs/evidence/c1-requirement-tabs/after-detail.png`：需求详情的页头返回为「返回需求列表」，点击后回到需求列表（`after-detail-back.png`） |
+| 1440×1100，Billing 项目空列表 | `before-list-billing.png`：讨论页内 Billing 表单与 1 条需求 | `docs/evidence/c1-requirement-tabs/after-list-billing.png`：需求列表页只显示 Billing 的 1 条需求，项目信息随项目切换 |
+| 1440×1100，独立新建项目页（行为不变） | `before-new-project.png` | `docs/evidence/c1-requirement-tabs/after-new-project.png`：页头返回「需求列表」，创建成功后落到新项目需求列表 |
+| 只提交描述后的详情（补充，无 before 对照） | — | `docs/evidence/c1-requirement-tabs/after-detail-derived.png`：标题取自描述首行，需求原文完整出现一次，「消息记录 0」不重复原文 |
 
 ## 架构影响
 
-- 影响面：`src/client` 的面板壳、路由记忆、项目数据轮询与 Discuss 页面，以及对应的 jsdom 测试和两篇产品文档；无 `src/app/**`、宿主 API、schema、安全/凭据或部署行为变更。
-- `docs/007` 的模块表与测试表已同步 `src/client/projects.tsx` 和 `tests/panel-projects.spec.tsx`，`tests/docs.spec.ts` 通过。
+- 影响面：`src/client` 的路由、页面壳、两个需求页、项目栏返回语义与文案；`src/app/local.ts` 的本地需求创建契约与 `POST local/issues` 的 `title` 可选；测试 fixture 与文档。无 `src/app/**` 之外的宿主数据模型、schema 迁移、安全/凭据或部署行为变更。
+- 旧路由保留为 `parseRoute` 的迁移分支，不删除本地需求数据；`LocalIssue.title` 仍是记录字段（由服务端派生），`body` 保存完整描述。
 - 判定：`arch_impact: local`。
 
 ## 过程记录
 
-- 实现 lane `lane-T1-project-tabs-1` 一次完成实现、文档与测试，并报告全部验证通过；worker 复核了其 diff，补充了「切换后新建需求目标」、页面 Tab 往返、Discuss 无项目列表/无内嵌表单、worktreeRoot 可见、创建页返回不创建等断言，并把创建成功/取消/项目切换的导航改为 replace，避免历史堆栈回到无效创建页。
-- 截图环境为隔离 profile `p1-before` / `p1-after`（端口 3095/3096，一次性 stateDir `/root/.dsh/state/p1-*`，系统 chromium headless），未使用线上 `superagent-test` 的真实工单或飞书内容；截图完成后已停止两个临时服务。
+- 实现 lane `lane-C1-1` 一次完成实现、测试与两篇文档，并报告 typecheck、定向 9 files / 75 tests、全量 63 files / 1259 tests、build 与 `git diff --check` 全部通过。
+- worker 复核 diff，补充/校正：把 `src/sources/local.ts` 的来源描述从「提交需求、讨论…」改为与新页签一致的「提交需求并审阅…」，并补齐两个测试文件的末尾换行；随后重跑定向、全量 check 与 `git diff --check`。
+- 截图环境为一次性 profile 与 stateDir；截图完成后停止两个临时服务。

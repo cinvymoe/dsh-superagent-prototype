@@ -50,6 +50,7 @@ export const USER_ERRORS = {
   projectTaken: ['refused', 'A project named {name} already exists'],
   projectRepository: ['refused', 'A project repository must be an owner/name pair'],
   projectWorktreeRoot: ['refused', 'A project worktree root must be an absolute path'],
+  issueEmpty: ['refused', 'A requirement needs a description'],
 } as const satisfies Record<string, readonly ['missing' | 'refused', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
 
