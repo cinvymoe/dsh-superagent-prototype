@@ -50,7 +50,7 @@
 
 ## 测试证据
 
-- 定向：`pnpm vitest run tests/local.spec.ts tests/local-align.spec.ts tests/panel-projects.spec.tsx tests/panel-discuss.spec.tsx tests/deployment.spec.ts tests/panel-source.spec.tsx tests/docs.spec.ts` → `docs/issues/evidence/c2-targeted.log`（7 files / 73 tests passed）。
+- 定向：`pnpm vitest run tests/local.spec.ts tests/local-align.spec.ts tests/panel-projects.spec.tsx tests/panel-discuss.spec.tsx tests/deployment.spec.ts tests/panel-source.spec.tsx tests/docs.spec.ts` → `docs/issues/evidence/c2-project-chains-targeted.log`（7 files / 73 tests passed）。
 - 全量：`env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check` → `docs/issues/evidence/c2-check.log`（63 files / 1257 tests passed，Build complete，exit 0）。
 - `pnpm typecheck`：exit 0（含在 check 内）。
 - `git diff --check`：干净。

@@ -1,23 +1,34 @@
 /** Read/write operations for requirements submitted through the built-in local issue board. */
+import { readFileSync, rmSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { key, UserError, type ActorRef, type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalAlignment, type LocalIssue, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
+import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalAlignment, type LocalImage, type LocalImageInput, type LocalIssue, type LocalProject,
+  type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
+import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
 
 export interface LocalIssuesHost {
   readonly store: Pick<Store, 'get' | 'set' | 'keys' | 'read' | 'tickets' | 'triggers' | 'threads'>
+  /** Directory under which every requirement's images are stored, in `local-images/<issue id>/`. */
+  readonly stateDir: string
   receive(trigger: Trigger): ReceiveResult
   now?(): string
 }
 
-export interface LocalIssueInput { title: string; body?: string; author?: string; project: string }
+export interface LocalIssueInput { title?: string; body?: string; author?: string; project: string; images?: LocalImageInput[] }
 export interface LocalProjectInput { name: string; repository: string; worktreeRoot?: string }
 export interface LocalProjectFields { name: string; repository?: string; intakeRepository?: string; codeRepository?: string; chain?: string; worktreeRoot?: string }
 export interface LocalAlignmentInput { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }
 
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
+
+/** The title a description yields: its first non-empty line, whitespace collapsed, shortened to 200 characters. */
+export function requirementTitle(text: string): string {
+  const line = text.split('\n').find(item => item.trim()) ?? ''
+  return line.trim().replace(/\s+/g, ' ').slice(0, 200)
+}
 
 /** Owns the local issue records; every comment still enters the Engine through a normal human Trigger. */
 export class LocalIssues {
@@ -135,16 +146,43 @@ export class LocalIssues {
   /** Create the issue and submit its original requirement as the first Trigger of its Thread. */
   create(input: LocalIssueInput): LocalIssue {
     if (!this.project(input.project)) throw new UserError('unknownProject')
+    const description = (input.body ?? '').trim()
+    // A title given by an older caller wins; a description-only submission names itself after its first non-empty line.
+    const title = input.title?.trim() || requirementTitle(description)
+    if (!title) throw new UserError('issueEmpty')
     const at = this.clock()
-    const id = `q-${key('local-issue', at, input.title, String(this.list().length)).slice(0, 8)}`
+    const id = `q-${key('local-issue', at, title, String(this.list().length)).slice(0, 8)}`
+    // Validate and store every image before the record exists, so one refused image creates nothing.
+    const images = storeRequirementImages(this.host.stateDir, id, input.images ?? [])
     const issue: LocalIssue = {
-      id, title: input.title.trim(), body: (input.body ?? '').trim(), author: input.author?.trim() || LOCAL_ACTOR,
-      project: input.project, createdAt: at, updatedAt: at, state: 'open',
+      id, title, body: description, author: input.author?.trim() || LOCAL_ACTOR,
+      project: input.project, ...(images.length ? { images } : {}), createdAt: at, updatedAt: at, state: 'open',
     }
-    this.host.store.set(KV.local.issue(id), issue)
-    this.host.receive(localTrigger({ issue, text: issue.body ? `${issue.title}\n\n${issue.body}` : issue.title, at,
-      id: key('local-trigger', id, at) }))
+    try { this.host.store.set(KV.local.issue(id), issue) }
+    catch (error) {
+      if (images.length) rmSync(requirementImagesDir(this.host.stateDir, id), { recursive: true, force: true })
+      throw error
+    }
+    // A derived title is already the description's first line, so the thread's original message is the description once,
+    // without prefixing a copy of it; an explicit title keeps its separate heading. Images add their absolute paths.
+    const text = !description ? title : input.title?.trim() ? `${title}\n\n${description}` : description
+    this.host.receive(localTrigger({ issue, text: this.requirementText(issue, text), at, id: key('local-trigger', id, at) }))
     return issue
+  }
+
+  /** The submitted text plus one absolute path per image, so a worker can read the image the person attached. */
+  private requirementText(issue: LocalIssue, text: string): string {
+    const images = issue.images ?? []
+    const lines = images.map(image => `- ${requirementImagePath(this.host.stateDir, issue.id, image)} (${image.mediaType}, ${image.bytes} bytes)`)
+    return images.length ? `${text}\n\nImages:\n${lines.join('\n')}` : text
+  }
+
+  /** The stored bytes and media type of one requirement image; undefined for an unknown issue, image or missing file. */
+  image(id: string, imageId: string): { bytes: Buffer; mediaType: string } | undefined {
+    const image = this.get(id)?.images?.find(entry => entry.id === imageId)
+    if (!image) return undefined
+    try { return { bytes: readFileSync(requirementImagePath(this.host.stateDir, id, image)), mediaType: image.mediaType } }
+    catch { return undefined }
   }
 
   /** Append a human comment to the issue Thread; it can wake an idle Ticket or start a fresh Eval. */

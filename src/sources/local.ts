@@ -34,7 +34,7 @@ const LocalConfigSchema = z.object({}).strict()
 export const localKind: SourceKind<z.infer<typeof LocalConfigSchema>> = {
   kind: LOCAL_SOURCE,
   title: { zh: '本地 Issue', en: 'Local issues' },
-  description: { zh: '在 Web 面板中提交需求、讨论并审阅对齐结果。', en: 'Submit requirements, discuss, and review alignment in the web panel.' },
+  description: { zh: '在 Web 面板中提交需求并审阅对齐结果。', en: 'Submit requirements and review alignment in the web panel.' },
   schema: LocalConfigSchema,
   fields: [],
   health: ['local'],

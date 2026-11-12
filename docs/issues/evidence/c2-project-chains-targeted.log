@@ -1,0 +1,39 @@
+(node:930162) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:930175) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-4e2a92d2a5b4
+
+(node:930230) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:930231) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:930229) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:930244) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:930255) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:930237) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:930243) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (11 tests) 35ms
+(node:930244) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/deployment.spec.ts (8 tests) 218ms
+(node:930229) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (6 tests) 1355ms
+     ✓ stores an optional absolute worktree root, treats blank values as unconfigured, and refuses relative ones  1028ms
+ ✓ tests/panel-projects.spec.tsx (3 tests) 516ms
+ ✓ tests/panel-discuss.spec.tsx (8 tests) 610ms
+ ✓ tests/panel-source.spec.tsx (18 tests) 2031ms
+   ✓ shows each Source's state on the Source status and opens its settings from a setup problem  320ms
+ ✓ tests/local-align.spec.ts (19 tests) 3451ms
+   ✓ accepts a local requirement for alignment and gives its worker the align tool instead of execution  1134ms
+
+ Test Files  7 passed (7)
+      Tests  73 passed (73)
+   Start at  16:50:25
+   Duration  4.85s (transform 3.82s, setup 0ms, import 6.05s, tests 8.22s, environment 2.56s)
+

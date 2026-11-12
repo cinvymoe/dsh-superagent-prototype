@@ -288,19 +288,28 @@ export async function startRuntime(seed?: (store: Store) => void) {
     const ticket = runtime.store.tickets.get((result.ticket as { ticket_id: string }).ticket_id)!
     return { trigger, ticket, sessionId: `worker-${ticket.id}` }
   }
+  async function raw(method: string, path: string, json?: unknown, headers: Record<string, string | undefined> = {}) {
+    let status = 0, received: Record<string, string> = {}
+    const chunks: Buffer[] = []
+    const body = json === undefined ? [] : [Buffer.from(JSON.stringify(json))]
+    const sent = Object.fromEntries(Object.entries({ host: '127.0.0.1:3082', 'x-orchestrator-request': '1', ...headers })
+      .filter(([, value]) => value !== undefined)) as Record<string, string>
+    const req = { method, url: `/orchestrator/api/${path}`, headers: sent,
+      async *[Symbol.asyncIterator]() { yield* body } }
+    await http(req, { writeHead: (code: number, value: Record<string, string> = {}) => { status = code; received = value },
+      end: (value?: string | Uint8Array) => { chunks.push(typeof value === 'string' ? Buffer.from(value) : Buffer.from(value ?? [])) } })
+    return { status, headers: received, body: Buffer.concat(chunks) }
+  }
   async function api(method: string, path: string, json?: unknown) {
-    let status = 0, text = ''
-    const chunks = json === undefined ? [] : [Buffer.from(JSON.stringify(json))]
-    const req = { method, url: `/orchestrator/api/${path}`, headers: { host: '127.0.0.1:3082', 'x-orchestrator-request': '1' }, async *[Symbol.asyncIterator]() { yield* chunks } }
-    await http(req, { writeHead: (code: number) => { status = code }, end: (data: string) => { text = data } })
-    return { status, body: JSON.parse(text) as Record<string, unknown> }
+    const response = await raw(method, path, json)
+    return { status: response.status, body: JSON.parse(response.body.toString('utf8')) as Record<string, unknown> }
   }
   async function stop() { await runtime.stop(); vi.restoreAllMocks(); rmSync(directory, { recursive: true, force: true }) }
   /** The Session's model takes its next step, which takes the messages steered in since its last. */
   const step = (sessionId: string) => { steps.get(sessionId)!() }
   /** A step of the worker claims what waits for it, and is cut off before the Session took it. */
   const claim = (sessionId: string) => { claims.get(sessionId)!() }
-  return { runtime, ctx, directory, agents, tools, deliveries, relays, candidates, runTool, route, acceptedTicket, api, controller, subprocess, hooks, resolveDefault, stop,
+  return { runtime, ctx, directory, agents, tools, deliveries, relays, candidates, runTool, route, acceptedTicket, api, raw, controller, subprocess, hooks, resolveDefault, stop,
     jobs, subagents, step, claim }
 }
 export type Host = Awaited<ReturnType<typeof startRuntime>>
