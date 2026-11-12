@@ -22,7 +22,7 @@ An `idle` Ticket has finished its turn without an outstanding question. A Trigge
 
 ## The Executor
 
-Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under one root, chosen in this order: the local project's `worktreeRoot`, the Executor's `directory`, then `<stateDir>/work`. The chosen root is recorded on the Ticket as `execution.worktreeRoot` only when it was configured explicitly; a later settings change does not move an accepted Ticket.
+Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under one root, chosen in this order: the local project's `worktreeRoot`, the Executor's `directory`, then `<stateDir>/work`. The chosen root is recorded on the Ticket as `execution.worktreeRoot` only when it was configured explicitly; a later settings change does not move an accepted Ticket. A Ticket created from a confirmed alignment slice starts the feature-exec `execute` flow, which ends at an open PR; review and merge stay with a person.
 
 Executor Sessions run commands without approval as the operator's OS user. Their `dsh-superagent-worker` preset contains the tools needed for work and moves foreground shell commands to background jobs after 5 seconds. This lets a worker receive new messages at the next step instead of waiting for a long command to finish.
 
