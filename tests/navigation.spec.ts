@@ -70,10 +70,24 @@ it('reads the requirement pages and maps a saved Discuss route onto them', () =>
   expect(parseRoute({ page: 'requirements', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
   expect(parseRoute({ page: 'requirements', edit: 'p-1' })).toEqual({ page: 'requirements', edit: 'p-1' })
   expect(parseRoute({ page: 'requirements', edit: 'p-1', create: true })).toEqual({ page: 'requirements', edit: 'p-1' })
+  // The list and detail keep a valid processing filter; an unknown one is dropped and pending is canonical (no query).
+  expect(parseRoute({ page: 'requirements', query: { filter: 'closed' } })).toEqual({ page: 'requirements', query: { filter: 'closed' } })
+  expect(parseRoute({ page: 'requirements', query: { filter: 'nope' } })).toEqual({ page: 'requirements' })
+  expect(parseRoute({ page: 'requirements', query: { filter: 'pending' } })).toEqual({ page: 'requirements' })
+  expect(parseRoute({ page: 'requirements', id: 'q1', query: { filter: 'confirmed' } }))
+    .toEqual({ page: 'requirements', id: 'q1', query: { filter: 'confirmed' } })
+  expect(parseRoute({ page: 'requirements', id: 'q1', query: { filter: 'pending' } })).toEqual({ page: 'requirements', id: 'q1' })
+  expect(parseRoute({ page: 'requirements', id: 'q1', query: { filter: 'nope' } })).toEqual({ page: 'requirements', id: 'q1' })
+  // The create and edit pages take no filter.
+  expect(parseRoute({ page: 'requirements', create: true, query: { filter: 'closed' } })).toEqual({ page: 'requirements', create: true })
+  expect(parseRoute({ page: 'requirements', edit: 'p-1', query: { filter: 'closed' } })).toEqual({ page: 'requirements', edit: 'p-1' })
   // The removed Discuss tab stays readable: detail, create page and list open their matching requirement page.
   expect(parseRoute({ page: 'discuss', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
   expect(parseRoute({ page: 'discuss', create: true })).toEqual({ page: 'requirements', create: true })
   expect(parseRoute({ page: 'discuss' })).toEqual({ page: 'requirements' })
+  expect(parseRoute({ page: 'discuss', query: { filter: 'closed' } })).toEqual({ page: 'requirements', query: { filter: 'closed' } })
+  expect(parseRoute({ page: 'discuss', id: 'q1', query: { filter: 'all' } }))
+    .toEqual({ page: 'requirements', id: 'q1', query: { filter: 'all' } })
 })
 it('opens the settings that fix each setup problem: the Deployment group, or the card of the Source it names', () => {
   expect(setupPage('deployment')).toEqual({ page: 'settings', query: { group: 'deployment' } })

@@ -1,0 +1,19 @@
+$ pnpm vitest run tests/questions.spec.ts tests/model-surface.spec.ts tests/docs.spec.ts
+ ✓ tests/questions.spec.ts (6 tests) 1039ms
+   ✓ answers one question from a Session forked off the worker's latest completed turn, then archives it  319ms
+
+ Test Files  3 passed (3)
+      Tests  29 passed (29)
+   Start at  00:59:18
+   Duration  2.50s (transform 1.80s, setup 0ms, import 2.64s, tests 1.83s, environment 1ms)
+
+
+$ env -u ... LC_ALL=C pnpm vitest run
+     ✓ collects the end of a job left to a person until dsh-superagent stopped its workers  355ms
+   ✓ resumes an ended ticket a person wrote to during a pause once it lifts, under the Policy then  354ms
+
+ Test Files  65 passed (65)
+      Tests  1327 passed (1327)
+   Start at  00:59:22
+   Duration  21.14s (transform 31.27s, setup 0ms, import 61.38s, tests 110.82s, environment 18.35s)
+

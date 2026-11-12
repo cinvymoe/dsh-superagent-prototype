@@ -6,13 +6,15 @@ import type { T } from './text.ts'
 
 export const TABS = ['overview', 'newRequirement', 'requirements', 'source', 'trigger', 'eval', 'execution', 'settings'] as const
 export type Tab = typeof TABS[number]
+export const REQUIREMENT_FILTERS = ['pending', 'confirmed', 'closed', 'all'] as const
+export type RequirementFilter = typeof REQUIREMENT_FILTERS[number]
 export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'prompts', 'deployment'] as const
 export type SettingsGroup = typeof SETTINGS_GROUPS[number]
 export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undefined }
   | { page: 'newRequirement'; id?: undefined; query?: undefined }
-  | { page: 'requirements'; id?: undefined; create?: true; edit?: undefined; query?: undefined }
+  | { page: 'requirements'; id?: undefined; create?: true; edit?: undefined; query?: { filter?: RequirementFilter } }
   | { page: 'requirements'; id?: undefined; create?: undefined; edit: string; query?: undefined }
-  | { page: 'requirements'; id: string; create?: undefined; edit?: undefined; query?: undefined }
+  | { page: 'requirements'; id: string; create?: undefined; edit?: undefined; query?: { filter?: RequirementFilter } }
   | { page: 'trigger'; id?: undefined; query?: { filter?: ThreadFilter } }
   | { page: 'trigger'; id: string; query?: { trigger?: string } }
   | { page: 'eval'; id?: undefined; query?: { filter?: DecisionFilter; window?: '24h' } }
@@ -45,9 +47,15 @@ export function parseRoute(value: unknown): Route | undefined {
     case 'overview': case 'source': return { page }
     case 'newRequirement': return { page }
     // The legacy Discuss tab stays readable: its detail, create page and list map onto the requirement pages.
-    case 'requirements': case 'discuss': return record ? { page: 'requirements', id: record }
-      : typeof edit === 'string' && edit ? { page: 'requirements', edit }
-      : create === true ? { page: 'requirements', create: true } : { page: 'requirements' }
+    case 'requirements': case 'discuss': {
+      // Pending is the default bucket and canonical: it is never written into a saved route.
+      const chosen = pick(REQUIREMENT_FILTERS, query?.filter)
+      const filter = chosen === 'pending' ? undefined : chosen
+      const kept = filter ? { query: { filter } } : {}
+      return record ? { page: 'requirements', id: record, ...kept }
+        : typeof edit === 'string' && edit ? { page: 'requirements', edit }
+        : create === true ? { page: 'requirements', create: true } : { page: 'requirements', ...kept }
+    }
     case 'trigger': return record ? { page, id: record, query: compact({ trigger: text('trigger') }) }
       : { page, query: compact({ filter: pick(THREAD_FILTERS, query?.filter) }) }
     case 'eval': return { page, query: compact({ filter: pick(DECISION_FILTERS, query?.filter),

@@ -11,6 +11,7 @@ import { mandateInstructions, ticketOfSession } from '../executor/dsh.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import { AgentDelivery, messageId } from './delivery.ts'
 import type { Effects } from './effects.ts'
+import { resolveExecutionStrategy, type ExecutionServices } from './execution-strategy.ts'
 import type { Variable } from './execution-environment.ts'
 import { RetryHealth } from './retry-health.ts'
 import { initializeRoleModel } from './role-models.ts'
@@ -62,9 +63,6 @@ declare module '@deepseek-ai/cordis' {
 const PRE_RUN_TOOLS = new Set(['bash', 'read', 'read_image', 'write', 'edit', 'glob', 'grep', 'web_search', 'web_fetch'])
 const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
   'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
-/** The feature-exec execution tools a sliced Ticket may use to run its pre-approved plan. */
-const EXECUTE_TOOLS = ['feature_exec_flow', 'feature_exec_start', 'feature_exec_status', 'feature_exec_gate', 'feature_exec_advance',
-  'feature_exec_plan', 'feature_exec_dispatch', 'feature_exec_close']
 /**
  * The only tools a Ticket's Q&A Session gets, in this order: reading its inherited conversation and the Ticket directory,
  * nothing that writes, runs or messages. The whitelist, not the permission, is what keeps the answer read-only.
@@ -288,9 +286,11 @@ export class Sessions {
     binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-policy', order: 9999, interpolate: false, text: context => {
       const version = this.promptFor(agent, context.signal !== undefined)
       const current = ticket && host.store.tickets.get(ticket.id)
+      // A slice worker is told to run the execution strategy its Ticket pinned; any other worker implements directly.
+      const strategy = current?.plan && resolveExecutionStrategy(current.plan, this.executionServices())
       const composed = master ? host.prompts.compose(version.config, 'orchestrator', current ? host.environment(current) : undefined)
         : current?.mode === 'align' ? host.prompts.composeAlign(version.config, host.environment(current))
-        : current?.plan ? host.prompts.composeExecute(version.config, host.environment(current))
+        : strategy ? host.prompts.composeExecute(version.config, strategy.mode, host.environment(current))
         : host.prompts.compose(version.config, 'worker', current ? host.environment(current) : undefined)
       return `[dsh-superagent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
     }, ...(master ? { complete: true } : {}) }))
@@ -387,10 +387,11 @@ export class Sessions {
   private workOnly(agent: Agent, ticket: Ticket): (() => void)[] {
     const store = this.host.store
     const parent = scopeParentOf(agent)
-    // A slice ticket may start its feature-exec execution run; an aligner has no feature-exec tool.
-    const tools = ticket.plan ? [...WORK_TOOLS, ...EXECUTE_TOOLS] : WORK_TOOLS
+    // A slice ticket gets the execution tools and pre-run guard its pinned strategy runs; every other ticket gets neither.
+    const strategy = ticket.plan ? resolveExecutionStrategy(ticket.plan, this.executionServices()) : undefined
+    const tools = strategy ? [...WORK_TOOLS, ...strategy.tools] : WORK_TOOLS
     const allow = tools.filter(name => agent.ctx.tools.get(name, parent))
-    const featureExec = allow.includes('feature_exec_start')
+    const featureExec = strategy?.preRunGuard && allow.includes('feature_exec_start')
       ? this.ctx.get('featureExec') as { list(): readonly { flow: string; status: string; subject?: { issue?: { id?: string } } }[] } | undefined
       : undefined
     return [agent.ctx.tools.restrict({ allow }), agent.ctx.tools.guard((execution?: { name: string }) => {
@@ -404,6 +405,8 @@ export class Sessions {
       return undefined
     })]
   }
+  /** The host services execution strategies run on: whether this host registered the feature-exec service. */
+  private executionServices(): ExecutionServices { return { featureExec: this.ctx.get('featureExec') !== undefined } }
   /**
    * A subagent of an Executor Session, or of one of its subagents, which runs under DSH's `standard` preset with the worker's
    * permissions, gets the same work tools as the worker, and none once the worker's ticket ended. Any other agent is left as
