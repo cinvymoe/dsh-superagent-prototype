@@ -257,7 +257,7 @@ Each model request binds the Session to the current prompt revision. The revisio
 ## Dependency rules
 
 - **Explicit, narrow dependencies.** Each class receives an interface that names what it uses, mostly as `Pick` types of other classes: `ExecutorHost`, `AssessorHost`, `SessionsHost`, `SettingsHost`, `SetupHost`, `PassesHost` and `OutboxHost` for the core classes, and `HttpHost`, `MainToolsHost`, `ExecutorToolsHost`, `ResourceHost`, `LinkHost` and `SourceContextDeps` for the glue, with the Engine as the `Pick` of the role that calls it. The Runtime passes itself only behind such an interface. A Source plugin injects the `orchestrator` service, which its type names as a `SourceHost`: the registry and `context(kind)`; its kind's code sees only its `SourceContext`.
-- **What may import what.** `src/core` imports nothing outside itself apart from Node's hashing, and does no I/O. `src/sources` imports nothing from `src/app`. The panel imports only types from the host side, and the plain values of `src/admission.ts`, `src/limits.ts`, `src/setup.ts`, `src/navigation.ts`, `src/sources/host.ts`, `src/core/errors.ts`, `src/core/reasons.ts` and the filter lists of `src/app/api.ts`.
+- **What may import what.** `src/core` imports nothing outside itself apart from Node's hashing, and does no I/O. `src/sources` imports nothing from `src/app`. The panel imports only types from the host side, and the plain values of `src/admission.ts`, `src/limits.ts`, `src/setup.ts`, `src/navigation.ts`, `src/sources/host.ts`, `src/core/errors.ts`, `src/core/reasons.ts` and the filter lists and requirement-image URL of `src/app/api.ts`.
 - **One writer per state.** Each kind of state has one writer, and the others read it or ask that writer.
 
   | State | Writer |
@@ -297,7 +297,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/setup.ts` | Setup problems: `SetupError`, with a code, the place that fixes it and the English text the log, the main Session and the panel share |
 | `src/policy.ts` | The Policy: the settings schemas by block, the Policy version, the gate and Mandate revalidation |
 | `src/admission.ts` | The admission table's values, each cell's options and defaults, shared with the panel |
-| `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer |
+| `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer, and the requirement-image count, media types and byte bounds |
 | `src/kv.ts` | `KV`: every family of `kv` records with its key, its value's type and its owner, and the `Key` and `Family` types the Store and `SourceContext.state` take |
 | `src/navigation.ts` | Opens a DeepSeek Harness Session from the panel once the host's catalog lists it |
 | `src/core/model.ts` | The domain types, among them the typed Ticket, `Execution` with its optional explicit `worktreeRoot`, and `MandateBasis`, with `threadKey`, `ticketOutcome`, `reached`, `followupOwners`, `settled`, `waitsForPerson`, `liveTicket`, `runningAssignment`, `latestAssignment` and `latestReport` |
@@ -339,14 +339,15 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory-root resolution (project `worktreeRoot` > `executor.directory` > `<stateDir>/work`) and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
-| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, the issue records bound to them, their comments as human Triggers, and the read-only alignment proposal a person confirms or sends back |
+| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, the issue records bound to them with their submitted image metadata, their comments as human Triggers, the read-only alignment proposal a person confirms or sends back, and the bytes of a requirement image |
+| `src/app/local-images.ts` | `storeRequirementImages`: the count, name, media-type, size and signature checks of a requirement's images, and their storage under `<stateDir>/local-images/<issue id>/` |
 | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
 | `src/app/resources.ts` | `RESOURCES` and `readResource`: what `orchestrator_read` reads, for each role |
 | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
 | `src/app/tools/main.ts` | The main Session's tools |
 | `src/app/tools/executor.ts` | An Executor Session's tools |
-| `src/app/http.ts` | The `/orchestrator/api` routes: the same-origin check, request limits and one status per kind of failure |
-| `src/app/api.ts` | `Api`, every route with its parameters, query, body and response, and the filters of the lists; it imports only types, so the panel bundles it |
+| `src/app/http.ts` | The `/orchestrator/api` routes: the same-origin check, request limits (the larger one only for the create-requirement body that carries images), the raw requirement-image response and one status per kind of failure |
+| `src/app/api.ts` | `Api`, every route with its parameters, query, body and response, the filters of the lists and the URL of a requirement image; it imports only types, so the panel bundles it |
 | `src/app/views/text.ts` | The two forms of a view's text: `preview`, plain text on one line, and `markdown` without HTML; `plain` and `readable` |
 | `src/app/views/records.ts` | The rows the views share: Triggers, Tickets, Threads, Decisions and Channel links, and `ownersOf`, the owners of follow-ups as one request reads them |
 | `src/app/views/tickets.ts` | The Ticket lists by stage, a Ticket's page, the Mandate basis facts and the Executor's load |
@@ -372,7 +373,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
 | `src/sources/local.ts` | The local panel kind and plugin entry, exported as `./local-watch`: human Triggers, a Channel that needs no transport, and the default local policy |
-| `src/sources/local-format.ts` | The local project (with its optional worktree root), issue, slices and alignment proposal, shared by the host and the panel |
+| `src/sources/local-format.ts` | The local project (with its optional worktree root), issue with its image metadata, image upload and slices, and the alignment proposal, shared by the host and the panel |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
@@ -413,8 +414,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | --- | --- |
 | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
-| `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
-| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, dispatching a confirmed plan's slices as tickets, and project worktree roots |
+| `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, a requirement with stored images and its comments as human Triggers, image refusals, the Aligner's proposal and a person's review, and closing |
+| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, dispatching a confirmed plan's slices as tickets, project worktree roots, and requirement image upload, refusal and reading over HTTP |
 | `tests/panel-discuss.spec.tsx` | The Discuss board scoped to the current project: the create-first hint, requirement submission and details with their project, and the standalone project creation page |
 | `tests/panel-projects.spec.tsx` | The project bar: project tab switching and Discuss scoping, the overflow More menu, and standalone project creation |
 | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
@@ -461,7 +462,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 
 ## Persistence
 
-One SQLite file, `<stateDir>/orchestrator.sqlite`, which only the Store opens.
+One SQLite file, `<stateDir>/orchestrator.sqlite`, which only the Store opens. Requirement images are files under `<stateDir>/local-images/<issue id>/`; the issue record keeps their ids, original names, media types and byte counts.
 
 | Table | Holds | Written by |
 | --- | --- | --- |

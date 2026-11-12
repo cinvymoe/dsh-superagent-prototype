@@ -1,0 +1,33 @@
+(node:933521) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:933569) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-7d197b3b2d9b
+
+(node:933633) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:933649) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:933643) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:933636) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:933642) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:933653) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (11 tests) 27ms
+ ✓ tests/class-docs.spec.ts (1 test) 19ms
+ ✓ tests/locales.spec.ts (6 tests) 9ms
+(node:933636) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:933633) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/http.spec.ts (4 tests) 23ms
+ ✓ tests/local.spec.ts (8 tests) 289ms
+ ✓ tests/local-align.spec.ts (17 tests) 2432ms
+
+ Test Files  6 passed (6)
+      Tests  47 passed (47)
+   Start at  16:51:53
+   Duration  4.00s (transform 3.26s, setup 0ms, import 4.83s, tests 2.80s, environment 1ms)
+

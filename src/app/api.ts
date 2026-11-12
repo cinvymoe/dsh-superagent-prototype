@@ -8,7 +8,7 @@ import type { SettingsView } from './views/settings.ts'
 import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
-import type { LocalIssue, LocalProject, LocalSlice } from '../sources/local-format.ts'
+import type { LocalImageInput, LocalIssue, LocalProject, LocalSlice } from '../sources/local-format.ts'
 import type { Receipt } from './store.ts'
 
 export const TICKET_FILTERS = ['open', 'person', 'working', 'idle', 'ended'] as const
@@ -37,7 +37,7 @@ export interface Api {
   'GET local/projects': { response: { projects: LocalProject[] } }
   'POST local/projects': { body: { name: string; repository: string; worktreeRoot?: string }; response: { project: LocalProject } }
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssue[] } }
-  'POST local/issues': { body: { title: string; body?: string; project: string }; response: { issue: LocalIssue } }
+  'POST local/issues': { body: { title: string; body?: string; project: string; images?: LocalImageInput[] }; response: { issue: LocalIssue } }
   'GET local/issues/:id': { response: { issue: LocalIssue; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }
   'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssue } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssue } }
@@ -61,3 +61,10 @@ type Params<P> = P extends `${string}:${infer Name}/${infer Rest}` ? Record<Name
 export type RouteParams<K extends keyof Api> = Params<Path<K>>
 export type ApiRequest<K extends keyof Api> = RouteParams<K> & Omit<Api[K], 'response'>
 export type ApiResponse<K extends keyof Api> = Api[K]['response']
+
+/**
+ * Same-origin URL of one requirement image. It answers bytes rather than JSON, so the panel renders it as an image
+ * source instead of calling it through the typed caller.
+ */
+export const localImageUrl = (issueId: string, imageId: string): string =>
+  `/orchestrator/api/local/issues/${encodeURIComponent(issueId)}/images/${encodeURIComponent(imageId)}`
