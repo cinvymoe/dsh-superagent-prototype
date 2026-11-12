@@ -23,6 +23,7 @@ const ICON_PATHS = {
   shield: 'M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z',
   decision: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8.5 12.5l2.5 2.5 4.5-5',
   message: 'M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-5 4V6a1 1 0 0 1 1-1z',
+  image: 'M4 5h16v14H4zM4 16l4.5-4.5 3.5 3.5 3-3L20 17M9 9.5h.01',
   inbox: 'M4 13l2.5-8h11l2.5 8M4 13v6h16v-6M4 13h5l1 2h4l1-2h5',
   hash: 'M10 4L8 20M16 4l-2 16M5 9h15M4 15h15',
   filter: 'M4 5h16l-6 7.5V18l-4 2v-7.5z',
