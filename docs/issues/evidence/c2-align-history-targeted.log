@@ -1,0 +1,41 @@
+(node:1602717) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1602760) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-9475bcf31c60
+
+(node:1602858) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1602857) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1602864) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1602856) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1602868) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (19 tests) 92ms
+ ✓ tests/locales.spec.ts (6 tests) 13ms
+(node:1602858) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1602856) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/panel-discuss.spec.tsx (35 tests) 1705ms
+ ✓ tests/local.spec.ts (16 tests) 6557ms
+     ✓ creates an issue and submits its text as a human Trigger on a local Thread  1408ms
+     ✓ derives a title from the first non-empty line of a description and stores the whole description  868ms
+     ✓ refuses a requirement with neither a title nor a description  1044ms
+     ✓ adds comments as further Triggers without changing the requirement  595ms
+     ✓ records a proposal and the person's review, and refuses a review without one  1712ms
+ ✓ tests/local-align.spec.ts (30 tests) 11543ms
+   ✓ accepts a local requirement for alignment and gives its worker the align tool instead of execution  2891ms
+   ✓ dispatches the confirmed slices as tickets, one per slice, and only after the person confirms  2467ms
+   ✓ delivers a rejection to the Aligner Session and accepts a new round  307ms
+     ✓ keeps the executor directory or the default work root when a project sets no worktree root  308ms
+   ✓ lets only the create-requirement route carry a body above the management limit  353ms
+     ✓ binds a legacy project to the chain its code repository names at startup, idempotently and without a chain for unmatched ones  306ms
+
+ Test Files  5 passed (5)
+      Tests  106 passed (106)
+   Start at  01:49:22
+   Duration  14.34s (transform 5.43s, setup 0ms, import 7.30s, tests 19.91s, environment 1.36s)
+

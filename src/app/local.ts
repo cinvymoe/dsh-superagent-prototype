@@ -156,10 +156,11 @@ export class LocalIssues {
   putIssue(issue: LocalIssue): void { this.host.store.set(KV.local.issue(issue.id), issue) }
 
   /**
-   * The HTTP view of a requirement: its stored record plus whether every slice Ticket of its confirmed alignment ended.
-   * Derived here, on read, so no migration or extra store field exists. A requirement without a confirmed alignment, one
-   * whose alignment has no slices, or one whose slice has no Ticket reports false rather than guessing that it finished.
-   * Both an Executor's end and a person's stop count, because the Ticket record only has to carry `ended`.
+   * The HTTP view of a requirement: its stored record, its alignment rounds read back, plus whether every slice Ticket of
+   * its confirmed alignment ended. Derived on read, so no migration or extra store field exists. A requirement without a
+   * confirmed alignment, one whose alignment has no slices, or one whose slice has no Ticket reports false rather than
+   * guessing that it finished. Both an Executor's end and a person's stop count, because the Ticket record only carries
+   * `ended`.
    */
   view(issue: LocalIssue): LocalIssueView {
     const materialized = this.withRounds(issue)

@@ -480,23 +480,37 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'POST local/issues/:id/alignment': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
-    // Each proposal appends a round; the fixture mirrors the host's ids without keeping the full history.
-    const round = (issue.alignments?.length ?? (issue.alignment ? 1 : 0)) + 1
-    const next = { ...issue, alignment: { roundId: `al-${round}`, status: 'proposed' as const, summary: body.summary ?? '',
-      slices: body.slices ?? [], acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' } }
+    // Each proposal appends a round and supersedes an earlier undecided one, as the host keeps its round history.
+    const rounds = issue.alignments ?? (issue.alignment ? [issue.alignment] : [])
+    if (rounds.at(-1)?.status === 'confirmed') return refuse(400, 'Alignment is already confirmed', { code: 'alignmentConfirmed' })
+    const taken = new Set(rounds.map(item => item.roundId))
+    let ordinal = rounds.length + 1
+    while (taken.has(`al-${ordinal}`)) ordinal += 1
+    const round: NonNullable<LocalIssue['alignment']> = { roundId: `al-${ordinal}`, status: 'proposed',
+      summary: body.summary ?? '', slices: body.slices ?? [], acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' }
+    const alignments = [...rounds.map(item => item.status === 'proposed' ? { ...item, status: 'superseded' as const } : item), round]
+    const next: LocalIssue = { ...issue, alignments, alignment: round }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     return { issue: issueView(next) }
   } },
   'POST local/issues/:id/alignment/decision': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
-    if (!issue?.alignment) return refuse(404, 'Local issue or alignment not found')
-    const next = { ...issue, alignment: { ...issue.alignment, status: body.decision === 'confirm' ? 'confirmed' as const : 'rejected' as const,
-      decidedAt: '2026-09-23T00:00:00Z', ...(body.decision === 'reject' && body.reason ? { reason: body.reason } : {}) } }
+    const rounds = issue?.alignments ?? (issue?.alignment ? [issue.alignment] : [])
+    const current = rounds.at(-1)
+    if (!issue || !current) return refuse(404, 'Local issue or alignment not found')
+    // A decision names the round the page rendered; one left on an older round is refused, as the host does.
+    if (body.roundId !== undefined && body.roundId !== current.roundId) {
+      return refuse(400, 'Alignment round is stale', { code: 'alignmentRoundStale', values: { round: body.roundId } })
+    }
+    const decided = { ...current, status: body.decision === 'confirm' ? 'confirmed' as const : 'rejected' as const,
+      decidedAt: '2026-09-23T00:00:00Z', ...(body.decision === 'reject' && body.reason ? { reason: body.reason } : {}) }
+    const alignments = [...rounds.slice(0, -1), decided]
+    const next: LocalIssue = { ...issue, alignments, alignment: decided }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     // A confirmed alignment dispatches the slices, so the requirement's execution mode is read-only from then on.
     if (body.decision === 'confirm') server.dispatchedIssues.add(params.id)
     return { issue: issueView(next), tickets: body.decision === 'confirm'
-      ? next.alignment.slices.map(slice => ({ id: `ticket-${slice.id}`, title: `${slice.id} · ${slice.title}` })) : [] }
+      ? decided.slices.map(slice => ({ id: `ticket-${slice.id}`, title: `${slice.id} · ${slice.title}` })) : [] }
   } },
   'POST local/issues/:id/execution': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
