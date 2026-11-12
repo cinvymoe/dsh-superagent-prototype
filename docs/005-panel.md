@@ -24,6 +24,14 @@ The tabs follow the workflow: **Overview**, **Discuss**, **Source**, **Trigger**
 | Execution | Executor state, Pause processing, and Tickets filtered by Open, Pending, Working, Waiting for a Trigger or Ended. Ticket details show actions, authorization, waiting Inputs, Subscriptions and Assignments |
 | Settings | Sources, Eval, Execution, Prompts and Deployment. Each group includes its save history |
 
+### Projects
+
+Each Discuss project has a name, a repository and an optional worktree root. **Name** labels the project in the Projects list and on its requirements. **Repository** is the `owner/name` repository that executes the project's requirements, and it is their only execution target. **Worktree root** is an optional absolute directory root for the project's Tickets; empty keeps the Execution ticket directory root.
+
+The project's row offers **Only this project**, which filters the Requirements list to that project, and **All projects**, which clears the filter.
+
+A configured worktree root must already exist and accept writes; otherwise the Ticket fails to launch instead of falling back to the Execution ticket directory root.
+
 ### Reading individual records
 
 A dropped message links to its Ticket, or to its Thread when it has no Ticket. The Source page explains whether its conversation disappeared or the Source stopped listening to it.
