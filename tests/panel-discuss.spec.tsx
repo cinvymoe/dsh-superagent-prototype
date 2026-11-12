@@ -777,7 +777,7 @@ it('shows 待关闭 once every slice ticket of a confirmed alignment ended, 开�
   const slice = { id: 'C1', title: 'Only slice', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
   const confirmed = (id: string, title: string, createdAt: string, state: 'open' | 'closed' = 'open') => ({
     ...localIssue(title), id, createdAt, state,
-    alignment: { status: 'confirmed' as const, summary: 'One slice', slices: [slice], acceptance: [], proposedAt: createdAt,
+    alignment: { roundId: 'al-1', status: 'confirmed' as const, summary: 'One slice', slices: [slice], acceptance: [], proposedAt: createdAt,
       decidedAt: createdAt },
   })
   server.localProjects = [PROJECT]

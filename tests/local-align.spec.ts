@@ -641,7 +641,7 @@ describe('requirement slice completion', () => {
   const slice = (id: string) => ({ id, title: `Slice ${id}`, outcome: `Outcome ${id}`, inScope: [], outOfScope: [], acceptance: [],
     dependsOn: [], lane: 'light' as const })
   const alignment = (status: 'proposed' | 'confirmed' | 'rejected', slices = [slice('C1')]): LocalAlignment =>
-    ({ status, summary: 'One slice', slices, acceptance: [], proposedAt: at })
+    ({ roundId: 'al-1', status, summary: 'One slice', slices, acceptance: [], proposedAt: at })
   /** The fields every directly written requirement shares; `project` is only known once the fixture ran. */
   const fields = () => ({ author: 'local', project: project.id, createdAt: at, updatedAt: at, state: 'open' as const })
   const listView = async (): Promise<{ id: string; slicesFinished: boolean }[]> =>
