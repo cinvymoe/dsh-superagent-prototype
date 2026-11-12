@@ -242,6 +242,8 @@ Validation inherits an omitted base from the saved override, drops removed parts
 
 Each model request binds the Session to the current prompt revision. The revisions it used are stored durably: `promptVersion` identifies the active one and `mayRead` restricts which versions a worker can inspect. Registrations are tracked in one map per agent.
 
+A Ticket's question is answered by a Session forked from its worker Session at the latest completed turn. `Sessions.answer` gives that fork the answer prompt in place of the worker preset's and only `read`, `read_image`, `glob` and `grep`, and `Questions` archives it after the answer. Asking writes nothing at all: the Ticket, its Inputs, its Assignments and the Engine stay as they were.
+
 `status` and `promptVersion` serve prompt pages. Saves go through `Prompts.save` and notify the main Session. `modelRetry` exposes model-budget retry state.
 
 ### Glue
@@ -314,7 +316,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/core/stage.ts` | `ticketStage` and `canRetry`: the Ticket stages of [003 Execution](003-execution.md) |
 | `src/core/errors.ts` | `UserError` and `USER_ERRORS` |
 | `src/core/reasons.ts` | `Reason`, `REASONS` and `reasonText`: why the core recorded a Decision or set a Trigger aside, by code |
-| `src/core/ids.ts` | `key`: ids derived from their inputs, equal for equal inputs |
+| `src/core/ids.ts` | `key` and `planTicketId`: ids derived from their inputs, equal for equal inputs; `planTicketId` is the one source of a slice Ticket's id, shared by plan dispatch and the requirement view |
 | `src/core/memory.ts` | `MemoryRepositories`: the Store's repositories in memory, in the Store's order and with its nested rollback, for domain tests |
 | `src/core/index.ts` | The core's exports |
 | `src/app/runtime.ts` | The Runtime, the composition root, with its start and stop |
@@ -335,6 +337,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/skill-files.ts` | Packaged text: `promptFile`, which joins a file's one-sentence lines into paragraphs, and the bundled skills |
 | `src/app/sessions.ts` | Sessions |
 | `src/app/execution-strategy.ts` | The execution strategies a slice Ticket runs, by the contract version its plan pinned: the execution tools and pre-run guard each mode gives a worker, the feature-exec fallback of a Ticket dispatched before strategies were pinned, the fallback to the current version, and the native degradation of a host that registered no feature-exec service |
+| `src/app/questions.ts` | `Questions`: one question about a Ticket, answered in a Session forked off its worker at the latest completed turn, given the answer prompt and only the reading tools, read for its answer and archived, with no Trigger, Eval, Ticket or Assignment written |
 | `src/app/delivery.ts` | `AgentDelivery`: delivers a message to a DeepSeek Harness agent once per request id, also across a restored Session |
 | `src/app/retry-health.ts` | `RetryHealth`: which Sessions wait on a model budget retry, for the `models` health entry |
 | `src/app/role-models.ts` | Resolves the Eval and Executor models, and seeds a new Session with its role's model |
@@ -342,7 +345,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory-root resolution (project `worktreeRoot` > `executor.directory` > `<stateDir>/work`) and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
-| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, their validated editable fields (`validateProject`, `draftProject`, `patchProject`), the issue records bound to them with their submitted image metadata, their comments as human Triggers, the alignment rounds (a new proposal supersedes the undecided one, a decision names the current round, and a rejection records its reason and posts it back to the Thread as a human Trigger), and the bytes of a requirement image |
+| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, their validated editable fields (`validateProject`, `draftProject`, `patchProject`), the issue records bound to them with their submitted image metadata, their comments as human Triggers, the alignment rounds (a new proposal supersedes the undecided one, a decision names the current round, and a rejection records its reason and posts it back to the Thread as a human Trigger), the bytes of a requirement image, and `view()`, the derived requirement view whose `slicesFinished` holds once a confirmed alignment has slices and every slice's Ticket exists and ended (zero slices or a missing Ticket reports false) |
 | `src/app/local-images.ts` | `storeRequirementImages`: the count, name, media-type, size and signature checks of a requirement's images, and their storage under `<stateDir>/local-images/<issue id>/` |
 | `src/app/projects.ts` | `Projects`: the project ↔ GitHub chain association, appending a project's own chain on create, editing only that chain on update, and binding legacy repository-only projects to a matching existing chain at startup |
 | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
@@ -350,7 +353,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
 | `src/app/tools/main.ts` | The main Session's tools |
 | `src/app/tools/executor.ts` | An Executor Session's tools |
-| `src/app/http.ts` | The `/orchestrator/api` routes: the same-origin check, request limits (the larger one only for the create-requirement body that carries images), the raw requirement-image response and one status per kind of failure |
+| `src/app/http.ts` | The `/orchestrator/api` routes: the same-origin check, request limits (the larger one only for the create-requirement body that carries images), the raw requirement-image response and one status per kind of failure; every local route that returns a requirement answers with `LocalIssues.view()` rather than the stored record |
 | `src/app/api.ts` | `Api`, every route with its parameters, query, body and response, the filters of the lists and the URL of a requirement image; it imports only types, so the panel bundles it |
 | `src/app/views/text.ts` | The two forms of a view's text: `preview`, plain text on one line, and `markdown` without HTML; `plain` and `readable` |
 | `src/app/views/records.ts` | The rows the views share: Triggers, Tickets, Threads, Decisions and Channel links, and `ownersOf`, the owners of follow-ups as one request reads them |
@@ -377,7 +380,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
 | `src/sources/local.ts` | The local panel kind and plugin entry, exported as `./local-watch`: human Triggers, a Channel that needs no transport, and the default local policy |
-| `src/sources/local-format.ts` | The local project (with its owned chain id, intake and code repositories, an optional worktree root and `projectRepositories`), issue with its image metadata, image upload and slices, and the alignment rounds with their shared `alignmentRounds`/`currentAlignment` readers, shared by the host and the panel |
+| `src/sources/local-format.ts` | The local project (with its owned chain id, intake and code repositories, an optional worktree root and `projectRepositories`), issue with its image metadata, image upload and slices, the alignment rounds with their shared `alignmentRounds`/`currentAlignment` readers, and `LocalIssueView`, an issue plus the derived `slicesFinished` a local HTTP response carries but no stored record does, shared by the host and the panel |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
@@ -442,6 +445,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/retry-health.spec.ts`, `tests/role-models.spec.ts` | Model budget retries, and the models of the two roles |
 | `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP |
 | `tests/tools.spec.ts` | The Sessions' tools: what `orchestrator_read` reads for each role, and the shapes and checks of the other main Session tools |
+| `tests/questions.spec.ts` | A Ticket's question: the answer from a Session forked off its worker at the latest completed turn, the answer prompt and exactly the four reading tools, the archive after the answer, the no-session, no-completed-turn, failed-fork, timeout and empty-answer failures, and the Ticket left unchanged |
 | `tests/runtime-concurrency.spec.ts` | Work that overlaps: Triggers during a pass, Tickets that change during deliveries and launches |
 | `tests/http.spec.ts` | The same-origin and loopback checks, the status of each kind of failure, the body limit, path parameters and queries |
 | `tests/settings.spec.ts` | Settings saves that race a model or account check, a Policy sync that a save outran, and the refusals of the pause, a sync and a block |
@@ -454,7 +458,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/cards.spec.ts` | The rules the built-in text must state, file by file |
 | `tests/model-surface.spec.ts` | Everything models read: tools, prompts, skills and inputs, checked against the tool schemas, the execution environment and the glossary, within a size budget per role |
 | `tests/deployment.spec.ts`, `tests/environment.spec.ts`, `tests/index.spec.ts` | The plugin configuration and setup, the agent's process environment, the plugin entry |
-| `tests/service-script.spec.ts` | `scripts/dsh-superagent` against fake `ps`, `tmux` and `dsh` |
+| `tests/service-script.spec.ts` | The service actions `start`, `stop`, `restart`, `status`, `prepare` and `activate`, against fake `ps`, `tmux`, `dsh` and `pnpm`, in a temporary git checkout with a bare remote the tests commit ahead |
 | `tests/client.spec.tsx`, `tests/navigation.spec.ts`, `tests/controls.spec.tsx` | The client plugin's registration and polling, Session navigation and route memory, the local controls, and the panel's imports, which have no cycle |
 | `tests/panel-overview.spec.tsx`, `panel-source.spec.tsx`, `panel-trigger.spec.tsx`, `panel-eval.spec.tsx`, `panel-execution.spec.tsx` | Each page of the panel, against a fake management API answered by route |
 | `tests/panel-settings.spec.tsx`, `panel-prompts.spec.tsx`, `panel-deployment.spec.tsx`, `panel-panel.spec.tsx` | The settings groups, drafts and history, the prompts, the Deployment page, and the panel's search, glossary and route memory |

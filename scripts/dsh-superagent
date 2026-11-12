@@ -4,6 +4,10 @@
 `status`, `start`, and `restart` exit 0 while the service runs normally; 1 when it is stopped, duplicated, unreachable, or
 reporting a runtime error, which `restart` may fix; 2 when it runs while a component such as a Source reports an error;
 and 3 when it runs and waits for setup. A restart fixes neither 2 nor 3: they need a person.
+
+`prepare` fast-forwards this checkout to the remote main of `--repository` and builds it. `activate` does the same, backs
+up the database, and restarts the service on the new commit, rolling the checkout, the database, and the service back when
+the new build does not become healthy.
 """
 
 import argparse
@@ -87,10 +91,13 @@ def state(url):
             value = json.load(response)
         # Keys omitted by another version read as empty so the service is not mistaken for unreachable.
         health, setup = value.get('health') or {}, value.get('setup') or {}
+        load = value.get('load') or {}
+        machine = setup.get('machine') or {}
         entries = {name: entry if isinstance(entry, dict) else {} for name, entry in health.items()}
         return {'health': {name: entry.get('state') for name, entry in entries.items()},
                 'errors': {name: str(entry.get('detail', '')) for name, entry in entries.items() if entry.get('state') == 'error'},
-                'setup': setup.get('problem'), 'feishu': setup.get('feishuProblem')}
+                'setup': setup.get('problem'), 'feishu': setup.get('feishuProblem'),
+                'stateDir': machine.get('stateDir'), 'running': load.get('running') or 0}
     except (OSError, ValueError, AttributeError):
         return None
 
@@ -156,6 +163,92 @@ def prune_logs(profile):
         path.unlink(missing_ok=True)
 
 
+def git(*arguments):
+    """Run git in this checkout and return its standard output; a non-zero exit raises with git's own message."""
+    result = subprocess.run(['git', *arguments], cwd=ROOT, capture_output=True, text=True)
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or f'exit code {result.returncode}'
+        raise RuntimeError('git ' + ' '.join(arguments) + ' failed: ' + detail)
+    return result.stdout
+
+
+def remote_repository(url):
+    """Return the last two path segments of a remote URL, lowercased and without a `.git` suffix, which name its repository."""
+    trimmed = url.strip().rstrip('/')
+    if trimmed.lower().endswith('.git'):
+        trimmed = trimmed[:-4]
+    segments = [segment for segment in re.split(r'[:/\\]', trimmed) if segment]
+    return '/'.join(segments[-2:]).lower() if len(segments) >= 2 else ''
+
+
+def remote_name(repository):
+    """Return the remote whose URL names `repository`, preferring `origin` and otherwise the first by name."""
+    found = {}
+    for line in git('remote', '-v').splitlines():
+        # The URL may contain spaces, so split the name off the tab and only the fetch suffix off the end.
+        name, tab, rest = line.partition('\t')
+        if not tab or not rest.endswith('(fetch)'):
+            continue
+        url = rest[:-len('(fetch)')].rstrip()
+        if remote_repository(url) == repository.lower():
+            found.setdefault(name, url)
+    if not found:
+        raise RuntimeError(f'No remote of this checkout names {repository}; add one with "git remote add origin <url of {repository}>".')
+    return 'origin' if 'origin' in found else sorted(found)[0]
+
+
+def pnpm_executable():
+    """Return pnpm's path from PATH, which a checkout needs to install and build."""
+    found = shutil.which('pnpm')
+    if not found:
+        raise RuntimeError('pnpm must be on PATH to install and build the checkout.')
+    return found
+
+
+def build_checkout(executable):
+    """Run the install and build that make a merged checkout effective, printing each command and streaming its output."""
+    for words in (['install', '--frozen-lockfile'], ['build']):
+        print('$ pnpm ' + ' '.join(words), flush=True)
+        code = subprocess.run([executable, *words], cwd=ROOT).returncode
+        if code:
+            raise RuntimeError(f'pnpm {words[0]} exited with code {code}')
+
+
+def prepare(args):
+    """Fast-forward this checkout to the remote main of `--repository` and build it, refusing before any change it cannot finish."""
+    repository = args.repository
+    remote = remote_name(repository)
+    branch = subprocess.run(['git', 'symbolic-ref', '--short', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
+    if branch.returncode or branch.stdout.strip() != 'main':
+        current = branch.stdout.strip() if not branch.returncode else 'a detached HEAD'
+        raise RuntimeError(f'prepare: this checkout is on {current}; check out main to merge {repository}.')
+    porcelain = subprocess.run(['git', 'status', '--porcelain'], cwd=ROOT, capture_output=True, text=True).stdout
+    if porcelain.strip():
+        raise RuntimeError('prepare: this checkout has uncommitted changes; commit or stash them first:\n' + porcelain.rstrip())
+    executable = pnpm_executable()
+    old = git('rev-parse', 'HEAD').strip()
+    git('fetch', '--no-tags', remote, '+refs/heads/main:refs/dsh-superagent/main')
+    target = git('rev-parse', 'refs/dsh-superagent/main').strip()
+    if subprocess.run(['git', 'merge-base', '--is-ancestor', 'HEAD', target], cwd=ROOT).returncode:
+        raise RuntimeError(f'prepare: this checkout has commits {remote}/main does not have; merge or discard them before '
+                           f'fast-forwarding from {old[:12]} to {target[:12]}.')
+    if target == old:
+        print(f'prepare: up to date at {old[:12]} on main')
+        return 0
+    git('merge', '--ff-only', target)
+    print(f'prepare: fast-forwarded from {old[:12]} to {target[:12]} on main', flush=True)
+    try:
+        build_checkout(executable)
+    except RuntimeError as error:
+        git('reset', '--hard', old)
+        try:
+            build_checkout(executable)
+        except RuntimeError:
+            raise RuntimeError(f'prepare: {error}; the checkout is back at {old[:12]}, but rebuilding it failed.') from None
+        raise RuntimeError(f'prepare: {error}; the checkout is back at {old[:12]} and rebuilt.') from None
+    return 0
+
+
 def start(args):
     session = 'dsh-' + args.profile
     pids = processes(args.profile)
@@ -206,9 +299,93 @@ def start(args):
     raise RuntimeError('Startup health check timed out; inspect the log. Any running process was left intact.')
 
 
+BACKUPS = ARTIFACTS / 'backups'
+KEEP_BACKUPS = 10
+
+
+def backup_database(state_dir, profile):
+    """Copy the database and its write-ahead log into a new backup directory for `profile`, keeping the newest ten."""
+    database = Path(state_dir) / 'orchestrator.sqlite'
+    if not database.is_file():
+        raise RuntimeError(f'activate: {database} does not exist; there is no database to back up before the restart.')
+    stamp = f'orchestrator-{profile}-{time.strftime("%Y%m%d-%H%M%S")}'
+    target, suffix = BACKUPS / stamp, 1
+    while target.exists():
+        target, suffix = BACKUPS / f'{stamp}-{suffix}', suffix + 1
+    target.mkdir(parents=True)
+    for source in (database, database.with_name(database.name + '-wal')):
+        if source.is_file():
+            shutil.copy2(source, target / source.name)
+    name = re.compile(re.escape(f'orchestrator-{profile}-') + r'\d{8}-\d{6}(?:-\d+)?')
+    kept = sorted(path for path in BACKUPS.iterdir() if name.fullmatch(path.name))
+    for path in kept[:-KEEP_BACKUPS]:
+        shutil.rmtree(path, ignore_errors=True)
+    return target
+
+
+def restore_database(state_dir, backup):
+    """Put the backed-up database back, dropping a write-ahead log or shared memory the failed version left behind."""
+    database = Path(state_dir) / 'orchestrator.sqlite'
+    for suffix in ('-wal', '-shm'):
+        Path(str(database) + suffix).unlink(missing_ok=True)
+    for source in sorted(backup.iterdir()):
+        shutil.copy2(source, Path(state_dir) / source.name)
+
+
+def rollback(args, reason, previous, state_dir, backup, executable):
+    """Put the checkout, the database, and the service back to the version that ran before `prepare`."""
+    print(f'activate: the new build did not start ({reason}); rolling back to {previous[:12]}.', flush=True)
+    try:
+        stop(args, intentional=False)
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f'activate: the failed start could not be stopped: {error}', file=sys.stderr)
+    git('reset', '--hard', previous)
+    restore_database(state_dir, backup)
+    print(f'activate: restored the database from {backup}.', flush=True)
+    build_checkout(executable)
+    try:
+        start(args)
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        raise RuntimeError(f'activate: rolling back to {previous[:12]} failed: {error}') from None
+    print(f'activate: rolled back to {previous[:12]}; the previous version is running again.', flush=True)
+
+
+def activate(args):
+    """Merge the remote main, back up the database, and restart on the new commit, rolling back when it does not become healthy."""
+    current = state(args.url)
+    if current is None:
+        raise RuntimeError(f'activate: nothing answers at {args.url}; start the service once so its state and database are known.')
+    if args.if_idle and current['running']:
+        print(f'activate: {current["running"]} Executor Session(s) are still working; activation is skipped.')
+        return 0
+    if not isinstance(current['stateDir'], str) or not current['stateDir']:
+        raise RuntimeError('activate: the service state names no state directory, so its database cannot be backed up.')
+    state_dir = Path(current['stateDir'])
+    database = state_dir / 'orchestrator.sqlite'
+    if not database.is_file():
+        raise RuntimeError(f'activate: {database} does not exist; start the service once so its database exists, then try again.')
+    executable = pnpm_executable()
+    previous = git('rev-parse', 'HEAD').strip()
+    prepare(args)
+    merged = git('rev-parse', 'HEAD').strip()
+    if args.only_when_behind and merged == previous:
+        print(f'activate: already up to date at {merged[:12]} on main; nothing to activate.')
+        return 0
+    stop(args, intentional=False)
+    backup = backup_database(state_dir, args.profile)
+    print(f'activate: backed up the database to {backup}', flush=True)
+    try:
+        code = start(args)
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        rollback(args, error, previous, state_dir, backup, executable)
+        return 1
+    print(f'activate: {merged[:12]} is running on main.', flush=True)
+    return code
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['start', 'stop', 'restart', 'status'])
+    parser.add_argument('action', choices=['start', 'stop', 'restart', 'status', 'prepare', 'activate'])
     parser.add_argument('--profile', default=os.environ.get('DSH_SUPERAGENT_PROFILE') or 'superagent',
                         help='DSH profile that loads dsh-superagent; its tmux session is dsh-<profile>.')
     parser.add_argument('--url', default=os.environ.get('DSH_SUPERAGENT_URL') or 'http://127.0.0.1:3082',
@@ -216,6 +393,11 @@ def main():
     parser.add_argument('--timeout', type=float, default=60, help='Startup timeout in seconds.')
     parser.add_argument('--stop-timeout', type=float, default=300,
                         help='Graceful shutdown timeout in seconds; running Executor Sessions finish their step first.')
+    parser.add_argument('--repository', help='Repository in owner/name form; prepare and activate merge its main.')
+    parser.add_argument('--if-idle', action='store_true',
+                        help='For activate: skip while Executor Sessions are working.')
+    parser.add_argument('--only-when-behind', action='store_true',
+                        help='For activate: restart only when prepare moved HEAD.')
     parser.add_argument('--respect-stop', action='store_true',
                         help='For monitoring: never start/restart after an intentional stop.')
     args = parser.parse_args()
@@ -223,17 +405,32 @@ def main():
         parser.error('--timeout and --stop-timeout must be positive')
     if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*', args.profile):
         parser.error('--profile must be a DSH profile name')
+    if args.action in ('prepare', 'activate'):
+        if not args.repository:
+            print(f'{args.action} needs --repository <owner/name>.', file=sys.stderr)
+            return 1
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', args.repository):
+            print(f'--repository must be owner/name, not {args.repository}.', file=sys.stderr)
+            return 1
     os.umask(0o077)
     with (control(args.profile) / 'operation.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise RuntimeError('Another dsh-superagent control operation is in progress.') from None
-        if args.respect_stop and args.action in ('start', 'restart') and stopped(args.profile):
-            print('Intentional stop is active; automatic recovery skipped.')
-            return 0
+        if args.respect_stop and stopped(args.profile):
+            if args.action in ('start', 'restart'):
+                print('Intentional stop is active; automatic recovery skipped.')
+                return 0
+            if args.action == 'activate':
+                print('Intentional stop is active; activation skipped.')
+                return 0
         if args.action == 'status':
             return status(args)
+        if args.action == 'prepare':
+            return prepare(args)
+        if args.action == 'activate':
+            return activate(args)
         if args.action in ('stop', 'restart'):
             # Only a stop keeps automatic recovery off; a restart whose stop timed out leaves it on.
             stop(args, intentional=args.action == 'stop')

@@ -121,6 +121,15 @@ export function currentAlignment(issue: Pick<LocalIssue, 'alignment' | 'alignmen
   return alignmentRounds(issue).at(-1)
 }
 
+/**
+ * A requirement as an HTTP response carries it: the stored record plus whether every slice Ticket of its confirmed
+ * alignment ended. The flag is derived when the view is built and never stored, so resuming a Ticket turns it off again
+ * and no migration is needed; `LocalIssue` records returned by `runtime.local.get()`/`list()` keep it absent.
+ */
+export interface LocalIssueView extends LocalIssue {
+  slicesFinished: boolean
+}
+
 /** The execution mode a requirement runs under: the person's choice, or native when they made none. */
 export function requirementExecutionMode(issue: Pick<LocalIssue, 'execution'>): ExecutionMode {
   return issue.execution ?? 'native'

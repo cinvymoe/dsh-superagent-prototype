@@ -1,12 +1,12 @@
 /** Read/write operations for requirements submitted through the built-in local issue board. */
 import { readFileSync, rmSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { key, UserError, EXECUTION_STRATEGY_REVISION, type ActorRef, type ExecutionMode, type ExecutionStrategy, type ReceiveResult,
-  type Thread, type Trigger } from '../core/index.ts'
+import { key, planTicketId, UserError, EXECUTION_STRATEGY_REVISION, type ActorRef, type ExecutionMode, type ExecutionStrategy,
+  type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
 import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment,
-  type LocalImage, type LocalImageInput, type LocalIssue, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
+  type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
 
@@ -41,7 +41,7 @@ export class LocalIssues {
   list(project?: string): LocalIssue[] {
     return this.host.store.keys(KV.local.issue.prefix).flatMap(entry => {
       const issue = this.host.store.get(KV.local.issue(entry.slice(KV.local.issue.prefix.length)))
-      return issue && (!project || issue.project === project) ? [this.view(issue)] : []
+      return issue && (!project || issue.project === project) ? [this.normalized(issue)] : []
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
@@ -143,14 +143,29 @@ export class LocalIssues {
   /** The requirement with its alignment rounds read back; a record written before rounds existed reads as one round. */
   get(id: string): LocalIssue | undefined {
     const issue = this.host.store.get(KV.local.issue(id))
-    return issue ? this.view(issue) : undefined
+    return issue ? this.normalized(issue) : undefined
   }
 
   /** A stored record as readers see it: rounds materialized and the single-slot mirror pointing at the current round. */
-  private view(issue: LocalIssue): LocalIssue {
+  private normalized(issue: LocalIssue): LocalIssue {
     const rounds = alignmentRounds(issue)
     if (!rounds.length) return issue
     return { ...issue, alignments: rounds, alignment: rounds[rounds.length - 1]! }
+  }
+
+  /**
+   * The HTTP view of a requirement: its stored record, its alignment rounds read back, plus whether every slice Ticket of
+   * its confirmed alignment ended. Derived on read, so no migration or extra store field exists. A requirement without a
+   * confirmed alignment, one whose alignment has no slices, or one whose slice has no Ticket reports false rather than
+   * guessing that it finished. Both an Executor's end and a person's stop count, because the Ticket record only carries
+   * `ended`.
+   */
+  view(issue: LocalIssue): LocalIssueView {
+    const current = this.normalized(issue)
+    const slices = current.alignment?.status === 'confirmed' ? current.alignment.slices : []
+    const slicesFinished = slices.length > 0
+      && slices.every(slice => !!this.host.store.tickets.get(planTicketId(current.id, slice.id))?.ended)
+    return { ...current, slicesFinished }
   }
 
   thread(id: string): string { return localThreadKey(id) }

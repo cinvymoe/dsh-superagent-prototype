@@ -690,3 +690,48 @@ it('offers Confirm and Send back only on the current proposed round and names th
   // The fixture dispatches the current round only, so the decision above confirmed the round this page named.
   expect(server.dispatchedIssues.has('q-fixture')).toBe(true)
 })
+
+it('shows 待关闭 once every slice ticket of a confirmed alignment ended, 开放 while one is live and 已关闭 when closed', async () => {
+  const slice = { id: 'C1', title: 'Only slice', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
+  const confirmed = (id: string, title: string, createdAt: string, state: 'open' | 'closed' = 'open') => ({
+    ...localIssue(title), id, createdAt, state,
+    alignment: { roundId: 'al-1', status: 'confirmed' as const, summary: 'One slice', slices: [slice], acceptance: [], proposedAt: createdAt,
+      decidedAt: createdAt },
+  })
+  server.localProjects = [PROJECT]
+  server.localIssues = [
+    confirmed('q-finished', 'Finished requirement', '2026-09-23T00:00:00Z'),
+    confirmed('q-live', 'Live requirement', '2026-09-22T00:00:00Z'),
+    confirmed('q-closed', 'Closed requirement', '2026-09-21T00:00:00Z', 'closed'),
+  ]
+  // The derived flag is true for the finished requirement and for the closed one; only an open requirement shows 待关闭.
+  server.issueSlicesFinished = new Set(['q-finished', 'q-closed'])
+  // The default 待处理 filter hides the two confirmed requirements, so this scenario opens 全部 to keep all three rows.
+  at({ page: 'requirements', query: { filter: 'all' } })
+  await mount()
+  const metas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
+  expect(metas).toHaveLength(3)
+  // Finished: 待关闭 beside the unchanged 已确认 alignment tag.
+  expect(metas[0]).toContain(zh['discuss.pendingClose'])
+  expect(metas[0]).toContain(zh['discuss.confirmed'])
+  expect(metas[0]).not.toContain(zh['discuss.open'])
+  // Live: still 开放 with the same alignment tag.
+  expect(metas[1]).toContain(zh['discuss.open'])
+  expect(metas[1]).toContain(zh['discuss.confirmed'])
+  expect(metas[1]).not.toContain(zh['discuss.pendingClose'])
+  // Closed: 已关闭 only, never 待关闭, even though its derived value is true.
+  expect(metas[2]).toContain(zh['discuss.closed'])
+  expect(metas[2]).not.toContain(zh['discuss.pendingClose'])
+  // The detail head renders the same labels as the selected row.
+  await click(all('.dt-cards .dt-row-title button')[0]!)
+  const finishedHead = document.querySelector('.dt-page-head')?.textContent ?? ''
+  expect(finishedHead).toContain(zh['discuss.pendingClose'])
+  expect(finishedHead).toContain(zh['discuss.confirmed'])
+  expect(finishedHead).not.toContain(zh['discuss.open'])
+  at({ page: 'requirements', id: 'q-closed' })
+  await remount()
+  const closedHead = document.querySelector('.dt-page-head')?.textContent ?? ''
+  expect(closedHead).toContain(zh['discuss.closed'])
+  expect(closedHead).not.toContain(zh['discuss.pendingClose'])
+
+})

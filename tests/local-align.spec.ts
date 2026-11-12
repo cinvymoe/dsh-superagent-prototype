@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { feishu, startRuntime, type Host } from './fixtures/host.ts'
 import { KV } from '../src/kv.ts'
 import { EXECUTION_STRATEGY_REVISION, type ExecutionMode, type Ticket } from '../src/core/index.ts'
-import { requirementExecutionMode } from '../src/sources/local-format.ts'
+import { requirementExecutionMode, type LocalAlignment, type LocalIssue } from '../src/sources/local-format.ts'
 import { REQUIREMENT_BODY_BYTES } from '../src/limits.ts'
 
 /** The id of the first human message on a local issue's thread. */
@@ -629,5 +629,83 @@ describe('project repository chains', () => {
     expect(ticket.execution?.chain).toBe('default')
     // Binding only writes project records: the stored chain configuration is unchanged.
     expect(h.runtime.store.settings().sources.github!.config).toEqual(chainsAfterBinding)
+  })
+})
+
+/**
+ * A requirement shows 待关闭 once every slice Ticket of its confirmed alignment ended. The value is derived when the HTTP
+ * view is built: no LocalIssue record carries it, so no migration is needed and a resumed Ticket turns it back off.
+ */
+describe('requirement slice completion', () => {
+  const at = '2026-09-01T00:00:00.000Z'
+  const slice = (id: string) => ({ id, title: `Slice ${id}`, outcome: `Outcome ${id}`, inScope: [], outOfScope: [], acceptance: [],
+    dependsOn: [], lane: 'light' as const })
+  const alignment = (status: 'proposed' | 'confirmed' | 'rejected', slices = [slice('C1')]): LocalAlignment =>
+    ({ roundId: 'al-1', status, summary: 'One slice', slices, acceptance: [], proposedAt: at })
+  /** The fields every directly written requirement shares; `project` is only known once the fixture ran. */
+  const fields = () => ({ author: 'local', project: project.id, createdAt: at, updatedAt: at, state: 'open' as const })
+  const listView = async (): Promise<{ id: string; slicesFinished: boolean }[]> =>
+    (await h.api('GET', `local/issues?project=${project.id}`)).body.issues as { id: string; slicesFinished: boolean }[]
+  const detailView = async (id: string): Promise<{ id: string; slicesFinished: boolean }> =>
+    (await h.api('GET', `local/issues/${id}`)).body.issue as { id: string; slicesFinished: boolean }
+
+  it('derives the flag for both end kinds and keeps it out of every stored record', async () => {
+    const created = await h.api('POST', 'local/issues', { title: 'Every slice ended', project: project.id })
+    const id = (created.body.issue as { id: string }).id
+    // Nothing dispatches before the person confirms the alignment.
+    expect((await h.api('POST', `local/issues/${id}/alignment`, { summary: 'Two slices',
+      slices: [slice('C1'), slice('C2')] })).status).toBe(200)
+    const confirmed = await h.api('POST', `local/issues/${id}/alignment/decision`, { decision: 'confirm' })
+    expect(confirmed.status).toBe(200)
+    expect((confirmed.body.issue as { slicesFinished?: boolean }).slicesFinished).toBe(false)
+    await h.runtime.idle()
+    const tickets = h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === id)
+    expect(tickets.map(ticket => ticket.plan!.sliceId).sort()).toEqual(['C1', 'C2'])
+    // While either slice Ticket is live both views say the slices are unfinished.
+    expect((await listView()).find(issue => issue.id === id)!.slicesFinished).toBe(false)
+    expect((await detailView(id)).slicesFinished).toBe(false)
+    // The stored records carry no derived field at all.
+    expect(h.runtime.local.get(id)).not.toHaveProperty('slicesFinished')
+    expect(h.runtime.local.list().some(issue => 'slicesFinished' in issue)).toBe(false)
+    // An executor's ready report ends one slice; the requirement is still unfinished.
+    const first = tickets.find(ticket => ticket.plan!.sliceId === 'C1')!
+    const second = tickets.find(ticket => ticket.plan!.sliceId === 'C2')!
+    h.runtime.engine.report(first.id, { state: 'ready', summary: 'done' })
+    expect(h.runtime.store.tickets.get(first.id)!.ended).toMatchObject({ by: 'executor' })
+    expect((await detailView(id)).slicesFinished).toBe(false)
+    // A person stopping the other slice counts as its end too, so the requirement turns 待关闭.
+    h.runtime.engine.stopTicket(second.id)
+    expect(h.runtime.store.tickets.get(second.id)!.ended).toMatchObject({ by: 'human', outcome: 'stopped' })
+    expect((await listView()).find(issue => issue.id === id)!.slicesFinished).toBe(true)
+    expect((await detailView(id)).slicesFinished).toBe(true)
+    // Closing never rewrites the derived value or the stored record; the panel picks 已关闭 over 待关闭.
+    const closed = await h.api('POST', `local/issues/${id}/close`)
+    expect(closed.body.issue).toMatchObject({ state: 'closed', slicesFinished: true })
+    expect(h.runtime.local.get(id)).toMatchObject({ state: 'closed' })
+    expect(h.runtime.local.get(id)).not.toHaveProperty('slicesFinished')
+  })
+
+  it('keeps the flag false for alignments that are not a finished confirmed plan', async () => {
+    // These requirements have real threads, so the detail route answers; their alignments are the anomalies.
+    const anomalous = async (title: string, record: (id: string) => LocalIssue): Promise<string> => {
+      const response = await h.api('POST', 'local/issues', { title, project: project.id })
+      const id = (response.body.issue as { id: string }).id
+      h.runtime.store.set(KV.local.issue(id), record(id))
+      return id
+    }
+    const zero = await anomalous('Zero slices', id => ({ ...fields(), id, title: 'Zero slices', body: '',
+      alignment: alignment('confirmed', []) }))
+    const missing = await anomalous('Missing ticket', id => ({ ...fields(), id, title: 'Missing ticket', body: '',
+      alignment: alignment('confirmed') }))
+    const proposed = await anomalous('Proposed alignment', id => ({ ...fields(), id, title: 'Proposed alignment', body: '',
+      alignment: alignment('proposed') }))
+    const rejected = await anomalous('Rejected alignment', id => ({ ...fields(), id, title: 'Rejected alignment', body: '',
+      alignment: alignment('rejected') }))
+    const unaligned = await anomalous('No alignment', id => ({ ...fields(), id, title: 'No alignment', body: '' }))
+    const issues = await listView()
+    for (const id of [zero, missing, proposed, rejected, unaligned]) {
+      expect(issues.find(issue => issue.id === id)!.slicesFinished).toBe(false)
+      expect((await detailView(id)).slicesFinished).toBe(false)
+    }
   })
 })

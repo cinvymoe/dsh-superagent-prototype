@@ -144,8 +144,7 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-round { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .dt-rounds-history { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 0.5px solid var(--dsw-alias-border-l3); }
 .dt-round-label { font-weight: 600; color: var(--dsw-alias-label-primary); }
-.dt-round-note { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; font-size: 12px; line-height: 18px;
-  color: var(--dsw-alias-label-caption); overflow-wrap: anywhere; }
+.dt-round-note { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); overflow-wrap: anywhere; }
 .dt-rounds-history .dt-disclosure-row { flex-wrap: wrap; }
 .dt-rounds-history .dt-disclosure-body { gap: 10px; }
 .dt-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
