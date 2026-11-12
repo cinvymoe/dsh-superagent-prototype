@@ -8,4 +8,4 @@
 | 4 | Update `tests/docs.spec.ts` assertions to the criterion sentences | Docs still stale → assertions fail until the docs are updated | Assertions written; docs updated in the same pass | — | No separate red run captured (documented honestly in the task contract) |
 | 5 | Run gates | All green | `pnpm vitest run tests/docs.spec.ts` 11/11; `pnpm typecheck` exit 0; clean-env `pnpm test` 62 files / 1245 tests; `git diff --check` clean | — | Evidence in `docs/issues/evidence/c3-*.log`; combined log in `evidence/verification.log` |
 | 6 | Two-axis review | Standards and Spec pass with no open finding | All four criteria verified; only limitation is the failed lane | — | `docs/issues/review-C3-retry.md` |
-| 7 | Open PR against deployment `main` | Open PR, no auto-merge | _待填_ | — | — |
+| 7 | Open PR against deployment `main` | Open PR, no auto-merge | PR #9 opened (head `b18c3ab`, base `main`), only docs/tests/records in the diff | Deployment repo `deepseek-ai/dsh-superagent-prototype` denies the account push; the operator fork accepts | PR opened on `cinvymoe/dsh-superagent-prototype`; a person reviews and merges |

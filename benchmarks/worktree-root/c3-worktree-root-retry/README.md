@@ -4,7 +4,7 @@
 - Branch: `agent/worktree-10cf3eb1cf2b`
 - Base: `66604aa`（deployment `main`，包含此前 C1/C2/C3 文档里程碑与 C1 `Clear filters` 文档）；工单 worktree 合并该分支后树与 main 一致，再落本切片增量
 - Scope: 文档-only retry delta —— 把根目录优先级写成显式链、把 Discuss/Execution 描述对齐面板实际字段、补齐 007 模块/测试表说明，并用 `tests/docs.spec.ts` 锁定这些语义；无 `src/**`、`prompts/**`、locale 或 UI 变化
-- PR: _待填_（`pr_status: open`）
+- PR: https://github.com/cinvymoe/dsh-superagent-prototype/pull/9（commit `b18c3ab`, state OPEN）
 
 ## Artifacts
 
