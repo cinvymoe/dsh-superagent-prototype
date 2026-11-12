@@ -19,6 +19,7 @@ export interface LocalIssuesHost {
 
 export interface LocalIssueInput { title?: string; body?: string; author?: string; project: string; images?: LocalImageInput[] }
 export interface LocalProjectInput { name: string; repository: string; worktreeRoot?: string }
+export interface LocalProjectFields { name: string; repository?: string; intakeRepository?: string; codeRepository?: string; chain?: string; worktreeRoot?: string }
 export interface LocalAlignmentInput { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }
 
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
@@ -53,7 +54,71 @@ export class LocalIssues {
 
   project(id: string): LocalProject | undefined { return this.host.store.get(KV.local.project(id)) }
 
-  /** Create a project; its repository is the only execution target for requirements in it. */
+  /** Whether another project already carries this name, ignoring case; `exceptId` is the project being renamed. */
+  projectNameTaken(name: string, exceptId?: string): boolean {
+    const lowered = name.toLowerCase()
+    return this.projects().some(project => project.id !== exceptId && project.name.toLowerCase() === lowered)
+  }
+
+  /**
+   * Validate and normalize the editable fields of a project: a non-empty name no other project carries, `owner/name`
+   * repositories (a code repository, or the legacy execution repository), and an optional absolute worktree root.
+   */
+  validateProject(input: LocalProjectFields, except?: LocalProject): LocalProjectFields {
+    const name = input.name.trim()
+    if (this.projectNameTaken(name, except?.id)) throw new UserError('projectTaken', { name })
+    const code = input.codeRepository?.trim() || input.repository?.trim() || ''
+    const intake = input.intakeRepository?.trim() || code
+    if (!REPOSITORY.test(code)) throw new UserError('projectRepository')
+    if (!REPOSITORY.test(intake)) throw new UserError('projectRepository')
+    // Omitted, empty and whitespace-only all mean no project root; any other value must name an absolute directory.
+    // Existence and writability are checked at a ticket's launch, not here, because the root may not exist yet when the
+    // project is made.
+    const trimmedRoot = input.worktreeRoot?.trim()
+    const worktreeRoot = trimmedRoot ? trimmedRoot : undefined
+    if (worktreeRoot !== undefined && !isAbsolute(worktreeRoot)) throw new UserError('projectWorktreeRoot')
+    return {
+      name,
+      ...(input.chain !== undefined ? { chain: input.chain } : {}),
+      ...(input.repository !== undefined ? { repository: input.repository.trim() } : {}),
+      ...(input.codeRepository !== undefined ? { codeRepository: code } : {}),
+      ...(input.intakeRepository !== undefined ? { intakeRepository: intake } : {}),
+      ...(worktreeRoot !== undefined ? { worktreeRoot } : {}),
+    }
+  }
+
+  /**
+   * Build a project record from validated fields without storing it. A project with an execution repository but no
+   * code repository gets a legacy record; one with a code repository owns the chain `fields.chain` names, or its own id.
+   */
+  draftProject(fields: LocalProjectFields, at = this.clock()): LocalProject {
+    const id = `p-${key('local-project', at, fields.name).slice(0, 8)}`
+    const project: LocalProject = { id, name: fields.name, createdAt: at, updatedAt: at }
+    if (fields.codeRepository !== undefined) {
+      project.chain = fields.chain ?? id
+      project.intakeRepository = fields.intakeRepository ?? fields.codeRepository
+      project.codeRepository = fields.codeRepository
+    }
+    if (fields.repository !== undefined) project.repository = fields.repository
+    if (fields.worktreeRoot !== undefined) project.worktreeRoot = fields.worktreeRoot
+    return project
+  }
+
+  /** Store a project record, replacing any earlier one with the same id. */
+  putProject(project: LocalProject): void { this.host.store.set(KV.local.project(project.id), project) }
+
+  /** The project with some validated fields replaced, without storing it. */
+  patchProject(project: LocalProject, fields: LocalProjectFields): LocalProject {
+    const updated: LocalProject = { ...project, name: fields.name, updatedAt: this.clock() }
+    for (const field of ['chain', 'repository', 'intakeRepository', 'codeRepository'] as const) {
+      if (fields[field] !== undefined) updated[field] = fields[field]
+    }
+    if (fields.worktreeRoot === undefined) delete updated.worktreeRoot
+    else updated.worktreeRoot = fields.worktreeRoot
+    return updated
+  }
+
+  /** Create a legacy project; its repository is the only execution target for requirements in it. */
   createProject(input: LocalProjectInput): LocalProject {
     const name = input.name.trim()
     const repository = input.repository.trim()

@@ -101,7 +101,7 @@ describe('worktree root documentation', () => {
   it('describes the worktree root in the module and test table entries this feature touches', () => {
     const architecture = prose('docs/007-architecture.md')
     expect(architecture).toContain('its `prepareDirectory` validation of an explicit worktree root and the prepare command\'s working directory')
-    expect(architecture).toContain('create a project with its name, repository and optional worktree root')
+    expect(architecture).toContain('create a project with its name, intake and code repositories and optional worktree root')
     expect(architecture).toContain('`Execution` with its optional explicit `worktreeRoot`')
     expect(architecture).toContain('the worktree-root sections state the root priority, the prepare working directory and the no-fallback failure')
   })

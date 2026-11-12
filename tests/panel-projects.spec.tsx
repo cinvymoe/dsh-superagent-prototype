@@ -7,10 +7,10 @@ import { localIssue, server } from './fixtures/panel-server.ts'
 
 usePanel()
 
-const project = (id: string, name: string, repository: string) => ({ id, name, repository,
-  createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' })
-const WIDGETS = { ...project('p-widgets', 'Widgets', 'acme/widgets'), worktreeRoot: '/srv/worktrees' }
-const OTHER = project('p-other', 'Other', 'acme/other')
+const project = (id: string, name: string, intakeRepository: string, codeRepository: string) => ({ id, name, chain: id,
+  intakeRepository, codeRepository, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' })
+const WIDGETS = { ...project('p-widgets', 'Widgets', 'acme/intake', 'acme/widgets'), worktreeRoot: '/srv/worktrees' }
+const OTHER = project('p-other', 'Other', 'acme/intake', 'acme/other')
 const issue = (id: string, projectId: string, title: string) => ({ ...localIssue(title), id, project: projectId })
 const posts = () => server.requests.filter(request => request.path === 'local/projects' && request.method === 'POST')
 const openCreate = async () => {
@@ -43,6 +43,8 @@ it('keeps the requirement list when switching projects there and refetches it', 
   expect(document.querySelector('.dt-tabs')?.querySelectorAll('[role="tab"]')).toHaveLength(8)
   expect(selectedPageTab()).toBe(zh['tab.requirements'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
+  expect(text()).toContain('acme/intake → acme/widgets')
+  expect(text()).toContain('/srv/worktrees')
   expect(requirementTitles()).toEqual(['Widgets requirement'])
   expect(server.requests.some(request => request.path === 'local/issues?project=p-widgets')).toBe(true)
   // Switching the project keeps the requirement list and refetches it for the new project.
@@ -50,7 +52,7 @@ it('keeps the requirement list when switching projects there and refetches it', 
   expect(all('.dt-project-strip [role="tab"]').map(item => item.getAttribute('aria-selected'))).toEqual(['false', 'true'])
   expect(selectedPageTab()).toBe(zh['tab.requirements'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Other')
-  expect(text()).toContain('acme/other')
+  expect(text()).toContain('acme/intake → acme/other')
   expect(requirementTitles()).toEqual(['Other requirement'])
   expect(server.requests.some(request => request.path === 'local/issues?project=p-other')).toBe(true)
 })
@@ -71,7 +73,7 @@ it('keeps the New requirement tab when switching projects there and targets the 
   await click(zh['discuss.submit'])
   expect(server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')?.body)
     .toEqual({ body: 'Other target', project: 'p-other' })
-  expect(text()).toContain('项目：Other · acme/other')
+  expect(text()).toContain('项目：Other · acme/intake → acme/other')
 })
 
 it('lands on the requirement list when switching from another tab', async () => {
@@ -139,10 +141,11 @@ it('creates a project on its own page, cancels without a request, and returns to
   // A submitted project becomes current and opens its own requirement list.
   await openCreate()
   await type(field(zh['discuss.projectName']), 'Rooted')
-  await type(field(zh['discuss.projectRepository']), 'acme/rooted')
+  await type(field(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(field(zh['discuss.projectCodeRepository']), 'acme/rooted')
   await type(field(zh['discuss.projectWorktreeRoot']), '/srv/rooted')
   await click(zh['discuss.createProject'])
-  expect(posts()[0]!.body).toEqual({ name: 'Rooted', repository: 'acme/rooted', worktreeRoot: '/srv/rooted' })
+  expect(posts()[0]!.body).toEqual({ name: 'Rooted', intakeRepository: 'acme/intake', codeRepository: 'acme/rooted', worktreeRoot: '/srv/rooted' })
   expect(document.querySelector('.dt-project-tab[aria-selected="true"]')?.textContent).toBe('Rooted')
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Rooted')
   expect(selectedPageTab()).toBe(zh['tab.requirements'])
@@ -151,10 +154,11 @@ it('creates a project on its own page, cancels without a request, and returns to
   // Leaving the worktree root empty omits it and the next project gets its own id.
   await openCreate()
   await type(field(zh['discuss.projectName']), 'Plain')
-  await type(field(zh['discuss.projectRepository']), 'acme/plain')
+  await type(field(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(field(zh['discuss.projectCodeRepository']), 'acme/plain')
   await click(zh['discuss.createProject'])
   expect(posts()).toHaveLength(2)
-  expect(posts()[1]!.body).toEqual({ name: 'Plain', repository: 'acme/plain' })
+  expect(posts()[1]!.body).toEqual({ name: 'Plain', intakeRepository: 'acme/intake', codeRepository: 'acme/plain' })
   expect(posts()[1]!.body).not.toHaveProperty('worktreeRoot')
   expect(document.querySelector('.dt-project-tab[aria-selected="true"]')?.textContent).toBe('Plain')
   expect(server.requests.some(request => request.path === 'local/issues?project=p-fixture-2')).toBe(true)

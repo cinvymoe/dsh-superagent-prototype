@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { Button, Icon } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import type { Route } from './route.ts'
+import { projectRepositories } from '../sources/local-format.ts'
 import { errorText } from './text.ts'
 import { PageHead } from './widgets.tsx'
 
@@ -84,7 +85,7 @@ export function ProjectBar({ route }: { route: Route }) {
       {open && <div className="dt-project-menu" role="menu" aria-label={t('project.menu')}>
         {projects.map(item => <button key={item.id} type="button" role="menuitemradio" aria-checked={item.id === current}
           className="dt-project-option" onClick={() => { setOpen(false); select(item.id) }}>
-          <span>{item.name}</span><span className="dt-mono">{item.repository}</span>
+          <span>{item.name}</span><span className="dt-mono">{projectRepositories(item)}</span>
         </button>)}
       </div>}
     </div>}
@@ -99,17 +100,18 @@ export function NewProjectPage() {
   const { t, call, notify, navigate, setProject } = usePanel()
   const { reloadProjects } = usePanelData()
   const [name, setName] = useState('')
-  const [repository, setRepository] = useState('')
+  const [intakeRepository, setIntakeRepository] = useState('')
+  const [codeRepository, setCodeRepository] = useState('')
   const [worktreeRoot, setWorktreeRoot] = useState('')
   const [busy, setBusy] = useState(false)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    const cleanName = name.trim(), cleanRepository = repository.trim(), root = worktreeRoot.trim()
-    if (busy || !cleanName || !cleanRepository) return
+    const cleanName = name.trim(), cleanIntake = intakeRepository.trim(), cleanCode = codeRepository.trim(), root = worktreeRoot.trim()
+    if (busy || !cleanName || !cleanIntake || !cleanCode) return
     setBusy(true)
     try {
-      const { project } = await call('POST local/projects', { body: { name: cleanName, repository: cleanRepository,
-        ...(root ? { worktreeRoot: root } : {}) } })
+      const { project } = await call('POST local/projects', { body: { name: cleanName, intakeRepository: cleanIntake,
+        codeRepository: cleanCode, ...(root ? { worktreeRoot: root } : {}) } })
       await reloadProjects()
       setProject(project.id)
       navigate({ page: 'requirements' }, true)
@@ -126,14 +128,17 @@ export function NewProjectPage() {
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.newProject')}</span></div>
         <input className="dt-text-input" value={name} maxLength={80} placeholder={t('discuss.projectName')}
           onChange={event => setName(event.target.value)} />
-        <input className="dt-text-input" value={repository} maxLength={200} placeholder={t('discuss.projectRepository')}
-          onChange={event => setRepository(event.target.value)} />
+        <input className="dt-text-input" value={intakeRepository} maxLength={200} placeholder={t('discuss.projectIntakeRepository')}
+          aria-label={t('discuss.projectIntakeRepository')} onChange={event => setIntakeRepository(event.target.value)} />
+        <input className="dt-text-input" value={codeRepository} maxLength={200} placeholder={t('discuss.projectCodeRepository')}
+          aria-label={t('discuss.projectCodeRepository')} onChange={event => setCodeRepository(event.target.value)} />
+        <p className="dt-hint">{t('discuss.projectRepositories')}</p>
         <input className="dt-text-input dt-mono" value={worktreeRoot} maxLength={4096} placeholder={t('discuss.projectWorktreeRoot')}
           aria-label={t('discuss.projectWorktreeRoot')} spellCheck={false}
           onChange={event => setWorktreeRoot(event.target.value)} />
         <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
         <div className="dt-actions">
-          <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim() || !repository.trim()}>
+          <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim() || !intakeRepository.trim() || !codeRepository.trim()}>
             {t('discuss.createProject')}</Button>
           <Button type="button" variant="ghost" size="sm" onClick={() => navigate({ page: 'requirements' }, true)}>{t('cancel')}</Button>
         </div>
