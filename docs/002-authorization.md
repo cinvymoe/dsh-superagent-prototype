@@ -108,6 +108,8 @@ For that Ticket, a rule's process and communication requirements override the de
 
 Rules, accept mode and each Source's Policy form the Policy version. Every Mandate records the version under which it was accepted.
 
+An execution strategy is outside the Policy version. The version covers the rules, the accept mode and each Source's Policy only: changing a requirement's mode is not a Policy version change, and a Policy change never moves a Ticket between modes.
+
 A version change discards running Evals and queues their Triggers again. It also sends a policy-changed Input to each affected live Ticket. The Input explains whether:
 
 - a matched rule changed, including its new text, or no longer applies;
