@@ -1,10 +1,19 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LocalIssues, requirementTitle } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
 import type { Trigger } from '../src/core/index.ts'
+import type { LocalImageInput } from '../src/sources/local-format.ts'
+
+
+/** A 1x1 transparent PNG, a 1x1 GIF, a WebP signature and a minimal JPEG header; enough to prove each media type. */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
+const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([12, 0, 0, 0]), Buffer.from('WEBPVP8 '), Buffer.from([4, 0, 0, 0]), Buffer.from('data')])
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+  0x00, 0x01, 0x00, 0x00, 0xff, 0xd9])
 
 const directories: string[] = []
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }) })
@@ -15,9 +24,9 @@ describe('the local issue board', () => {
     directories.push(directory)
     const store = new Store(join(directory, 'orchestrator.sqlite'))
     const triggers: Trigger[] = []
-    const issues = new LocalIssues({ store, receive: trigger => { triggers.push(trigger); return { kind: 'stored' } as never } })
+    const issues = new LocalIssues({ store, stateDir: directory, receive: trigger => { triggers.push(trigger); return { kind: 'stored' } as never } })
     const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
-    return { issues, triggers, project }
+    return { issues, triggers, project, directory }
   }
 
   it('creates an issue and submits its text as a human Trigger on a local Thread', () => {
@@ -108,6 +117,57 @@ describe('the local issue board', () => {
     }
     expect(code('relative/root')).toBe('projectWorktreeRoot')
     expect(code('  relative/root  ')).toBe('projectWorktreeRoot')
+  })
+
+  it('stores every type of attached image under the requirement directory and names their absolute paths in the trigger', () => {
+    const { issues, triggers, project, directory } = setup()
+    const issue = issues.create({ title: 'Screenshots', body: 'Four shots', project: project.id, images: [
+      { name: 'one.png', mediaType: 'image/png', data: PNG.toString('base64') },
+      { name: 'two.gif', mediaType: 'image/gif', data: `data:image/gif;base64,${GIF.toString('base64')}` },
+      { name: 'three.webp', mediaType: 'image/webp', data: WEBP.toString('base64') },
+      { name: 'four.jpg', mediaType: 'image/jpeg', data: JPEG.toString('base64') },
+    ] })
+    expect(issue.images).toHaveLength(4)
+    expect(issue.images![0]).toMatchObject({ name: 'one.png', mediaType: 'image/png', bytes: PNG.length })
+    expect(issue.images![0]!.id).toMatch(/^img-[0-9a-f]{8}$/)
+    const files = [
+      join(directory, 'local-images', issue.id, `${issue.images![0]!.id}.png`),
+      join(directory, 'local-images', issue.id, `${issue.images![1]!.id}.gif`),
+      join(directory, 'local-images', issue.id, `${issue.images![2]!.id}.webp`),
+      join(directory, 'local-images', issue.id, `${issue.images![3]!.id}.jpg`),
+    ]
+    for (const [index, file] of files.entries()) {
+      expect(existsSync(file)).toBe(true)
+      const sent = [PNG, GIF, WEBP, JPEG][index]!
+      expect(readFileSync(file).equals(sent)).toBe(true)
+      expect(triggers[0]!.text).toContain(file)
+    }
+    expect(triggers[0]!.text).toContain('Images:')
+    const stored = issues.image(issue.id, issue.images![2]!.id)!
+    expect(stored.mediaType).toBe('image/webp')
+    expect(stored.bytes.equals(WEBP)).toBe(true)
+    expect(issues.image(issue.id, 'img-unknown')).toBeUndefined()
+  })
+
+  it('refuses a requirement whose images break a rule, creating no issue, no trigger and no files', () => {
+    const { issues, triggers, project, directory } = setup()
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    const code = (images: LocalImageInput[]): unknown => {
+      try { issues.create({ title: 'Bad', project: project.id, images }) } catch (error) { return (error as { code?: unknown }).code }
+      return undefined
+    }
+    expect(code([image('1.png', 'image/png', PNG), image('2.png', 'image/png', PNG), image('3.png', 'image/png', PNG),
+      image('4.png', 'image/png', PNG), image('5.png', 'image/png', PNG)])).toBe('issueImageCount')
+    expect(code([image('big.png', 'image/png', Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]))])).toBe('issueImageSize')
+    expect(code([{ name: 'x.png', mediaType: 'image/png', data: 'not base64!!' }])).toBe('issueImageData')
+    expect(code([image('mismatch.png', 'image/png', GIF)])).toBe('issueImageType')
+    expect(code([image('bad.bmp', 'image/bmp', Buffer.from('BM'))])).toBe('issueImageType')
+    expect(code([{ name: '   ', mediaType: 'image/png', data: PNG.toString('base64') }])).toBe('issueImageName')
+    // A valid first image cannot save an invalid second one: the whole request is refused before anything is stored.
+    expect(code([image('ok.png', 'image/png', PNG), image('bad.png', 'image/png', Buffer.from('nope'))])).toBe('issueImageType')
+    expect(issues.list()).toHaveLength(0)
+    expect(triggers).toHaveLength(0)
+    expect(existsSync(join(directory, 'local-images'))).toBe(false)
   })
 
   it('closes an issue without deleting its record', () => {
