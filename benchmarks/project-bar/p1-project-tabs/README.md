@@ -3,7 +3,7 @@
 - Ticket: `72eef87fa22817c7628e4a74ecffb1a0`（alignment `q-539e143e` 的 P1 slice）
 - Branch: `agent/tab-72eef87fa228`
 - Base: deployment `main` @ `3b8c6a8`（已合并 PR #9）
-- PR: 本切片执行时创建（见 `docs/issues/PR-72eef87fa22817c7628e4a74ecffb1a0.md`）；不在本案例中记录合并状态
+- PR: https://github.com/cinvymoe/dsh-superagent-prototype/pull/10 （OPEN；由人复核合并，未启用 auto-merge）
 - Scope: 面板顶部项目栏（`role=tab` 项目 Tab、溢出「更多」菜单）、独立新建项目页、项目作用域的 Discuss、对应测试与文档
 
 ## Artifacts
