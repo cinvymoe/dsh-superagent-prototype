@@ -216,30 +216,31 @@ function routes(runtime: HttpHost): Routes {
       if (Object.keys(input).length === 0) throw new RouteError(400, 'No project field to update')
       return { project: await runtime.projects.update(params.id, input) }
     },
+    // Every local route that returns a requirement returns its view, which adds the derived slicesFinished flag.
     'GET local/issues': ({ query }) => {
       const project = typeof query?.project === 'string' && query.project ? query.project : undefined
-      return { issues: runtime.local.list(project) }
+      return { issues: runtime.local.list(project).map(issue => runtime.local.view(issue)) }
     },
     'POST local/issues': async ({ body }) => {
       // The one route that carries images, so it alone reads more than the default management body limit.
       const input = z.object({ title: z.string().trim().min(1).max(200).optional(), body: z.string().trim().max(20_000).optional(),
         project: z.string().min(1), images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional()
       }).parse(await body(REQUIREMENT_BODY_BYTES))
-      return { issue: runtime.local.create(input) }
+      return { issue: runtime.local.view(runtime.local.create(input)) }
     },
     'GET local/issues/:id': ({ params }) => {
       const issue = runtime.local.get(params.id)
       if (!issue) throw new RouteError(404, 'Local issue not found')
       const thread = threadDetail(views(runtime), runtime.local.thread(issue.id), undefined, 200)
       if (!thread) throw new RouteError(404, 'Local issue thread not found')
-      return { issue, project: issue.project ? runtime.local.project(issue.project) ?? null : null,
+      return { issue: runtime.local.view(issue), project: issue.project ? runtime.local.project(issue.project) ?? null : null,
         thread, replies: runtime.store.receipts.thread('local', runtime.local.thread(issue.id)) }
     },
     'POST local/issues/:id/comments': async ({ params, body }) => {
       const input = z.object({ text: z.string().trim().min(1).max(20_000) }).parse(await body())
       const issue = runtime.local.comment(params.id, input.text)
       if (!issue) throw new RouteError(404, 'Local issue not found')
-      return { issue }
+      return { issue: runtime.local.view(issue) }
     },
     'POST local/issues/:id/alignment': async ({ params, body }) => {
       const input = z.object({ summary: z.string().max(20_000).optional(), slices: z.array(z.object({
@@ -248,7 +249,7 @@ function routes(runtime: HttpHost): Routes {
         lane: z.enum(['full', 'light']).default('full') })).optional(), acceptance: z.array(z.string()).optional() }).parse(await body())
       const issue = runtime.local.propose(params.id, input)
       if (!issue) throw new RouteError(404, 'Local issue not found')
-      return { issue }
+      return { issue: runtime.local.view(issue) }
     },
     'POST local/issues/:id/alignment/decision': async ({ params, body }) => {
       const input = z.object({ decision: z.enum(['confirm', 'reject']), reason: z.string().max(4_000).optional() }).parse(await body())
@@ -256,18 +257,18 @@ function routes(runtime: HttpHost): Routes {
       if (!issue) throw new RouteError(404, 'Local issue or alignment not found')
       // The person's confirmation is the authorization to dispatch: each slice becomes a worker ticket, dependencies gated by the executor.
       const tickets = input.decision === 'confirm' ? runtime.dispatchPlan(params.id).map(ticket => ({ id: ticket.id, title: ticket.title })) : []
-      return { issue, tickets }
+      return { issue: runtime.local.view(issue), tickets }
     },
     'POST local/issues/:id/execution': async ({ params, body }) => {
       const input = z.object({ mode: z.string() }).parse(await body())
       const issue = runtime.local.setExecution(params.id, input.mode)
       if (!issue) throw new RouteError(404, 'Local issue not found')
-      return { issue }
+      return { issue: runtime.local.view(issue) }
     },
     'POST local/issues/:id/close': ({ params }) => {
       const issue = runtime.local.close(params.id)
       if (!issue) throw new RouteError(404, 'Local issue not found')
-      return { issue }
+      return { issue: runtime.local.view(issue) }
     },
     'POST tickets/:id/retry': ({ params }) => { const id = ticket(params.id); runtime.engine.retryTicket(id); return { retried: true } },
     'POST tickets/:id/stop': ({ params }) => { const id = ticket(params.id); runtime.engine.stopTicket(id); return { stopped: true } },

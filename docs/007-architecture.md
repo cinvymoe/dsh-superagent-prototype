@@ -316,7 +316,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/core/stage.ts` | `ticketStage` and `canRetry`: the Ticket stages of [003 Execution](003-execution.md) |
 | `src/core/errors.ts` | `UserError` and `USER_ERRORS` |
 | `src/core/reasons.ts` | `Reason`, `REASONS` and `reasonText`: why the core recorded a Decision or set a Trigger aside, by code |
-| `src/core/ids.ts` | `key`: ids derived from their inputs, equal for equal inputs |
+| `src/core/ids.ts` | `key` and `planTicketId`: ids derived from their inputs, equal for equal inputs; `planTicketId` is the one source of a slice Ticket's id, shared by plan dispatch and the requirement view |
 | `src/core/memory.ts` | `MemoryRepositories`: the Store's repositories in memory, in the Store's order and with its nested rollback, for domain tests |
 | `src/core/index.ts` | The core's exports |
 | `src/app/runtime.ts` | The Runtime, the composition root, with its start and stop |
@@ -345,7 +345,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory-root resolution (project `worktreeRoot` > `executor.directory` > `<stateDir>/work`) and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
-| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, their validated editable fields (`validateProject`, `draftProject`, `patchProject`), the issue records bound to them with their submitted image metadata, their comments as human Triggers, the read-only alignment proposal a person confirms or sends back, and the bytes of a requirement image |
+| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, their validated editable fields (`validateProject`, `draftProject`, `patchProject`), the issue records bound to them with their submitted image metadata, their comments as human Triggers, the read-only alignment proposal a person confirms or sends back, the bytes of a requirement image, and `view()`, the derived requirement view whose `slicesFinished` holds once a confirmed alignment has slices and every slice's Ticket exists and ended (zero slices or a missing Ticket reports false) |
 | `src/app/local-images.ts` | `storeRequirementImages`: the count, name, media-type, size and signature checks of a requirement's images, and their storage under `<stateDir>/local-images/<issue id>/` |
 | `src/app/projects.ts` | `Projects`: the project ↔ GitHub chain association, appending a project's own chain on create, editing only that chain on update, and binding legacy repository-only projects to a matching existing chain at startup |
 | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
@@ -353,7 +353,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
 | `src/app/tools/main.ts` | The main Session's tools |
 | `src/app/tools/executor.ts` | An Executor Session's tools |
-| `src/app/http.ts` | The `/orchestrator/api` routes: the same-origin check, request limits (the larger one only for the create-requirement body that carries images), the raw requirement-image response and one status per kind of failure |
+| `src/app/http.ts` | The `/orchestrator/api` routes: the same-origin check, request limits (the larger one only for the create-requirement body that carries images), the raw requirement-image response and one status per kind of failure; every local route that returns a requirement answers with `LocalIssues.view()` rather than the stored record |
 | `src/app/api.ts` | `Api`, every route with its parameters, query, body and response, the filters of the lists and the URL of a requirement image; it imports only types, so the panel bundles it |
 | `src/app/views/text.ts` | The two forms of a view's text: `preview`, plain text on one line, and `markdown` without HTML; `plain` and `readable` |
 | `src/app/views/records.ts` | The rows the views share: Triggers, Tickets, Threads, Decisions and Channel links, and `ownersOf`, the owners of follow-ups as one request reads them |
@@ -380,7 +380,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
 | `src/sources/local.ts` | The local panel kind and plugin entry, exported as `./local-watch`: human Triggers, a Channel that needs no transport, and the default local policy |
-| `src/sources/local-format.ts` | The local project (with its owned chain id, intake and code repositories, an optional worktree root and `projectRepositories`), issue with its image metadata, image upload and slices, and the alignment proposal, shared by the host and the panel |
+| `src/sources/local-format.ts` | The local project (with its owned chain id, intake and code repositories, an optional worktree root and `projectRepositories`), issue with its image metadata, image upload and slices, the alignment proposal, and `LocalIssueView`, an issue plus the derived `slicesFinished` a local HTTP response carries but no stored record does, shared by the host and the panel |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
