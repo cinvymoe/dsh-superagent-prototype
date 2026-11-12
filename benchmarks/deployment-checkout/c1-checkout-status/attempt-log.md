@@ -1,0 +1,15 @@
+# Attempt log
+
+1. `feature_exec_start` execute flow (run `run-mwdqup5g-12`, policy A1). e1 wrote the slice record `docs/issues/2b9bf67f6fd82b0720ed7644ef721c67.md` and the task contract, signed `execution-approved` with the Discuss alignment as evidence, and advanced to e2.
+2. `pnpm install --frozen-lockfile` in the fresh ticket worktree (node_modules absent; 1.5 s from the shared store).
+3. e2 planned T1 and dispatched `lane-T1-1` (subagent spawn, cwd = the ticket worktree). Unlike the C2 ticket's three silent lane failures, this lane completed on the first dispatch and reported before finishing.
+4. Lane implementation: the module, the route wiring, the panel fixture's static answer, 18 tests and the two documentation rows. Its first typecheck failed only on the panel fixture's exhaustive `ROUTES` map, which it then fixed inside the same lane.
+5. Red evidence: with only `tests/checkout.spec.ts` added, `pnpm vitest run tests/checkout.spec.ts` exits 1 with `Cannot find module '../src/app/checkout.ts'` and collects 0 tests (`docs/issues/evidence/c1-checkout-red.log`).
+6. Five real assertion failures after the first implementation (start-snapshot race, detached read via `abbrev-ref`, `noRepository` leaking into isolated fixtures, path-limited `status` in a subdirectory, the `remote` substring in the read-only assertion). Each is described with its fix in `retrospective.md`.
+7. Green: targeted 1 file / 19 tests; `pnpm typecheck` exit 0; related regression 4 files / 24 tests; full `pnpm check` 64 files / 1313 tests plus build, exit 0.
+8. Main-session repair after review: `docs/006-deployment.md` now says `repository` comes from the `origin` remote; the no-remote test case was extended with a real `gitlab.com` remote so `available:false` + `noRepository` is proven end to end. All four commands were re-run on the final code and their evidence logs overwritten.
+9. Commit `19153ed9` (`feat(deployment): read the running checkout's status over the management API`) as `cinvymoe-superagent` with the `slice-C1` trailer; pushed `agent/get-deployment-checkout-2b9bf67f6fd82b0720ed7644ef721c67`; opened PR #28 against `main` with the Architecture impact line.
+10. Commit `e9dafa41` records the open PR and the limits the merge slice inherits; pushed to the same branch. PR #28 is `MERGEABLE`/`CLEAN`.
+11. The host restarted right after e4. On resume: worktree clean at `e9dafa41`, PR #28 open, run at e4 with both gates passed; advanced to e5 without repeating the push or the PR.
+12. `orchestrator_report` with `pr_number: 28` was refused by the host's ownership check ("PR does not belong to this ticket") even though the PR is on `agent/<ticket name>` opened by `rust-crane-agent[bot]`; the progress report was sent without `pr_number` and named the PR URL.
+13. e5 sediment: this regression case, the issue's sediment section, the `docs/issues/benchmark` pointer and the worktree record. The ticket worktree and branch are retained until PR #28 merges (the execute flow delivers an open PR; a person merges).
