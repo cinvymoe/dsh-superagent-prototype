@@ -5,8 +5,7 @@ import { key, planTicketId, UserError, EXECUTION_STRATEGY_REVISION, type ActorRe
   type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment,
-  type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
+import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
 
@@ -41,7 +40,7 @@ export class LocalIssues {
   list(project?: string): LocalIssue[] {
     return this.host.store.keys(KV.local.issue.prefix).flatMap(entry => {
       const issue = this.host.store.get(KV.local.issue(entry.slice(KV.local.issue.prefix.length)))
-      return issue && (!project || issue.project === project) ? [this.normalized(issue)] : []
+      return issue && (!project || issue.project === project) ? [this.withRounds(issue)] : []
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }
 
@@ -143,15 +142,18 @@ export class LocalIssues {
   /** The requirement with its alignment rounds read back; a record written before rounds existed reads as one round. */
   get(id: string): LocalIssue | undefined {
     const issue = this.host.store.get(KV.local.issue(id))
-    return issue ? this.normalized(issue) : undefined
+    return issue ? this.withRounds(issue) : undefined
   }
 
   /** A stored record as readers see it: rounds materialized and the single-slot mirror pointing at the current round. */
-  private normalized(issue: LocalIssue): LocalIssue {
+  private withRounds(issue: LocalIssue): LocalIssue {
     const rounds = alignmentRounds(issue)
     if (!rounds.length) return issue
     return { ...issue, alignments: rounds, alignment: rounds[rounds.length - 1]! }
   }
+
+  /** Store a requirement record, replacing any earlier one with the same id; the caller owns every field it changes. */
+  putIssue(issue: LocalIssue): void { this.host.store.set(KV.local.issue(issue.id), issue) }
 
   /**
    * The HTTP view of a requirement: its stored record, its alignment rounds read back, plus whether every slice Ticket of
@@ -161,11 +163,11 @@ export class LocalIssues {
    * `ended`.
    */
   view(issue: LocalIssue): LocalIssueView {
-    const current = this.normalized(issue)
-    const slices = current.alignment?.status === 'confirmed' ? current.alignment.slices : []
+    const materialized = this.withRounds(issue)
+    const slices = materialized.alignment?.status === 'confirmed' ? materialized.alignment.slices : []
     const slicesFinished = slices.length > 0
-      && slices.every(slice => !!this.host.store.tickets.get(planTicketId(current.id, slice.id))?.ended)
-    return { ...current, slicesFinished }
+      && slices.every(slice => !!this.host.store.tickets.get(planTicketId(issue.id, slice.id))?.ended)
+    return { ...materialized, slicesFinished }
   }
 
   thread(id: string): string { return localThreadKey(id) }

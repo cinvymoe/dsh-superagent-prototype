@@ -150,3 +150,69 @@ it('ends a restart that never stopped answering after half a minute, and reads t
   await advance(2_000)
   expect(reads()).toBe(ended + 1)
 })
+
+it('shows the running checkout with its short commit, commit time, work tree and matched chain repository', async () => {
+  at({ page: 'settings', query: { group: 'deployment' } })
+  await mount()
+  expect(text()).toContain(zh.deploymentCheckout)
+  expect(text()).toContain('/srv/dsh-superagent')
+  expect(text()).toContain('main')
+  expect(text()).toContain('acme/widgets')
+  expect(text()).toContain(zh.deploymentCheckoutClean)
+  expect(document.querySelector('code[title="0123456789abcdef0123456789abcdef01234567"]')?.textContent).toBe('0123456')
+  expect(all('time').at(-1)?.getAttribute('datetime')).toBe('2026-09-23T00:00:00Z')
+  // A dirty work tree says so instead of reporting it clean.
+  server.prepare = { ...server.prepare, checkout: { ...server.prepare.checkout, dirty: true } }
+  await remount()
+  expect(text()).toContain(zh.deploymentCheckoutDirty)
+})
+
+it('lists the localized reasons a checkout cannot take a merge and disables the action', async () => {
+  at({ page: 'settings', query: { group: 'deployment' } })
+  server.prepare = { ...server.prepare, available: false, reasons: ['notMain', 'dirty', 'noChain'], chain: null, repository: null }
+  await mount()
+  expect(text()).toContain(zh.deploymentCheckoutUnavailableReason)
+  for (const reason of ['checkoutReason.notMain', 'checkoutReason.dirty', 'checkoutReason.noChain'] as const) expect(text()).toContain(zh[reason])
+  expect(all('button').find(item => item.textContent === zh.deploymentCheckoutAction)?.hasAttribute('disabled')).toBe(true)
+})
+
+it('waits for setup before offering a pull and build', async () => {
+  at({ page: 'settings', query: { group: 'deployment' } })
+  server.setup = { ...server.setup, accounts: null }
+  await mount()
+  expect(text()).toContain(zh.deploymentCheckoutWaiting)
+  expect(all('button').some(item => item.textContent === zh.deploymentCheckoutAction)).toBe(false)
+})
+
+it('runs one pull and build after confirmation, then shows the new commit and that a restart applies it', async () => {
+  at({ page: 'settings', query: { group: 'deployment' } })
+  await mount()
+  await click(zh.deploymentCheckoutAction)
+  expect(text()).toContain(zh.deploymentCheckoutActionTitle)
+  expect(text()).toContain('将从 acme/widgets 拉取 main 并重新构建；不会重启 dsh-superagent，重启后生效。')
+  // A double click on the confirmation still runs one pull and build.
+  const confirm = find(zh.confirm)
+  await act(async () => { confirm.click(); confirm.click() })
+  await settle()
+  expect(server.requests.filter(request => request.method === 'POST' && request.path === 'deployment/prepare')).toHaveLength(1)
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh.deploymentCheckoutMerged)
+  expect(text()).toContain('fedcba9')
+  expect(text()).toContain(zh.deploymentCheckoutRestart)
+})
+
+it('keeps the Deployment page and shows the script message and the log path when the pull and build fails', async () => {
+  at({ page: 'settings', query: { group: 'deployment' } })
+  const message = 'prepare: this checkout has uncommitted changes; commit or stash them first:\n M readme.md'
+  const log = '/srv/dsh-superagent/prepare/prepare-20261112-000000-1.log'
+  server.prepareFailure = { message, log }
+  await mount()
+  await click(zh.deploymentCheckoutAction)
+  await click(zh.confirm)
+  expect(server.requests.filter(request => request.method === 'POST' && request.path === 'deployment/prepare')).toHaveLength(1)
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(zh.deploymentCheckoutFailed)
+  expect(text()).toContain('uncommitted changes')
+  expect(text()).toContain(log)
+  // The page keeps its facts and the action, so another attempt needs no navigation.
+  expect(text()).toContain('0123456')
+  expect(all('button').some(item => item.textContent === zh.deploymentCheckoutAction)).toBe(true)
+})

@@ -1,0 +1,21 @@
+# C3 · After capture (this slice, head cc0a5d33)
+# After: branch agent/slice-4b2e5405034c at cc0a5d33 (base d2a6ede1 = 422a21a4 + merge of the C1 branch); pnpm check rebuilt lib/ before the capture.
+# Profile: DSH profile c3local-after, stateDir /root/.dsh/state/c3local-after, webserver 10.126.126.6:3142,
+#   dsh-superagent linked to /tmp/c3-after-src.
+# Checkout: /tmp/c3-after-src, branch main at cc0a5d33, remote origin https://github.com/cinvymoe/dsh-superagent-prototype.git,
+#   with a git url.<local mirror>.insteadOf so the fetch goes to a local bare mirror (/tmp/c3-after-remote/...) whose main is
+#   one empty commit ahead of the checkout. The chain is cinvymoe/dsh-superagent-prototype; no live GitHub/Feishu state, no credentials.
+# State: seeded SQLite with one GitHub chain and a setup-stub CLI; nothing private is shown in the capture.
+# Command: python3 -u /tmp/c3-after-capture3.py <url> /tmp/c3-shots-after
+READY TEXT: 来源 | 评估 | 执行 | 提示词 | 部署 | 部署 |  | 这台机器上的 dsh-superagent 设置，存放在 DSH 配置文件的 dsh-superagent 条目里；保存后立即生效，不会重启 dsh-superagent。 |  | 运行中的检出 | 路径 | /tmp/c3-after-src | 分支 | main | 提交 | cc0a5d3 6分钟前 | 工作树 | 干净 | 匹配的链路仓库 | cinvymoe/dsh-superagent-prototype |  | 拉取并构建 |  | 本机设置 | 状态目录 | /root/.dsh/state/c3local-after | 上限 | 提示词配置的最大字符数 | 一次研判可读的线程页数 | 一次上下文读取的时限 / 毫秒
+DIRTY TEXT: 来源 | 评估 | 执行 | 提示词 | 部署 | 部署 |  | 这台机器上的 dsh-superagent 设置，存放在 DSH 配置文件的 dsh-superagent 条目里；保存后立即生效，不会重启 dsh-superagent。 |  | 运行中的检出 | 路径 | /tmp/c3-after-src | 分支 | main | 提交 | cc0a5d3 6分钟前 | 工作树 | 有未提交改动 | 匹配的链路仓库 | cinvymoe/dsh-superagent-prototype |  | 无法拉取并构建：工作树有未提交的改动 |  | 拉取并构建 |  | 本机设置 | 状态目录 | /root/.dsh/state/c3local-after | 上限 | 提示词配置的最大字符数 | 一次研判可读的线程页数 | 一次上下文读取的时限 / 毫秒
+CONFIRM TEXT: 来源 | 评估 | 执行 | 提示词 | 部署 | 部署 |  | 这台机器上的 dsh-superagent 设置，存放在 DSH 配置文件的 dsh-superagent 条目里；保存后立即生效，不会重启 dsh-superagent。 |  | 运行中的检出 | 路径 | /tmp/c3-after-src | 分支 | main | 提交 | cc0a5d3 7分钟前 | 工作树 | 干净 | 匹配的链路仓库 | cinvymoe/dsh-superagent-prototype |  | 拉取并构建 |  | 本机设置 | 状态目录 | /root/.dsh/state/c3local-after | 上限 | 提示词配置的最大字符数 | 一次研判可读的线程页数 | 一次上下文读取的时限 / 毫秒
+MERGED HEAD: cc0a5d3 -> 9a462c3 built: True
+MERGED TEXT: 来源 | 评估 | 执行 | 提示词 | 部署 | 部署 |  | 这台机器上的 dsh-superagent 设置，存放在 DSH 配置文件的 dsh-superagent 条目里；保存后立即生效，不会重启 dsh-superagent。 |  | 运行中的检出 | 路径 | /tmp/c3-after-src | 分支 | main | 提交 | 9a462c3 7分钟前 | 工作树 | 干净 | 匹配的链路仓库 | cinvymoe/dsh-superagent-prototype |  | 重启后生效 |  | 拉取并构建 |  | 本机设置 | 状态目录 | /root/.dsh/state/c3local-after | 上限 | 提示词配置的最大字符数 | 一次研判可读的线程页数 | 一次上下文读取的时限 / 毫秒
+FAILED TEXT: 来源 | 评估 | 执行 | 提示词 | 部署 | 部署 |  | 这台机器上的 dsh-superagent 设置，存放在 DSH 配置文件的 dsh-superagent 条目里；保存后立即生效，不会重启 dsh-superagent。 |  | 运行中的检出 | 路径 | /tmp/c3-after-src | 分支 | main | 提交 | c20c311 现在 | 工作树 | 干净 | 匹配的链路仓库 | cinvymoe/dsh-superagent-prototype |  | 重启后生效 |  | 拉取并构建 |  | 拉取并构建失败 |  | prepare: this checkout has commits origin/main does not have; merge or discard them before fast-forwarding from c20c311d8deb to 9a462c3a1ba9. |  | 日志路径：/root/.dsh/state/c3local-after/prepare/prepare-20261112-181736-1648015.log |  | 本机设置 | 状态目录 | /root/.dsh/state/c3local-after | 上限 | 提示词配置的最大字符数 | 一次研判可读的线程页数 | 一次上下文读取的时限 / 毫秒
+# SHOTS: after-deployment.png (facts + action), after-dirty.png (dirty tree disables the action and names the reason),
+#   after-merged.png (the script fast-forwarded to 9a462c3 and rebuilt; page reads the new commit and "重启后生效"),
+#   after-failed.png (a local commit ahead of the remote is refused; the page keeps its facts and shows the script text and log path)
+# The successful run's log: /root/.dsh/state/c3local-after/prepare/prepare-<stamp>.log, 0600, holds the fetch, merge and pnpm output.
+# Viewport 1440x1100, light, zh-CN, /usr/bin/chromium headless via Playwright; route sessionStorage['dsh-superagent/route'] = settings/deployment.
+# Command exit status: 0

@@ -1,0 +1,27 @@
+(node:1605371) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1605397) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/api-engine-62fa6ab64496
+
+(node:1605462) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1605456) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1605457) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/locales.spec.ts (6 tests) 15ms
+(node:1605456) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1605457) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (19 tests) 847ms
+ ✓ tests/local-align.spec.ts (30 tests) 6493ms
+   ✓ accepts a local requirement for alignment and gives its worker the align tool instead of execution  370ms
+   ✓ accepts an optional absolute worktree root over HTTP and refuses a relative one  1781ms
+   ✓ lets only the create-requirement route carry a body above the management limit  328ms
+
+ Test Files  3 passed (3)
+      Tests  55 passed (55)
+   Start at  01:51:13
+   Duration  8.21s (transform 2.11s, setup 0ms, import 3.21s, tests 7.36s, environment 0ms)
+

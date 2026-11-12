@@ -151,6 +151,46 @@ Both actions take `--repository owner/name`, exit 1 without it, and refuse a mal
 
 A database migrated by a newer version cannot be opened by an older one, which is why activation backs it up first. When the new build does not become healthy, `activate` stops whatever it left running, resets the checkout to the commit from before `prepare`, restores the backed-up database (deleting the failed version's `-wal` and `-shm` files first), rebuilds, and starts the previous version. It prints `activate: the new build did not start (...); rolling back to <sha>.`, `activate: restored the database from ...`, and `activate: rolled back to <sha>; the previous version is running again.`, then exits 1, with the previous version running again from the restored database.
 
+### After a merge: make the running version match the checkout
+
+Four steps make the running version match the checkout. dsh-superagent loads its built files at startup, and Node caches those modules, so neither the plugin nor its panel can replace the code of the instance that loaded them. A merged pull request changes the repository, not the running process.
+
+1. **Merge the pull request.** Nothing on this machine changes yet.
+
+2. **Refresh and rebuild the checkout.** Choose **Pull and build** in the **Running checkout** block of **Settings → Deployment**, or run the same action in the checkout:
+
+   ```sh
+   scripts/dsh-superagent prepare --repository acme/widgets
+   ```
+
+   A merge prints `prepare: fast-forwarded from <old sha> to <new sha> on main`, then runs and prints `$ pnpm install --frozen-lockfile` and `$ pnpm build`, and exits 0. An up-to-date checkout prints `prepare: up to date at <sha> on main`, builds nothing and exits 0. A refusal changes nothing and exits 1; a failed install or build resets the checkout to the previous commit, rebuilds it and exits 1. The page shows the run's log path when it fails. Nothing restarts, so the running instance keeps the old code and, after a merge, the page shows **Takes effect after a restart** (`restartRequired`, also on `GET deployment/checkout`).
+
+3. **Restart per deployment form.** `prepare` stops after the build; the form decides who restarts:
+
+   | Deployment form | How the new build starts |
+   | --- | --- |
+   | A dedicated profile such as `superagent`, started by this script | `scripts/dsh-superagent restart --profile superagent`, or `scripts/dsh-superagent activate --repository acme/widgets`, which merges the checkout, backs up the database, restarts the service and rolls back when the new build is unhealthy |
+   | A host profile, the plugin loaded into a DSH instance another supervisor owns, such as a DSH Web instance a systemd unit starts (for example the unit `dsh-web.service` on port 8399) | Restart that process the way its supervisor does, for example `systemctl restart dsh-web` for that unit, then wait for the panel to answer; the plugin cannot restart it |
+
+   `prepare` is shared by both forms; `restart` and `activate` restart the profile's process in this script's tmux session `dsh-<profile>`, so never point them at a host profile: they would stop the process its supervisor owns and relaunch it under the script's tmux session. The plugin never restarts the process that loaded it.
+
+4. **Verify.** Once the process runs the new build, the route answers with the new commit and no pending restart:
+
+   ```sh
+   curl -s -H 'x-orchestrator-request: 1' http://127.0.0.1:3082/orchestrator/api/deployment/checkout | jq '{head, restartRequired}'
+   ```
+
+   ```json
+   {
+     "head": "<new sha>",
+     "restartRequired": false
+   }
+   ```
+
+   The **Running checkout** block shows the same commit without the **Takes effect after a restart** badge, and `scripts/dsh-superagent status` exits 0.
+
+`prepare` exits 0 when the checkout was up to date or was merged and built, and 1 when it refused or a build failed. `activate` exits 0 when it skipped — an up-to-date checkout with `--only-when-behind`, working Executor Sessions with `--if-idle`, an intentional stop with `--respect-stop` — and 1 when it refused, `prepare` failed or it rolled back. When it activated, it returns the health check's code: 0 healthy, 2 when a part reports an error, 3 when setup waits. `restart` uses the four codes of `status`.
+
 ### Hourly check
 
 Create the hourly check in the DeepSeek Harness profile you normally use, not in `superagent`. It must keep running when the agent service is down. Ask an agent in that profile to create an hourly schedule using this prompt, with the checkout path filled in:
@@ -160,6 +200,14 @@ Check dsh-superagent: run `scripts/dsh-superagent --profile superagent status` i
 ```
 
 `--respect-stop` preserves an intentional stop. Only `stop` writes the marker; `start` clears it. `restart` writes no marker, so the check can recover a restart whose shutdown timed out.
+
+The same schedule can also make a merged checkout effective while nobody works, when the checkout belongs to a dedicated profile such as `superagent`. It cannot for a host profile: nothing here restarts a process another supervisor owns. Add a second hourly schedule with this prompt:
+
+```text
+Make a merged checkout of dsh-superagent effective: in <checkout> run `scripts/dsh-superagent --profile superagent activate --repository <owner/name> --only-when-behind --if-idle --respect-stop`. Exit 0 with `activate: already up to date at <sha> on main; nothing to activate.`, `activate: <n> Executor Session(s) are still working; activation is skipped.` or `Intentional stop is active; activation skipped.`: do nothing and say nothing. Exit 0 with `activate: <sha> is running on main.`: the running version changed, so report that single line. Exit 2: do not restart; tell me each part under `errors` with its detail, unless you already told me about the same ones. Exit 3: do not restart; tell me what `setup` says setup needs, unless you already told me. If it exits 1 or prints a `rolling back to` line, read the newest .artifacts/dsh-superagent-superagent-*.log and the Troubleshooting section of docs/006-deployment.md, fix what you can, and tell me what failed, what you did and whether the previous version runs again.
+```
+
+Both prompts report only when a check acted or failed. An unchanged checkout, a skipped activation and a healthy service stay silent.
 
 ## Settings
 
@@ -190,8 +238,11 @@ Agents may rely on these routes and fields. The other routes in `src/app/api.ts`
 | Request | Answer |
 | --- | --- |
 | `GET state` | What every page reads: `setup`, with `problem` and `feishuProblem`, each `null` or a setup problem with `place`, `code`, `values` and `detail`, and `accounts` once setup resolved them; `health`, an entry per part, below, with `state` (`starting`, `ready`, `paused` or `error`), `detail` and `at`; `load`, the Executor Sessions `running`, the Tickets `queued` and `maxWorkers`; `paused`; and `masterId` |
-| `GET settings` | `blocks`: `policy`, `eval` and `executor`, each with its `value` and its `revision`; `sources`: the Source instances, each with `id`, `kind`, `installed`, its block's `value`, `{"enabled": …, "config": {…}}`, and `revision`, its kind's form, and its setup `problem` when it has one; `policyVersion`; and `environment`, the execution environment's `root` and `variables` |
+| `GET settings` | `blocks`: `policy`, `eval`, `executor` and `agents`, each with its `value` and its `revision`; `agents`: the three Agent roles' tool catalog, each with its `role`, the `preset` its Sessions run under, its `required` tools a save cannot turn off and its `optional` ones it may; `sources`: the Source instances, each with `id`, `kind`, `installed`, its block's `value`, `{"enabled": …, "config": {…}}`, and `revision`, its kind's form, and its setup `problem` when it has one; `policyVersion`; and `environment`, the execution environment's `root` and `variables` |
 | `GET sources` | Each Source's status: `state` (`missing`, `off`, `error`, `setup`, `starting`, `paused` or `ready`), the `health` of its parts, its setup `problem`, the last day's `stats`, the Triggers it `filtered` in that day, and the messages it `dropped` in that day, newest drop first, each with its `channel`, `preview`, `ticket` (`id` and `title`) when it was for one, its `thread` when the store has it, and `dropped.at` and `dropped.reason`, `channelGone` or `channelIgnored` |
+| `GET deployment/checkout` | The checkout dsh-superagent runs from, read with local git commands only: `path`, `repository` (the `owner/name` its `origin` remote names, or `null`), `branch`, `head`, `committedAt` (the commit's time, or `null`), `dirty`, `remotes` (each remote's `name` and the `repository` its URL names, or `null`), `available`, `reasons` (`notGit`, `noRepository`, `detached`, `notMain`, `dirty`), and `restartRequired`, whether the disk moved past what this instance started on |
+| `GET deployment/prepare` | Whether the running checkout can take a local merge: `checkout`, as `GET deployment/checkout`; `chain`, the id of the configured chain whose code repository one of the checkout's `remotes` names; `repository`, that chain's code repository; `available`; `reasons` (the checkout's own, then `noChain` when no chain names it, then `empty` when it has no commit); and `running`, whether a merge is in flight |
+| `POST deployment/prepare` | Runs `scripts/dsh-superagent prepare --repository <repository>` in the linked checkout, the only writer: 200 with `merged`, whether the commit moved, `head`, the commit now on disk, and `log`, the absolute path of the run's log. 400 `prepareUnavailable` with `reasons` when the checkout cannot take a merge, 400 `prepareBusy` while one runs, and 400 `prepareFailed` with `message`, the script's output tail, and `log`. It never restarts or stops dsh-superagent, so the new build takes effect after a restart |
 | `PUT settings/<block>` with `{"value": …, "revision": n}` | Saves one block: `saved`, the block's new `revision`, `policy_changed` and `restarting`. `value` is the whole block, as `GET settings` holds it; a missing key takes its default |
 | `POST executor/pause` with `{"paused": true}` or `false` | Pauses or resumes processing: `paused` |
 | `POST setup/check` | Runs setup again by restarting dsh-superagent: `restarting: true`. Refused when setup has nothing to fix |
@@ -223,6 +274,7 @@ The blocks:
 - `source:github`, `source:feishu`: `{"enabled": true, "config": {…}}`. GitHub's config requires `chains` as `[{"id": "alpha", "intakeRepository": "acme/widgets-issues", "codeRepository": "acme/widgets"}]` (at least one chain; a stored configuration in the old single-chain shape is read as one `default` chain until a panel save writes `chains`), `cli`, plus the switches `observeIssues`, `observePulls`, `observeComments` and `observeCi`, off by default. Observing repository-wide Issues and comments reads each chain's intake repository, while pull requests and the default branch's CI stay on its code repository; Feishu's has `cli`, `chats` as `[{"chatId": "oc_…", "name": "…", "listen": "mentions"}]` (or `"all"`), `directMessages`, and `otherChats` as `"none"` or `"mentions"`.
 - `policy`: `{"rules": […], "sources": {"github": {"allowed": [{"id": "<login>"}], "bots": [{"id": "dependabot[bot]"}]}, "feishu": {"allowed": [{"id": "ou_…", "name": "…"}], "syncChat": "oc_…", "admission": {"oc_…": {"unlistedAddressed": "explicit"}}}}}`. `bots` lists the bots whose messages may become inferred candidates. An `admission` row is keyed by chat id, `other` or `direct` for Feishu, and by `issues`, `pulls`, `comments` or `ci` for GitHub; an unset cell takes its default (see [002 Authorization](002-authorization.md)).
 - `eval`: `mode`, `timeoutSeconds` and `model`.
+- `agents`: the three configured Agent roles, `main` (the main Session), `aligner` and `executor`, each `{"model": null, "disabledTools": []}`. A `model` is `{"provider", "model"}` (and optionally `"reasoningEffort"`) or `null` to inherit the role's default model; `disabledTools` lists the optional tools the role turns off. A role's `required` tools cannot be turned off, and a name outside its catalog is refused with `agentsRequiredTool` or `agentsUnknownTool`. Only the panel may save the block (`panelOnlyAgents` otherwise); a saved block keeps its own `revision` and appears in the configuration history.
 - `executor`: `model`, `maxWorkers`, `directory`, `prepare` and `blockedCommands`. The processing pause is a setting of its own, `paused`, which `POST executor/pause` sets. `directory` is the Ticket directory root; a local project's `worktreeRoot` takes precedence over it, and either explicitly configured root must already exist, be a directory and be writable when a Ticket launches. `prepare` runs with the chosen root as its working directory; a missing, non-directory or unwritable explicit root fails the Ticket without creating anything or falling back to `<stateDir>/work`.
 
 Changing a repository or CLI runs the corresponding setup check first. A failed check returns 400 with details in `setup`. A successful account change, or any save while setup is pending, returns `restarting: true`. The API is temporarily unavailable while the application restarts.
@@ -298,6 +350,10 @@ Setup problems appear on the overview with a link to the fix, in the panel's lan
 | `pnpm must be on PATH to install and build the checkout.` | Install pnpm and put it on PATH, then run the command again |
 | `activate: nothing answers at …; start the service once` | The state and database are unknown while the service is down: run `start`, then `activate` |
 | `activate: the new build did not start (…); rolling back to …` | The new commit's build does not start. The lines after it name each rollback step, and the previous version runs again from its restored database. Read the newest log, fix the build, then try again |
+| The page still shows **Takes effect after a restart** after a successful pull and build | The process still runs the code it loaded at startup, because the pull and build changed the disk only: restart it for its deployment form, with `restart --profile superagent`, `activate`, or its supervisor for a host profile |
+| `activate: <n> Executor Session(s) are still working; activation is skipped.` | Executor Sessions are busy, so `--if-idle` skipped the activation: retry when they finish, or drop `--if-idle` to restart now |
+| `Intentional stop is active; activation skipped.` | A `stop` wrote the manually-stopped marker, so `--respect-stop` skipped the activation: `start` clears the marker, then activate again |
+| The **Running checkout** block names a checkout other than the one you built | Another DSH process or profile serves the panel: build and restart the checkout that process loads |
 | `… timed out after 90 s`, `… was stopped by …`, `… exited with code …` or `… could not run: …` | A CLI failed without printing why; run the named program by hand as the operator's user to see its own message |
 | The panel says dsh-superagent is not answering | It is restarting, or did not start because of its configuration; the DeepSeek Harness log names the cause |
 | `dsh-superagent configuration has keys it does not use` (log) | Remove the named keys; the message says where each value lives now |

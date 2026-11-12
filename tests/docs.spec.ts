@@ -153,6 +153,27 @@ describe('requirement alignment history documentation', () => {
   it('names the round history in the panel module row and the panel test row', () => {
     const architecture = prose('docs/007-architecture.md')
     expect(architecture).toContain('the alignment round history renders the current round expanded with earlier rounds collapsed until opened, and every decision names the current round')
-    expect(architecture).toContain('the alignment round history (a list row\'s round count, the expanded current round, an earlier round opened on demand and a decision naming the current round)')
+    expect(architecture).toContain('the alignment round history (a list row\'s round count, the expanded current round, an earlier round opened on demand and a decision naming the current round)')  })
+})
+
+describe('local checkout flow documentation', () => {
+  it('walks a merged pull request to a running version with the expected script output', () => {
+    const deployment = prose('docs/006-deployment.md')
+    expect(deployment).toContain('A merged pull request changes the repository, not the running process.')
+    expect(deployment).toContain('prepare: fast-forwarded from <old sha> to <new sha> on main')
+    expect(deployment).toContain('"restartRequired": false')
+    expect(deployment).toContain('The plugin never restarts the process that loaded it.')
+    expect(deployment).toContain('never point them at a host profile')
+    expect(deployment).toContain('--only-when-behind --if-idle --respect-stop')
+    expect(deployment).toContain('Both prompts report only when a check acted or failed.')
+  })
+  it('names the running checkout and the pull-and-build action in the panel document', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('**Running checkout**, the checkout the running plugin loads')
+    expect(panel).toContain('**Pull and build**')
+  })
+  it('states in the architecture document that rebuilt code needs the loading process to restart', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('A rebuilt checkout takes effect only when the process that loaded it restarts')
   })
 })

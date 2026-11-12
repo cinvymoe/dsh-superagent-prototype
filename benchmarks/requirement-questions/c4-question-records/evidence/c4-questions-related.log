@@ -1,0 +1,30 @@
+(node:1606117) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1606147) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/api-engine-62fa6ab64496
+
+(node:1606346) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1606384) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1606372) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1606387) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1606402) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/class-docs.spec.ts (1 test) 23ms
+ ✓ tests/docs.spec.ts (16 tests) 50ms
+(node:1606372) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/http.spec.ts (4 tests) 35ms
+ ✓ tests/questions.spec.ts (6 tests) 1226ms
+   ✓ answers one question from a Session forked off the worker's latest completed turn, then archives it  350ms
+ ✓ tests/panel-discuss.spec.tsx (31 tests) 2334ms
+
+ Test Files  5 passed (5)
+      Tests  58 passed (58)
+   Start at  01:51:44
+   Duration  5.25s (transform 2.69s, setup 0ms, import 3.94s, tests 3.67s, environment 1.07s)
+

@@ -79,6 +79,25 @@ export interface LocalImageInput {
   data: string
 }
 
+/**
+ * One question a person asked about a Ticket the requirement dispatched, with the answer recorded on the requirement
+ * record rather than on the Ticket: nothing of the Engine sees it.
+ */
+export interface LocalQuestion {
+  id: string
+  /** The dispatched Ticket the question is about. */
+  ticket: string
+  text: string
+  status: 'asked' | 'answered' | 'failed'
+  askedAt: string
+  /** When the question reached this status; absent while it is still `asked`. */
+  answeredAt?: string
+  /** The answer, once one was read from a Session forked off the Ticket's worker. */
+  answer?: string
+  /** Why the question failed, so a person may retry it; absent unless it is `failed`. */
+  error?: string
+}
+
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */
 export interface LocalIssue {
   id: string
@@ -89,6 +108,11 @@ export interface LocalIssue {
   project?: string
   /** Images attached when the requirement was submitted; absent when there are none. */
   images?: LocalImage[]
+  /**
+   * The questions people asked about its dispatched Tickets, newest last. Absent when there are none, so records written
+   * before questions existed read fine and need no migration.
+   */
+  questions?: LocalQuestion[]
   /**
    * The execution mode the person chose for the requirement's slice tickets: absent means native, which is also how
    * requirements created before the field existed dispatch.
