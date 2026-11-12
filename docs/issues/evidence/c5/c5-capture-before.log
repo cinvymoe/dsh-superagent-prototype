@@ -1,0 +1,12 @@
+MODE before
+PAGE HEAD: 返回需求列表 | 需求详情支持对关联工单提问 | 需求详情与对齐审阅 | 开放 | 已确认
+ROWS: [('C1 · 提问记录与后台回答', ['C1 · 提问记录与后台回答', '打开 Session']), ('C2 · 时间线展示问题与回答', ['C2 · 时间线展示问题与回答', '打开 Session']), ('C3 · Aligner 工单复核对齐结论', ['C3 · Aligner 工单复核对齐结论', '打开 Session'])]
+TICKET ROW: ('C1 · 提问记录与后台回答', ['C1 · 提问记录与后台回答', '打开 Session'])
+TICKET ROW: ('C2 · 时间线展示问题与回答', ['C2 · 时间线展示问题与回答', '打开 Session'])
+TICKET ROW: ('C3 · Aligner 工单复核对齐结论', ['C3 · Aligner 工单复核对齐结论', '打开 Session'])
+TIMELINE COUNT: 3
+TIMELINE EVENTS: ['local | 7小时前 |  | 回答里的 Markdown 要能正常显示。', '智能体 | 8小时前 | 智能体 |  | 收到，提问与回答都会回到这里。', 'local | 8小时前 |  | 提问入口请放在关联工单行，别再加一页。']
+QUESTION EVENTS: []
+SCHEME: {'prefersDark': False, 'bodyBg': 'rgb(255, 255, 255)'}
+SHOT docs/issues/evidence/c5/before-timeline.png
+SHOT docs/issues/evidence/c5/before-tickets.png
