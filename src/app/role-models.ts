@@ -3,23 +3,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Ticket } from '../core/index.ts'
-import type { AgentRole, RoleModel, Settings } from '../policy.ts'
+import type { AgentRole, RoleModel } from '../policy.ts'
+
+export { roleModel } from '../agent-model.ts'
 
 /** The role an Executor Session runs: an aligner for a Ticket accepted for alignment, the executor otherwise. */
 export function workerRole(ticket: Ticket | undefined): Exclude<AgentRole, 'main'> {
   return ticket?.mode === 'align' ? 'aligner' : 'executor'
-}
-/**
- * The model a role's new Session starts with: its own override, else the role's default. An aligner inherits the executor's
- * effective model, so configuring the executor also moves an aligner that sets no override of its own; an existing Session
- * keeps the model it started with, as `initializeRoleModel` leaves a Session that has run alone.
- */
-export function roleModel(settings: Settings, role: AgentRole): RoleModel | null {
-  switch (role) {
-    case 'main': return settings.agents.main.model ?? settings.eval.model
-    case 'executor': return settings.agents.executor.model ?? settings.executor.model
-    case 'aligner': return settings.agents.aligner.model ?? roleModel(settings, 'executor')
-  }
 }
 
 /** Resolve a configured route through the live provider; catalog membership is not a restriction. */
