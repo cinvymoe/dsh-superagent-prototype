@@ -1,0 +1,48 @@
+C1 · agents 设置块（数据模型、校验与管理 API）· 测试与验证证据
+Ticket: 9326a1747b59254c13ccd91f49aa4028
+Branch: agent/agent-api-9326a1747b59
+Baseline: deployment main @ 934a1f07
+Recorded: 2026-11-13 (Asia/Shanghai)
+Worktree: /data/project/workspace/dsh-worktrees/agent-api-9326a1747b59
+
+1) 指定 6 个测试文件（验收标准 6）
+Command:
+  pnpm vitest run tests/agent-config.spec.ts tests/policy.spec.ts tests/settings.spec.ts tests/http.spec.ts tests/locales.spec.ts tests/docs.spec.ts
+Exit: 0
+Result: Test Files 6 passed (6) / Tests 368 passed (368), duration 1.72s
+Full log: docs/issues/evidence/C1-agents-targeted-tests.log
+
+2) 类型检查
+Command: pnpm typecheck  (tsc --noEmit)
+Exit: 0 (no diagnostics)
+
+3) PR 前全量门禁
+Command (clean host env, see note):
+  env -u GIT_ASKPASS -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_NOSYSTEM -u GIT_PAGER \
+      -u GIT_TERMINAL_PROMPT -u LANGUAGE LANG=C.UTF-8 LC_ALL=C.UTF-8 pnpm check
+Exit: 0  (typecheck + full vitest + tsdown build)
+Build tail: "[CJS] lib/client.js 424.22 kB ... ✔ Build complete", "[ESM] lib/index.js 507.89 kB ... ✔ Build complete"
+Full vitest within the same change set (separate run, durable log):
+  Test Files 65 passed (65) / Tests 1331 passed (1331), duration 22.23s
+Full log: docs/issues/evidence/C1-agents-full-tests.log
+
+Environment note (honest record)
+- The ticket worker shell exports GIT_CONFIG_GLOBAL=/root/.dsh/state/superagent/worker-gitconfig, GIT_CONFIG_NOSYSTEM=1
+  and LANG=zh_CN.UTF-8. With that environment inherited, 3 unrelated, pre-existing tests fail:
+  * tests/environment.spec.ts "reports a failed command's exit status"-area git error text is localized by
+    LANG (expects /bad config/, git prints 致命错误：…)
+  * tests/runtime.spec.ts (2 cases) assert process.env.GIT_CONFIG_GLOBAL is undefined, which the worker shell breaks.
+- Re-running those two files with the host git/locale variables unset passed: Test Files 2 passed (2) /
+  Tests 108 passed (108). The clean-env `pnpm check` above is therefore the faithful full-gate result, and the
+  3 failures are host-environment artifacts, not caused by this slice (they are reproducible on the baseline).
+- No test was skipped, deleted or weakened; the full suite count grew from 1288 (main) to 1331 with this slice's
+  5 new agent-config cases and the added assertions in policy/settings/http/locales/tools.
+
+Acceptance mapping (details in docs/issues/review.md)
+1. SettingsSchema.parse({}) / old settings / migrateSettings  → tests/policy.spec.ts "agent settings" (2 cases)
+2. GET settings blocks.agents + agents.roles catalog          → tests/agent-config.spec.ts (case 2)
+3. PUT settings/agents save, revision, history, 4 refusals    → tests/agent-config.spec.ts (cases 3,4),
+                                                                tests/http.spec.ts, tests/settings.spec.ts, tests/tools.spec.ts
+4. history diff codes per role                                → tests/agent-config.spec.ts (case 3), tests/locales.spec.ts
+5. stored tool name no longer in the catalog still reads      → tests/agent-config.spec.ts (case 5), tests/policy.spec.ts
+6. commands above                                             → this file

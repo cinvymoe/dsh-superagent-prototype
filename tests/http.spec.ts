@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import { z } from 'zod'
 import { registerHttp } from '../src/app/http.ts'
 import { PromptConflict } from '../src/app/prompts.ts'
+import { UserError } from '../src/core/index.ts'
 import { SettingsConflict } from '../src/app/settings.ts'
 import type { HttpHost } from '../src/app/http.ts'
 import { SettingsSchema } from '../src/policy.ts'
@@ -97,4 +98,18 @@ it('answers a prompt save that lost a race with 409, and a settings body over 12
   expect(await call('PUT', 'settings/executor', { value, revision: 0 })).toEqual({ status: 400,
     body: { error: `Request exceeds ${128 * 1024} bytes` } })
   expect(saves).toEqual([])
+})
+
+it('accepts the agents settings block and answers its refusals with their code', async () => {
+  const saves: unknown[] = []
+  const call = serve({ settings: { save: async (...args: unknown[]) => {
+    saves.push(args)
+    if (args[1] === 'refused') throw new UserError('agentsRequiredTool', { role: 'executor', tools: 'bash' })
+    return { saved: true, revision: 1, restarting: false }
+  } } })
+  expect(await call('PUT', 'settings/agents', { value: 'ok', revision: 0 })).toMatchObject({ status: 200 })
+  expect(saves).toEqual([['agents', 'ok', 0, 'panel']])
+  expect(await call('PUT', 'settings/agents', { value: 'refused', revision: 0 })).toEqual({ status: 400,
+    body: { error: 'The executor Agent cannot turn off its required tools: bash', code: 'agentsRequiredTool',
+      values: { role: 'executor', tools: 'bash' } } })
 })

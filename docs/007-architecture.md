@@ -224,6 +224,8 @@ Its `context`, `read` and `decide` methods serve `orchestrator_eval`, `orchestra
 
 Every save declares its origin: `panel`, `tool` or `sync`. Only `panel` can change the execution environment or fields listed in `SETUP_FIELDS` (`src/deployment.ts`).
 
+The `agents` block holds the three configured Agent roles, `main` (the main Session), `aligner` and `executor`, each with an optional `model` override (`null` inherits the role's default model) and the `disabledTools` it turns off. Only `panel` may save it: a model or tool change reaches every Session of the role. A save is checked against the role's catalog (`src/app/agent-tools.ts`), so a required tool cannot be turned off and an unknown name is refused, while reading stays lenient so a stored name the catalog later dropped is ignored at run time rather than failing an upgrade. Saving the block changes no running Session and no `policyVersion`.
+
 A Policy-version change calculates `policyEffects`, records which Tickets were notified, and calls `Engine.policyChanged`. `syncable` and `sync(id)` refresh a Source's Policy part. `refreshLabels(id)` refreshes display names.
 
 ### Prompts
@@ -329,11 +331,12 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/versions.ts` | `Versions`: a record kept as numbered snapshots with a pointer to the current one, for the settings and the prompts |
 | `src/app/cache.ts` | `TextCache`: texts kept in memory within a size, the least recently used dropped first |
 | `src/app/settings.ts` | Settings |
-| `src/app/settings-history.ts` | `policyHistory`: each saved settings revision with what it changed from the one before |
+| `src/app/settings-history.ts` | `policyHistory`: each saved settings revision with what it changed from the one before, including each Agent role's model and turned-off tools |
 | `src/app/prompts.ts` | Prompts, `builtInParts`, the built-in parts a team may override, and `promptParts`, the order of a role's prompt sections |
 | `src/app/context.ts` | The built-in prompt text, read from `prompts/`, and the transcript entries Sessions read |
 | `src/app/skill-files.ts` | Packaged text: `promptFile`, which joins a file's one-sentence lines into paragraphs, and the bundled skills |
 | `src/app/sessions.ts` | Sessions |
+| `src/app/agent-tools.ts` | Every Agent role's tool catalog: the presets its Sessions run under, the tools it cannot turn off, the optional ones a person may, and the check a saved `agents` block runs |
 | `src/app/execution-strategy.ts` | The execution strategies a slice Ticket runs, by the contract version its plan pinned: the execution tools and pre-run guard each mode gives a worker, the feature-exec fallback of a Ticket dispatched before strategies were pinned, the fallback to the current version, and the native degradation of a host that registered no feature-exec service |
 | `src/app/delivery.ts` | `AgentDelivery`: delivers a message to a DeepSeek Harness agent once per request id, also across a restored Session |
 | `src/app/retry-health.ts` | `RetryHealth`: which Sessions wait on a model budget retry, for the `models` health entry |
@@ -357,7 +360,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/views/tickets.ts` | The Ticket lists by stage, a Ticket's page, the Mandate basis facts and the Executor's load |
 | `src/app/views/threads.ts` | The Thread lists, a Thread's timeline, the search and the Decision list |
 | `src/app/views/sources.ts` | The Source status: each Source instance's state, its last day's counts, and what it filtered and dropped in that day |
-| `src/app/views/settings.ts` | The settings page's view: each block with its revision, each Source's settings with its kind's form, and the execution environment |
+| `src/app/views/settings.ts` | The settings page's view: each block with its revision, the three Agent roles' tool catalog, each Source's settings with its kind's form, and the execution environment |
 | `src/app/views/overview.ts` | The overview: Tickets that need a person, problems, the last day's flow and the Executor's load |
 | `src/executor/dsh.ts` | The DshExecutor, its `prepareDirectory` validation of an explicit worktree root and the prepare command's working directory, `WorkerSlots`, `ticketExecution`, `inputMessage` and `mandateInstructions` |
 | `src/executor/background.ts` | A worker's background work in DeepSeek Harness, the shell jobs its Session owns (`ctx.jobs`) and its subagents (`ctx.subagents`): `runningJobs`, `untilQuiet`, `killJobs`, `collectJobs`, `stopSubagents`, `stopBackground`, `until`, and `cancelled`, the workers whose turn a stop of their subagents cancelled |
@@ -444,7 +447,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/tools.spec.ts` | The Sessions' tools: what `orchestrator_read` reads for each role, and the shapes and checks of the other main Session tools |
 | `tests/runtime-concurrency.spec.ts` | Work that overlaps: Triggers during a pass, Tickets that change during deliveries and launches |
 | `tests/http.spec.ts` | The same-origin and loopback checks, the status of each kind of failure, the body limit, path parameters and queries |
-| `tests/settings.spec.ts` | Settings saves that race a model or account check, a Policy sync that a save outran, and the refusals of the pause, a sync and a block |
+| `tests/settings.spec.ts` | Settings saves that race a model or account check, a Policy sync that a save outran, the refusals of the pause, a sync and a block, and an `agents` save outside the panel |
+| `tests/agent-config.spec.ts` | The `agents` settings block: the three roles' tool catalog and presets, `GET settings` with the block and its catalog, a save's revision and history diff, the refusals of a required tool, an unknown tool, an unavailable model and a non-panel origin, and a stored tool name the catalog dropped |
 | `tests/views.spec.ts` | What the management views derive from the Store, such as the Thread a dropped message belongs to |
 | `tests/timeline.spec.ts` | A Thread's pages and a Trigger's neighbours by time and then id, with every received Trigger's time in one form |
 | `tests/migration.spec.ts` | The schema 11 migration: every stored record in its current shape, and the refusal of older schemas |
@@ -520,7 +524,7 @@ The main Session has 14 application tools:
 
 `orchestrator_route` accepts 1–20 decisions in order. Each accept, attach, stop or ignore runs as a separate Engine command. It also permits ignoring an inferred candidate directly from its card. `orchestrator_ticket_note` sends a fact as context, not authority.
 
-Settings saves select `policy`, `eval`, `executor`, `pause`, or `source`; the last also names its Source id. A prompt save with `preview: true` composes text without saving.
+Settings saves select `policy`, `eval`, `executor`, `agents`, `pause`, or `source`; the last also names its Source id. A prompt save with `preview: true` composes text without saving.
 
 The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_image`, `job_output`, `job_list` and `job_kill`. When the host provides billion-context's compression tools (`compress`, `decompress`, `search_context`, `acp_status`, `acp_cache`, `acp_read_original_image`), its restriction also allows them; the allow list is recomputed on `tools/change`, so tools registered after the Session was created are included. A host without the plugin keeps the seven built-ins. Avoiding code reads is a prompt rule, not a tool restriction.
 

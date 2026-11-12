@@ -1,4 +1,5 @@
 /** Computes structured settings diffs across saved revisions for display in the management panel. */
+import { AGENT_ROLES, AgentsConfigSchema, type AgentsConfig, type AgentRole } from '../policy.ts'
 import type { FieldSpec } from '../sources/kind.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import { KV } from '../kv.ts'
@@ -9,13 +10,22 @@ type SourceSettings = SettingsVersion['settings']['sources'][string]
 export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction' | 'ruleEnabled' | 'ruleDisabled' | 'ruleRemoved'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'maxWorkers' | 'paused' | 'resumed' | 'executionDirectory' | 'prepareCommand'
-  | 'blockedCommands'
+  | 'blockedCommands' | 'agentMainModel' | 'agentAlignerModel' | 'agentExecutorModel' | 'agentMainTools' | 'agentAlignerTools'
+  | 'agentExecutorTools'
 /** A single settings diff entry rendered by the panel using `change.<code>` and field labels from the Source listing. */
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
   field?: string; part?: true
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+/** Each Agent role's model and turned-off-tool change codes. */
+const AGENT_CHANGES: Readonly<Record<AgentRole, { model: SettingsChangeCode; tools: SettingsChangeCode }>> = {
+  main: { model: 'agentMainModel', tools: 'agentMainTools' },
+  aligner: { model: 'agentAlignerModel', tools: 'agentAlignerTools' },
+  executor: { model: 'agentExecutorModel', tools: 'agentExecutorTools' },
+}
+/** A snapshot's Agent overrides; revisions saved before the block existed carry none. */
+const agentsOf = (settings: SettingsVersion['settings']) => (settings.agents as AgentsConfig | undefined) ?? AgentsConfigSchema.parse({})
 function fieldChanges(id: string, fields: readonly FieldSpec[], a: Record<string, unknown>, b: Record<string, unknown>, part?: true): SettingsChange[] {
   const changes: SettingsChange[] = []
   const at = { source: id, ...part ? { part } : {} }
@@ -71,6 +81,12 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
   if (before.executor.directory !== after.executor.directory) changes.push({ code: 'executionDirectory', from: before.executor.directory, to: after.executor.directory })
   if (before.executor.prepare !== after.executor.prepare) changes.push({ code: 'prepareCommand' })
   if (!same(before.executor.blockedCommands, after.executor.blockedCommands)) changes.push({ code: 'blockedCommands', from: before.executor.blockedCommands.join(' '), to: after.executor.blockedCommands.join(' ') })
+  const wasAgents = agentsOf(before), isAgents = agentsOf(after)
+  for (const role of AGENT_ROLES) {
+    const was = wasAgents[role], is = isAgents[role], codes = AGENT_CHANGES[role]
+    if (!same(was.model, is.model)) changes.push({ code: codes.model })
+    if (!same(was.disabledTools, is.disabledTools)) changes.push({ code: codes.tools, from: was.disabledTools.join(' '), to: is.disabledTools.join(' ') })
+  }
   for (const id of new Set([...Object.keys(before.sources), ...Object.keys(after.sources)])) changes.push(...sourceChanges(id, before.sources[id], after.sources[id], sources))
   return changes
 }

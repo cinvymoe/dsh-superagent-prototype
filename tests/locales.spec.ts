@@ -44,3 +44,8 @@ it('has words for every reason code the core records', () => {
 it('words the reasons agents read in the glossary\'s words: a sender on the list, a Thread', () => {
   expect(Object.values(REASONS).filter(text => /\b(member|members|topic)\b/i.test(text))).toEqual([])
 })
+
+it('words every change an agents save records, in both languages', () => {
+  const codes = ['agentMainModel', 'agentAlignerModel', 'agentExecutorModel', 'agentMainTools', 'agentAlignerTools', 'agentExecutorTools']
+  expect(codes.filter(code => !zh[`change.${code}` as DshSuperagentKey] || !en[`change.${code}` as DshSuperagentKey])).toEqual([])
+})

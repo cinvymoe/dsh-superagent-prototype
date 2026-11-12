@@ -36,7 +36,7 @@ it('reads the lists, a ticket, a decision, the settings, the prompts and the mod
   expect(settings).toMatchObject({ eval: { value: { mode: 'auto' } }, policy: { revision: expect.any(Number), allowed: { feishu: 1, github: 1 }, read: 'settings/policy' },
     pause: { value: { paused: false } }, sources: expect.arrayContaining([expect.objectContaining({ id: 'github', read: 'settings/source:github' })]) })
   expect(JSON.stringify(settings)).not.toContain('ou_alice')
-  for (const block of ['policy', 'eval', 'executor', 'pause', 'source:github']) {
+  for (const block of ['policy', 'eval', 'executor', 'agents', 'pause', 'source:github']) {
     const page = await read(`settings/${block}`) as { text: string }
     expect(JSON.parse(page.text)).toEqual({ block, revision: h.runtime.store.blockRevision(block as 'policy'), value: h.runtime.settings.block(block).value })
   }
@@ -272,6 +272,11 @@ it('saves a settings block by name, a Source\'s block with the Source\'s id', as
   expect(await save({ block: 'source', source: 'github', value: off, revision: github.revision })).toMatchObject({ saved: true })
   expect(h.runtime.store.settings().sources.github?.enabled).toBe(false)
   expect(await save({ block: 'pause', value: { paused: true }, revision: 0 })).toEqual({ paused: true })
+  // Only the management panel may change the Agent configuration, so the main Session's tool cannot widen one.
+  const agents = h.runtime.store.settings().agents
+  await expect(save({ block: 'agents', value: { ...agents, executor: { model: null, disabledTools: ['web_search'] } },
+    revision: h.runtime.store.blockRevision('agents') })).rejects.toThrow('management panel')
+  expect(h.runtime.store.settings().agents).toEqual(agents)
 })
 
 it('previews a prompt configuration without saving it, and saves one only against the revision it edits', async () => {
