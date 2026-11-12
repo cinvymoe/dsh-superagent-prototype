@@ -47,6 +47,19 @@ let sections: Map<string, Section>
 type Guard = (execution?: { name: string; arguments: unknown }) => string | undefined
 let guards: Map<string, Guard>
 let restricts: Map<string, unknown[]>
+/** Tools the host registers globally only after a Session exists, as billion-context's plugin does. */
+let lateTools: string[]
+/** The restrictions a Session lifted, in the order it released them. */
+let released: { allow: string[] }[]
+/** Every restriction installed and lifted, in order, which proves a rebuild installs before it lifts. */
+let mutations: { kind: 'restrict' | 'release'; allow: string[] }[]
+/** The rules already lifted, so a disposer called twice releases nothing twice. */
+let lifted: WeakSet<object>
+/** Makes the next `restrict` call fail, as a tool unregistering between the lookup and the filter does. */
+let refuseNextRestrict: boolean
+/** What the main Session may call: the DSH built-ins, and billion-context's compression tools when the host provides them. */
+const MAIN_TOOLS = ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill']
+const COMPRESSION_TOOLS = ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image']
 type HttpHandler = (req: unknown, res: unknown) => Promise<void>
 let http: HttpHandler
 async function api(method: string, path: string): Promise<{ status: number; body: unknown }> {
@@ -158,6 +171,11 @@ beforeEach(async () => {
   sections = new Map()
   guards = new Map()
   restricts = new Map()
+  lateTools = []
+  released = []
+  mutations = []
+  lifted = new WeakSet()
+  refuseNextRestrict = false
   deliveries = vi.fn()
   controller = {
     create: vi.fn(async ({ sessionId, agentPreset }) => {
@@ -170,14 +188,26 @@ beforeEach(async () => {
       tools.set(sessionId, sessionTools)
       agentCtx.reflect.provide('tools', { register: (tool: RegisteredTool) => { sessionTools.set(tool.name,
         tool); return () => sessionTools.delete(tool.name) },
-        // Preset tools are inherited; subagent is registered on the agent itself and cannot be named by restrict.
+        // Preset tools are inherited; subagent is registered on the agent itself and cannot be named by restrict. A tool
+        // in `lateTools` was registered after the Session existed, as billion-context's plugin registers its own.
         get: (name: string, scope?: object) => {
-          const own = scope === agents.get(sessionId)
-          return (scope === preset || own) && inherited.includes(name) || own && name === 'subagent' ? { name } : undefined
+          const own = scope === agents.get(sessionId), known = inherited.includes(name) || lateTools.includes(name)
+          return (scope === preset || own) && known || own && name === 'subagent' ? { name } : undefined
         },
         restrict: vi.fn((rule: { allow: string[] }) => {
-          if (rule.allow.some(name => !inherited.includes(name))) throw new Error('Restriction names a non-inherited tool')
-          restricts.set(sessionId, [...restricts.get(sessionId) ?? [], rule]); return () => {}
+          if (refuseNextRestrict) { refuseNextRestrict = false; throw new Error('Restriction raced an unregistering tool') }
+          if (rule.allow.some(name => !inherited.includes(name) && !lateTools.includes(name))) throw new Error('Restriction names a non-inherited tool')
+          restricts.set(sessionId, [...restricts.get(sessionId) ?? [], rule])
+          mutations.push({ kind: 'restrict', allow: rule.allow })
+          // As DSH does, a registry mutation notifies listeners before the registration returns.
+          ctx.emit('tools/change')
+          return () => {
+            if (lifted.has(rule)) return
+            lifted.add(rule)
+            released.push(rule)
+            mutations.push({ kind: 'release', allow: rule.allow })
+            ctx.emit('tools/change')
+          }
         }),
         guard: vi.fn((check: Guard) => { guards.set(sessionId, check); return () => {} }) })
       agentCtx.reflect.provide('skills', { register: () => () => {} })
@@ -1588,6 +1618,55 @@ it('refuses an ended ticket\'s worker its tools, and restricts the main Session 
   // A worker keeps only the profile's work tools: none that ask a person, change the profile, schedule or start work outside
   // the worker slots, reach other Sessions or edit documents, whenever they were registered.
   expect(restricts.get(sessionId)).toEqual([{ allow: ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill'] }])
+})
+
+it('keeps the main Session on its built-ins, without an unknown-tool error, when the host has no compression tools', async () => {
+  // The Session was created before any compression tool existed (the default in `beforeEach`): the names the host does
+  // not know are filtered out instead of being passed to `restrict`, which refuses a name it cannot resolve.
+  expect(restricts.get(runtime.masterId)).toEqual([{ allow: MAIN_TOOLS }])
+  // A change that adds no tool recomputes the same list, so the restriction stays in place rather than being rebuilt.
+  ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
+  expect(restricts.get(runtime.masterId)).toEqual([{ allow: MAIN_TOOLS }])
+  expect(mutations).toEqual([{ kind: 'restrict', allow: MAIN_TOOLS }])
+})
+
+it('gives the main Session the compression tools billion-context registers after it, replacing its restriction', async () => {
+  // It exists before the plugin's tools appear (the default in `beforeEach`), so it starts with the built-ins only.
+  expect(restricts.get(runtime.masterId)).toEqual([{ allow: MAIN_TOOLS }])
+  // billion-context registers its ACP tools asynchronously: DSH's registry notification recomputes the allow list, and
+  // the new filter is installed before the old one is lifted, since filters intersect and the old one would mask them.
+  lateTools.push(...COMPRESSION_TOOLS)
+  ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
+  const rules = restricts.get(runtime.masterId) as { allow: string[] }[]
+  expect(rules).toHaveLength(2)
+  expect(rules[1]).toEqual({ allow: [...MAIN_TOOLS, ...COMPRESSION_TOOLS] })
+  expect(mutations).toEqual([
+    { kind: 'restrict', allow: MAIN_TOOLS },
+    { kind: 'restrict', allow: [...MAIN_TOOLS, ...COMPRESSION_TOOLS] },
+    { kind: 'release', allow: MAIN_TOOLS },
+  ])
+  // The recomputation settles on the new list: a further change rebuilds nothing.
+  ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
+  expect(restricts.get(runtime.masterId)).toHaveLength(2)
+})
+
+it('keeps the main Session\'s restriction in force when a rebuild fails, and retries on the next change', async () => {
+  const ctx = (runtime as unknown as { ctx: Context }).ctx
+  const rules = () => restricts.get(runtime.masterId) as { allow: string[] }[]
+  // The plugin's tools appear, but the rebuild races an unregistering tool and its filter throws: the 7-name restriction
+  // stays in force as the only one recorded, and the registry notification does not fail.
+  refuseNextRestrict = true
+  lateTools.push(...COMPRESSION_TOOLS)
+  expect(() => ctx.emit('tools/change')).not.toThrow()
+  expect(rules()).toEqual([{ allow: MAIN_TOOLS }])
+  expect(mutations).toEqual([{ kind: 'restrict', allow: MAIN_TOOLS }])
+  expect(released).toEqual([])
+  // The failed attempt is not remembered as done: the next change retries it, then lifts the old restriction.
+  ctx.emit('tools/change')
+  expect(rules()).toHaveLength(2)
+  expect(rules()[1]).toEqual({ allow: [...MAIN_TOOLS, ...COMPRESSION_TOOLS] })
+  expect(released).toEqual(rules().slice(0, 1))
+  expect(mutations.at(-1)).toEqual({ kind: 'release', allow: MAIN_TOOLS })
 })
 
 it('gives an explicit ticket\'s worker a prompt without the limits of an inferred Mandate', async () => {

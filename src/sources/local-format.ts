@@ -1,5 +1,7 @@
 /** Local web source records shared by the source plugin, the panel routes, and the client view types. */
 
+import type { ExecutionMode } from '../core/model.ts'
+
 /** Stable sender identity of the built-in local panel, which is a same-origin, owner-operated surface. */
 export const LOCAL_SOURCE = 'local'
 export const LOCAL_ACTOR = 'local'
@@ -81,8 +83,18 @@ export interface LocalIssue {
   project?: string
   /** Images attached when the requirement was submitted; absent when there are none. */
   images?: LocalImage[]
+  /**
+   * The execution mode the person chose for the requirement's slice tickets: absent means native, which is also how
+   * requirements created before the field existed dispatch.
+   */
+  execution?: ExecutionMode
   createdAt: string
   updatedAt: string
   state: 'open' | 'closed'
   alignment?: LocalAlignment
+}
+
+/** The execution mode a requirement runs under: the person's choice, or native when they made none. */
+export function requirementExecutionMode(issue: Pick<LocalIssue, 'execution'>): ExecutionMode {
+  return issue.execution ?? 'native'
 }
