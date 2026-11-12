@@ -1,0 +1,9 @@
+# C5 · typecheck (after main merge)
+# date: 2026-11-13T02:51:55+08:00
+# tree: agent/slice-96d585fa7995 @ 869ec781 (deployment main 72b4c4a8 merged)
+# command: env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm typecheck
+
+(node:1696610) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ tsc --noEmit
+EXIT=0
