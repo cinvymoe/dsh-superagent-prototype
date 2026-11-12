@@ -97,6 +97,8 @@ async function start() {
   } }
   const agents = new Map<string, { status: string }>()
   const tools = new Map<string, Map<string, Tool>>()
+  // The host's built-ins the main Session is restricted to; a real host always provides these, and none other.
+  const builtins = ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill']
   const sections = new Map<string, Section>()
   const skills = new Map<string, Skill[]>()
   const inputs: { sessionId: string; text: string }[] = []
@@ -106,7 +108,7 @@ async function start() {
     const own = new Map<string, Tool>(), registered: Skill[] = []
     tools.set(sessionId, own); skills.set(sessionId, registered)
     const register = (tool: Tool) => { own.set(tool.name, tool); return () => own.delete(tool.name) }
-    agentCtx.reflect.provide('tools', { register, get: () => undefined, restrict: () => () => {}, guard: () => () => {} })
+    agentCtx.reflect.provide('tools', { register, get: (name: string) => builtins.includes(name) ? { name } : undefined, restrict: () => () => {}, guard: () => () => {} })
     agentCtx.reflect.provide('skills', { register: (skill: Skill) => { registered.push(skill); return () => {} } })
     const section = (spec: { text: Section }) => { sections.set(sessionId, spec.text); return () => {} }
     agentCtx.reflect.provide('systemPrompt', { section })

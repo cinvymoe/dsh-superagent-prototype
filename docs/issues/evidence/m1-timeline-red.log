@@ -1,0 +1,91 @@
+(node:1417518) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1417543) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-b92376fc8704
+
+(node:1417596) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ tests/panel-discuss.spec.tsx (23 tests | 3 failed) 1012ms
+   ✓ creates a project on its own page with an optional absolute worktree root and makes it current 225ms
+   ✓ omits the worktree root from the payload when the field is left empty 61ms
+   ✓ shows only the current project and one description field on New requirement 31ms
+   ✓ keeps submission disabled while the description is blank and submits the description alone 67ms
+   ✓ lists the current project requirements newest first with their tags, time and slice count 45ms
+   ✓ returns from a requirement detail to the requirement list rather than the overview 34ms
+   ✓ shows a requirement text once and leaves its original message out of the timeline 27ms
+   × lists the message timeline newest first and keeps the follow-up box above the list 38ms
+   × posts a follow-up from the box above the list and shows it first with the count grown and the box cleared 24ms
+   × renders the newest-first message timeline and its top follow-up box in English 49ms
+   ✓ opens a saved Discuss route on its matching requirement page after reload 18ms
+   ✓ opens a saved Discuss list route on the requirement list after reload 18ms
+   ✓ names the project worktree root field and hint in English as well 38ms
+   ✓ omits a whitespace-only worktree root from the payload 55ms
+   ✓ shows the project worktree root on a requirement detail 18ms
+   ✓ renders a legacy requirement whose project has no worktree root 18ms
+   ✓ shows the localized refusal when the worktree root is relative and stays on the creation page 43ms
+   ✓ selects several images with thumbnails and names, submits description and images together, and shows them in order 53ms
+   ✓ removes a chosen image before submitting, posting and rendering only the remaining one 44ms
+   ✓ refuses an unsupported type and an oversized file locally without submitting or showing a thumbnail 31ms
+   ✓ keeps the description and chosen images and shows the localized error when the host refuses the create 38ms
+   ✓ shows the image count on a requirement list row only when the issue has images 15ms
+   ✓ reads each requirement image through the management API with the same-origin header and renders a blob URL 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/panel-discuss.spec.tsx > lists the message timeline newest first and keeps the follow-up box above the list
+AssertionError: expected [ 'First follow-up', …(2) ] to deeply equal [ 'Second follow-up', …(2) ]
+
+- Expected
++ Received
+
+  [
+-   "Second follow-up",
+-   "The agent answered",
+    "First follow-up",
++   "The agent answered",
++   "Second follow-up",
+  ]
+
+ ❯ tests/panel-discuss.spec.tsx:206:22
+    204|   await mount()
+    205|   // Newest first, whichever side sent the message: the earliest one f…
+    206|   expect(messages()).toEqual(['Second follow-up', 'The agent answered'…
+       |                      ^
+    207|   expect(all('.dt-timeline .dt-event')).toHaveLength(3)
+    208|   expect(timelineSection().querySelector('.dt-count')?.textContent).to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/panel-discuss.spec.tsx > posts a follow-up from the box above the list and shows it first with the count grown and the box cleared
+Error: No comment button
+ ❯ commentButton tests/panel-discuss.spec.tsx:55:21
+     53| const commentButton = (): HTMLButtonElement => {
+     54|   const match = all('.dt-timeline-form button').find(button => button.…
+     55|   if (!match) throw new Error('No comment button')
+       |                     ^
+     56|   return match as HTMLButtonElement
+     57| }
+ ❯ tests/panel-discuss.spec.tsx:227:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/panel-discuss.spec.tsx > renders the newest-first message timeline and its top follow-up box in English
+AssertionError: expected [] to include 'Comment'
+ ❯ tests/panel-discuss.spec.tsx:253:85
+    251|   expect(text()).toContain(en['discuss.timeline'])
+    252|   expect(area(en['discuss.commentPlaceholder']).getAttribute('aria-lab…
+    253|   expect(all('.dt-timeline-form button').map(button => button.textCont…
+       |                                                                                     ^
+    254|   expect(messages()).toEqual(['The English answer', 'English follow-up…
+    255|   expect(all('.dt-timeline .dt-event')[0]!.textContent).toContain(en['…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 20 passed (23)
+   Start at  23:54:22
+   Duration  3.98s (transform 1.49s, setup 0ms, import 1.98s, tests 1.01s, environment 787ms)
+

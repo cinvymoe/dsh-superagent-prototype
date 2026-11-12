@@ -237,6 +237,7 @@ export class Runtime extends Service implements SourceHost {
     const issue = this.local.get(issueId)
     if (!input || !issue?.alignment) throw new Error('No confirmed alignment to dispatch')
     return this.engine.acceptPlan({ source: 'local', id: issueId }, { issueId, triggerIds: input.triggerIds, actor: input.actor,
+      execution: input.execution,
       slices: issue.alignment.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome,
         acceptance: slice.acceptance, dependsOn: slice.dependsOn, lane: slice.lane })) })
   }

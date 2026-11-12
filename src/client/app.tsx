@@ -150,9 +150,10 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
     switch (route.page) {
       case 'overview': return <OverviewPage />
       case 'newRequirement': return <NewRequirementPage />
-      case 'requirements': return route.id !== undefined ? <RequirementDetail key={route.id} id={route.id} />
+      case 'requirements': return route.id !== undefined
+        ? <RequirementDetail key={route.id} id={route.id} filter={route.query?.filter ?? 'pending'} />
         : route.edit ? <ProjectFormPage key={route.edit} edit={route.edit} />
-        : route.create ? <ProjectFormPage /> : <RequirementList />
+        : route.create ? <ProjectFormPage /> : <RequirementList filter={route.query?.filter ?? 'pending'} />
       case 'source': return <SourceStatus />
       case 'trigger': return route.id !== undefined ? <ThreadPage key={route.id} id={route.id} target={route.query?.trigger} />
         : <TriggerStatus filter={route.query?.filter ?? 'subscribed'} />

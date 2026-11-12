@@ -5,7 +5,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { feishu, startRuntime, type Host } from './fixtures/host.ts'
 import { KV } from '../src/kv.ts'
-import type { Ticket } from '../src/core/index.ts'
+import { EXECUTION_STRATEGY_REVISION, type ExecutionMode, type Ticket } from '../src/core/index.ts'
+import { requirementExecutionMode } from '../src/sources/local-format.ts'
 import { REQUIREMENT_BODY_BYTES } from '../src/limits.ts'
 
 /** The id of the first human message on a local issue's thread. */
@@ -82,6 +83,53 @@ it('dispatches the confirmed slices as tickets, one per slice, and only after th
   const again = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
   expect(again.status).toBe(200)
   expect(h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)).toHaveLength(2)
+})
+
+it('records a requirement\'s execution mode, defaults to native and refuses changes after dispatch', async () => {
+  const created = await h.api('POST', 'local/issues', { title: 'Choose the execution mode', project: project.id })
+  expect(created.status).toBe(200)
+  const issue = created.body.issue as { id: string; execution?: ExecutionMode }
+  // A requirement that names no mode is native and keeps no field, so records written before the field stay valid.
+  expect(issue.execution).toBeUndefined()
+  expect(requirementExecutionMode(issue)).toBe('native')
+  const chosen = await h.api('POST', `local/issues/${issue.id}/execution`, { mode: 'feature-exec' })
+  expect(chosen.status).toBe(200)
+  expect((chosen.body.issue as { execution?: ExecutionMode }).execution).toBe('feature-exec')
+  // Reading the requirement back returns the stored mode.
+  expect((((await h.api('GET', `local/issues/${issue.id}`)).body.issue) as { execution?: ExecutionMode }).execution).toBe('feature-exec')
+  // An unknown mode is a structured refusal that explains the rule, and the stored mode does not change.
+  const invalid = await h.api('POST', `local/issues/${issue.id}/execution`, { mode: 'sometimes' })
+  expect(invalid.status).toBe(400)
+  expect(invalid.body).toMatchObject({ code: 'executionMode' })
+  expect((((await h.api('GET', `local/issues/${issue.id}`)).body.issue) as { execution?: ExecutionMode }).execution).toBe('feature-exec')
+  expect((await h.api('POST', 'local/issues/q-unknown/execution', { mode: 'native' })).status).toBe(404)
+  // Confirming the alignment pins the chosen mode on every dispatched ticket; from then on the requirement is read-only.
+  const oneSlice = [{ id: 'C1', title: 'Only slice', outcome: 'The mode is pinned', acceptance: ['typecheck'], dependsOn: [], lane: 'light' }]
+  expect((await h.api('POST', `local/issues/${issue.id}/alignment`, { summary: 'One slice', slices: oneSlice })).status).toBe(200)
+  const confirmed = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
+  expect(confirmed.status).toBe(200)
+  const tickets = h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)
+  expect(tickets).toHaveLength(1)
+  expect(tickets[0]!.plan!.execution).toEqual({ mode: 'feature-exec', version: EXECUTION_STRATEGY_REVISION })
+  const locked = await h.api('POST', `local/issues/${issue.id}/execution`, { mode: 'native' })
+  expect(locked.status).toBe(400)
+  expect(locked.body).toMatchObject({ code: 'executionLocked' })
+  expect((((await h.api('GET', `local/issues/${issue.id}`)).body.issue) as { execution?: ExecutionMode }).execution).toBe('feature-exec')
+  await h.runtime.idle()
+})
+
+it('dispatches a requirement without an execution field as native', async () => {
+  const created = await h.api('POST', 'local/issues', { title: 'Legacy native', project: project.id })
+  expect(created.status).toBe(200)
+  const id = (created.body.issue as { id: string }).id
+  const oneSlice = [{ id: 'C1', title: 'Only slice', outcome: 'Native dispatch', acceptance: [], dependsOn: [], lane: 'light' }]
+  expect((await h.api('POST', `local/issues/${id}/alignment`, { summary: 'One slice', slices: oneSlice })).status).toBe(200)
+  const confirmed = await h.api('POST', `local/issues/${id}/alignment/decision`, { decision: 'confirm' })
+  expect(confirmed.status).toBe(200)
+  const tickets = h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === id)
+  expect(tickets).toHaveLength(1)
+  expect(tickets[0]!.plan!.execution).toEqual({ mode: 'native', version: EXECUTION_STRATEGY_REVISION })
+  await h.runtime.idle()
 })
 
 it('creates projects over HTTP and keeps requirements scoped to them', async () => {
