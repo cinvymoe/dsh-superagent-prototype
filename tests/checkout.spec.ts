@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CHECKOUT_GIT, CHECKOUT_REASONS, Checkout, checkoutReasons, readCheckout, repositoryOf, restartRequired, type Git }
-  from '../src/app/checkout.ts'
+import { CHECKOUT_GIT, CHECKOUT_REASONS, Checkout, checkoutReasons, readCheckout, repositoryOf, restartRequired,
+  type CheckoutReading, type Git } from '../src/app/checkout.ts'
 import { registerHttp, type HttpHost } from '../src/app/http.ts'
 import { gitEnv } from './fixtures/git.ts'
 
@@ -94,33 +94,49 @@ describe('repositoryOf', () => {
 })
 
 describe('readCheckout and the reason codes', () => {
+  // A reading whose commit time and remotes do not matter to the codes it is judged by.
+  const reading = (fields: { root: string | null; repository: string | null; branch: string | null; head: string | null; dirty: boolean }): CheckoutReading =>
+    ({ committedAt: null, remotes: [], ...fields })
   it('names the codes in the order a status reports them, and refuses a checkout that is no repository alone', () => {
     expect(CHECKOUT_REASONS).toEqual(['notGit', 'noRepository', 'detached', 'notMain', 'dirty'])
-    expect(checkoutReasons({ root: null, repository: 'acme/widgets', branch: null, head: 'abc123', dirty: true })).toEqual(['notGit'])
-    expect(checkoutReasons({ root: '/srv/widgets', repository: null, branch: 'main', head: 'abc123', dirty: false })).toEqual(['noRepository'])
-    expect(checkoutReasons({ root: '/srv/widgets', repository: 'acme/widgets', branch: null, head: 'abc123', dirty: true }))
+    expect(checkoutReasons(reading({ root: null, repository: 'acme/widgets', branch: null, head: 'abc123', dirty: true }))).toEqual(['notGit'])
+    expect(checkoutReasons(reading({ root: '/srv/widgets', repository: null, branch: 'main', head: 'abc123', dirty: false }))).toEqual(['noRepository'])
+    expect(checkoutReasons(reading({ root: '/srv/widgets', repository: 'acme/widgets', branch: null, head: 'abc123', dirty: true })))
       .toEqual(['detached', 'dirty'])
-    expect(checkoutReasons({ root: '/srv/widgets', repository: 'acme/widgets', branch: 'feature', head: 'abc123', dirty: false }))
+    expect(checkoutReasons(reading({ root: '/srv/widgets', repository: 'acme/widgets', branch: 'feature', head: 'abc123', dirty: false })))
       .toEqual(['notMain'])
-    expect(checkoutReasons({ root: '/srv/widgets', repository: 'acme/widgets', branch: 'main', head: 'abc123', dirty: true })).toEqual(['dirty'])
+    expect(checkoutReasons(reading({ root: '/srv/widgets', repository: 'acme/widgets', branch: 'main', head: 'abc123', dirty: true }))).toEqual(['dirty'])
   })
   it('reads a checkout it cannot inspect as notGit, and a tree it cannot inspect as dirty, never throwing', async () => {
     const missing: Git = async () => { throw new Error('git is unavailable') }
-    expect(await readCheckout(missing, join(dir, 'gone'))).toEqual({ root: null, repository: null, branch: null, head: null, dirty: false })
+    expect(await readCheckout(missing, join(dir, 'gone'))).toEqual({ root: null, repository: null, branch: null, head: null,
+      committedAt: null, dirty: false, remotes: [] })
     const unreadable: Git = async args => {
       if (args[0] === 'status') throw new Error('the index is locked')
       if (args[0] === 'symbolic-ref') return 'main\n'
+      if (args[0] === 'log') return '2026-11-12T00:00:00+08:00\n'
       if (args[0] === 'config') return 'https://github.com/Acme/Widgets.git\n'
       if (args[1] === '--show-toplevel') return `${join(dir, 'repository')}\n`
       return 'abc123\n'
     }
     expect(await readCheckout(unreadable, dir)).toEqual({ root: join(dir, 'repository'), repository: 'acme/widgets', branch: 'main',
-      head: 'abc123', dirty: true })
+      head: 'abc123', committedAt: '2026-11-12T00:00:00+08:00', dirty: true, remotes: [] })
   })
   it('reports a clean main checkout on an https remote as available', async () => {
     const root = await repository('widgets', 'https://github.com/acme/widgets.git')
     expect(await new Checkout(root).status()).toEqual({ path: await toplevel(root), repository: 'acme/widgets', branch: 'main',
-      head: await git(root, 'rev-parse', 'HEAD'), dirty: false, available: true, reasons: [], restartRequired: false })
+      head: await git(root, 'rev-parse', 'HEAD'), committedAt: await git(root, 'log', '-1', '--format=%cI'), dirty: false,
+      remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true, reasons: [], restartRequired: false })
+  })
+  it('names every remote with the repository it names, sorted, and reads the commit time of HEAD', async () => {
+    const root = await repository('remotes', 'https://github.com/upstream/prototype.git')
+    await git(root, 'remote', 'add', 'deployment', 'git@github.com:acme/widgets.git')
+    await git(root, 'remote', 'add', 'vendor', 'https://gitlab.com/vendor/tools.git')
+    const view = await new Checkout(root).status()
+    expect(view.remotes).toEqual([{ name: 'deployment', repository: 'acme/widgets' },
+      { name: 'origin', repository: 'upstream/prototype' }, { name: 'vendor', repository: null }])
+    expect(view.committedAt).toBe(await git(root, 'log', '-1', '--format=%cI'))
+    expect(view.repository).toBe('upstream/prototype')
   })
   it('reads an ssh scp remote whatever its case and `.git` suffix', async () => {
     const root = await repository('scp', 'git@github.com:Acme/Widgets.git')
@@ -140,8 +156,8 @@ describe('readCheckout and the reason codes', () => {
     const plain = join(dir, 'plain')
     mkdirSync(plain)
     writeFileSync(join(plain, 'note.txt'), 'not a repository\n')
-    expect(await new Checkout(plain).status()).toEqual({ path: plain, repository: null, branch: null, head: null, dirty: false,
-      available: false, reasons: ['notGit'], restartRequired: false })
+    expect(await new Checkout(plain).status()).toEqual({ path: plain, repository: null, branch: null, head: null, committedAt: null,
+      dirty: false, remotes: [], available: false, reasons: ['notGit'], restartRequired: false })
   })
   it('reports a detached HEAD as detached, with the commit it points at', async () => {
     const root = await repository('detached', 'https://github.com/acme/widgets.git')
@@ -231,7 +247,7 @@ describe('GET deployment/checkout', () => {
     const plain = join(dir, 'plain-route')
     mkdirSync(plain)
     const refused = await serve(new Checkout(plain))('deployment/checkout')
-    expect(refused).toEqual({ status: 200, body: { path: plain, repository: null, branch: null, head: null, dirty: false, available: false,
-      reasons: ['notGit'], restartRequired: false } })
+    expect(refused).toEqual({ status: 200, body: { path: plain, repository: null, branch: null, head: null, committedAt: null, dirty: false,
+      remotes: [], available: false, reasons: ['notGit'], restartRequired: false } })
   })
 })

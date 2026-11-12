@@ -17,7 +17,7 @@ import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, ty
 import { allowedSender, settingsPolicy } from '../policy.ts'
 import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
-import { packageRoot } from '../infra/paths.ts'
+import { packagePath, packageRoot } from '../infra/paths.ts'
 import { GithubConfigSchema, githubChains, normalizeGithubConfig, type Deployment, type Machine } from '../deployment.ts'
 import { environmentOf, ticketEnvironment, type Variable } from './execution-environment.ts'
 import type { SetupProblem } from '../setup.ts'
@@ -32,6 +32,7 @@ import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
 import { Checkout } from './checkout.ts'
+import { Prepare } from './prepare.ts'
 import { LocalIssues } from './local.ts'
 import { Projects } from './projects.ts'
 import type { LocalProject } from '../sources/local-format.ts'
@@ -78,6 +79,7 @@ export class Runtime extends Service implements SourceHost {
   readonly local: LocalIssues
   readonly projects: Projects
   readonly checkout: Checkout
+  readonly prepare: Prepare
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
@@ -107,6 +109,11 @@ export class Runtime extends Service implements SourceHost {
       const report = (error: unknown) => { ctx.logger.warn('dsh-superagent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
       const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart })
+      // The panel's pull and build runs the service script in this checkout, against the chain whose code repository a remote names.
+      this.prepare = new Prepare({ checkout: this.checkout, directory: packageRoot(), script: packagePath('scripts', 'dsh-superagent'),
+        logDir: join(machine.stateDir, 'prepare'),
+        chains: () => setup.configured()
+          ? Object.entries(setup.deployment.chains ?? {}).map(([id, target]) => ({ id, repository: target.repository })) : [] })
       const deployed = () => setup.configured()
         ? environmentOf({ deployment: setup.deployment, sources: this.sources, settings: store.settings() }) : undefined
       const feishu = () => setup.configured() && !!setup.deployment.feishu
@@ -278,6 +285,7 @@ export class Runtime extends Service implements SourceHost {
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
       projects: this.projects,
       checkout: this.checkout,
+      prepare: this.prepare,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },

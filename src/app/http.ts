@@ -30,6 +30,7 @@ import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import type { LocalIssues } from './local.ts'
 import type { Projects } from './projects.ts'
 import type { Checkout } from './checkout.ts'
+import type { Prepare } from './prepare.ts'
 import { REQUIREMENT_BODY_BYTES } from '../limits.ts'
 
 export interface HttpHost {
@@ -49,6 +50,8 @@ export interface HttpHost {
   readonly projects: Projects
   /** The checkout dsh-superagent runs from, read only. */
   readonly checkout: Pick<Checkout, 'status'>
+  /** Whether that checkout can take a local merge, and the one merge at a time it runs through the service script. */
+  readonly prepare: Pick<Prepare, 'status' | 'merge'>
   dispatchPlan(issueId: string): Ticket[]
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
@@ -171,6 +174,8 @@ function routes(runtime: HttpHost): Routes {
   return {
     'GET state': () => stateView(runtime),
     'GET deployment/checkout': () => runtime.checkout.status(),
+    'GET deployment/prepare': () => runtime.prepare.status(),
+    'POST deployment/prepare': () => runtime.prepare.merge(),
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),

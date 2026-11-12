@@ -145,6 +145,10 @@ export interface PanelServer {
   queued: Set<string>
   searching?: (query: string) => Promise<void>
   setup: SetupView
+  /** The running checkout the Deployment page shows, and what a pull and build does to it. */
+  prepare: ApiResponse<'GET deployment/prepare'>
+  /** When set, a pull and build refuses with `prepareFailed` carrying this script message and log path. */
+  prepareFailure?: { message: string; log: string }
   health: Record<string, Health>
   /** When true, all API requests return an empty 404 to simulate the host plugin being stopped. */
   down: boolean
@@ -299,6 +303,10 @@ function initial(): PanelServer {
     setup: { machine: MACHINE, problem: null, feishuProblem: null,
       accounts: { repository: 'acme/widgets', intakeRepository: 'acme/widgets', agent: 'agent-bot', feishu: { appId: 'cli_bot', brand: 'feishu', botId: 'ou_bot',
         name: 'Widgets Bot' } } },
+    prepare: { checkout: { path: MACHINE.stateDir, repository: 'acme/widgets', branch: 'main',
+      head: '0123456789abcdef0123456789abcdef01234567', committedAt: '2026-09-23T00:00:00Z', dirty: false,
+      remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true, reasons: [], restartRequired: false },
+      chain: 'default', repository: 'acme/widgets', available: true, reasons: [], running: false },
     settings, revisions: { policy: 3, eval: 1, executor: 0 },
     prompts: { masterId: 'master', sections: TEAM_SECTIONS, skillName: SKILL_NAME.source, builtin: ['feishu', 'github'],
       skillPrefix: SKILL_PREFIX, revision: 0, current: { ...defaults, config: defaultPrompts() },
@@ -342,9 +350,27 @@ const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET state': { answer: stateView },
-  // The running checkout is read-only and no panel page polls it yet; the fake answers an available checkout.
+  // The running checkout is read only; the fake answers an available checkout and its pull-and-build action.
   'GET deployment/checkout': { answer: () => ({ path: '/srv/dsh-superagent', repository: 'acme/widgets', branch: 'main',
-    head: '0123456789abcdef0123456789abcdef01234567', dirty: false, available: true, reasons: [], restartRequired: false }) },
+    head: '0123456789abcdef0123456789abcdef01234567', committedAt: '2026-09-23T00:00:00Z', dirty: false,
+    remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true, reasons: [], restartRequired: false }) },
+  'GET deployment/prepare': { answer: () => server.prepare },
+  'POST deployment/prepare': { answer: () => {
+    if (server.prepareFailure) {
+      return refuse(400, `The pull and build failed: ${server.prepareFailure.message}`, { code: 'prepareFailed',
+        values: server.prepareFailure })
+    }
+    if (server.prepare.running) return refuse(400, 'A pull and build is already running', { code: 'prepareBusy', values: {} })
+    if (!server.prepare.available) {
+      return refuse(400, `The checkout cannot take a local merge: ${server.prepare.reasons.join(',')}`,
+        { code: 'prepareUnavailable', values: { reasons: server.prepare.reasons.join(',') } })
+    }
+    // As the host does: the merge moves HEAD and the new build takes effect after a restart.
+    const head = 'fedcba9876543210fedcba9876543210fedcba98'
+    server.prepare = { ...server.prepare, checkout: { ...server.prepare.checkout, head, committedAt: '2026-09-24T00:00:00Z',
+      restartRequired: true } }
+    return { merged: true, head, log: `${MACHINE.stateDir}/prepare/prepare-20260924-000000-1.log` }
+  } },
   'GET overview': { answer: overviewView },
   'GET search': { query: ['q'], answer: async ({ query }) => {
     const q = query.q ?? ''
