@@ -132,6 +132,15 @@ export interface Mandate {
   scope: string
 }
 
+/** How a confirmed slice ticket runs its plan: the native worker loop, or the feature-exec execution flow. */
+export type ExecutionMode = 'native' | 'feature-exec'
+/** Version of the execution-strategy contract, which a dispatched slice ticket pins with its mode. */
+export const EXECUTION_STRATEGY_REVISION = 'execution-v1'
+/** The execution strategy a slice ticket is dispatched under: its mode and the contract version that gives it meaning. */
+export interface ExecutionStrategy { mode: ExecutionMode; version: string }
+/** What a newly dispatched slice ticket pins when its plan names no execution strategy: the native worker loop. */
+export const DEFAULT_EXECUTION_STRATEGY: ExecutionStrategy = { mode: 'native', version: EXECUTION_STRATEGY_REVISION }
+
 /** One slice of a confirmed requirement plan, which becomes an execution ticket. */
 export interface PlanSlice {
   id: string
@@ -319,8 +328,11 @@ export interface Ticket {
   mode?: 'work' | 'align'
   /** Tickets that must have ended before this one launches, by ticket id. */
   dependsOn?: string[]
-  /** The confirmed plan slice this ticket executes. */
-  plan?: { issueId: string; sliceId: string; acceptance?: string[] }
+  /**
+   * The confirmed plan slice this ticket executes. Its `execution` strategy is fixed when the ticket is dispatched: a
+   * repeated confirmation reuses the ticket and keeps the strategy it pinned, and a later default change never rewrites it.
+   */
+  plan?: { issueId: string; sliceId: string; acceptance?: string[]; execution?: ExecutionStrategy }
 }
 /**
  * A Thread a ticket follows, by its key: `own` when the ticket opened it, such as its own pull request, and when and how it

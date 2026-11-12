@@ -1,0 +1,185 @@
+(node:1284074) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1284102) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /tmp/c1-base
+
+(node:1284155) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1284156) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1284155) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ❯ tests/environment.spec.ts (13 tests | 1 failed) 175ms
+     ✓ run a wrapper that calls `gh` by name without reaching the shim again, and keep the caller's other PATH entries 16ms
+     ✓ make `lark-cli` fail without a Feishu bot and each blocked command fail with the agent's login 12ms
+     ✓ keep `gh` and `lark-cli` working, and shim no `git`, when the blocked commands name the commands workers need 10ms
+     ✓ replace only what dsh-superagent wrote and refuse anything else in its places 10ms
+     ✓ replaces the files it wrote under the project's earlier names 5ms
+     ✓ ignores the operator's global and system git configuration, also after DSH drops credential-shaped variables 38ms
+   ✓ fails instead of asking the operator's askpass helpers when the agent's credential helper has no answer 15ms
+   ✓ removes every spelling of a directory from PATH and keeps the other entries 1ms
+     ✓ passes a directory whose repository adds no credentials, and one outside any repository 13ms
+     ✓ names the credential settings of the repository's own configuration 13ms
+     × fails when git cannot read the repository's configuration, instead of passing it 19ms
+     ✓ reports a failed command's exit status 4ms
+     ✓ is left alone by the tests' git and named in no worker's environment, as when they run inside `git rebase --exec` 16ms
+ ❯ tests/runtime.spec.ts (92 tests | 2 failed) 12612ms
+   ✓ relays an explicit member mention as a candidate and creates the ticket, acknowledgement, subscription and worker on accept 213ms
+   ✓ fans a person's later thread message out to the live worker as context and tells the orchestrator, without an Eval 137ms
+   ✓ assesses a proactive observation in the orchestrator Session and creates the ticket only on a positive auto-mode decision 185ms
+   ✓ accepts silently under a rule that says so, gives the worker the rule procedure, and closes it as dropped when nothing is left for a human 168ms
+   ✓ records worker reports, binds the task PR, ends the ticket on ready without a PR, and relays attention 182ms
+   ✓ lists each ticket with the Threads it subscribes to, as their Sources describe them 126ms
+   ✓ shows a message that carries JSON, with or without a label, as its label and values on lines 59ms
+   ✓ ends a ticket on ready when no PR is bound 139ms
+   ✓ stops a ticket on a person's instruction for good, and resumes an ended one on any person's message on its thread 278ms
+   ✓ tells live workers about policy changes instead of revoking them and restarts in-flight assessments 181ms
+   ✓ attaches an event to an existing open task through orchestrator_route 147ms
+   ✓ acknowledges a follow-up from the worker once and rejects events outside the task 154ms
+   ✓ treats GitHub comments through the same gate: mentions by members are explicit, others need an existing task 131ms
+   ✓ binds a PR a report names in its summary and copies the result reply to the intake Issue and the PR 142ms
+   ✓ relays an allowed sender's mention in a new Issue as an explicit candidate from the poll that reads its notification 110ms
+   ✓ ignores an allowed sender's new Issue that does not mention the agent, and an unlisted sender's mention, from the poll that reads them 103ms
+   ✓ keeps Issue Triggers stored before Issues arrived through notifications readable on their Thread 74ms
+   ✓ relaunches running assignments after a restart with a recovery note 155ms
+   ✓ projects read models for the management page and removes thread subscriptions from the Web surface 151ms
+   ✓ lets an Executor drop only its own ticket from a thread it finds unrelated, but not the thread it started on or its pull request's 198ms
+   ✓ reports a Source that was switched on as starting until its next pass reports its health 104ms
+   ✓ records each settings save with its policy change and the open tickets told about it 157ms
+   ✓ refuses an accept through orchestrator_route for inferred candidates so proactive work always goes through Eval 77ms
+   ✓ syncs a Source's list once its plugin loads after dsh-superagent started 147ms
+   ✓ syncs the Feishu part of the Policy from its sync chat in place, and keeps the Policy version when only the order the chat lists changes 80ms
+   ✓ describes rule edits in the Policy history and skips Policy syncs that change nothing 66ms
+   ✓ records an admission table change in the Policy history as one line for its Source, with a new Policy version 74ms
+   ✓ retries only a failed, blocked or undelivered ticket with a new assignment, and finds tickets by title in search, and reports unavailable Evals as a problem 201ms
+   ✓ links Channels and Threads for people, finds tickets by a bare PR number, and keeps ended subscriptions out of the default Thread filter 142ms
+   ✓ counts every step of the day's flow over the same arriving messages and lists the same accepted Decisions 121ms
+   ✓ queues a requeued trigger visibly and tells the orchestrator 140ms
+   ✓ asks a question where the human message that raised it was written, not in the ticket's original conversation 161ms
+   ✓ finds triggers by #PR number, GitHub link prefix and Feishu message id 97ms
+   ✓ keeps pages of Source reads, prompt previews and Feishu message links in memory, outside the kv area 86ms
+   ✓ reads resources recorded under the pre-vocabulary names 124ms
+   ✓ leaves waiting and blocked assignments alone after a restart and keeps blocked workers paused 177ms
+   ✓ waits for setup without the agent's GitHub CLI: the panel works, and nothing is polled, assessed or dispatched 244ms
+   ✓ reports each setup problem where the operator fixes it, and checks the agent CLI the way worker shells run it 141ms
+   ✓ reports a failure to write the agent environment as environmentFailed and leaves this process's environment as it was 72ms
+   ✓ checks only the account a Source save changes, so a problem setup has elsewhere does not refuse it 102ms
+   ✓ lets only the panel change the execution environment, since it decides what runs as a shell command and which CLIs workers reach 76ms
+   ✓ checks a changed account CLI before saving it, restarts after the save, and lets only the panel change it 196ms
+   ✓ lists Tickets that wait on a person with where to answer them, as the overview does 135ms
+   ✓ pauses and resumes processing as its own action, a setting outside every block, which keeps an Executor settings draft valid 98ms
+   × runs setup again while the Feishu bot check failed, and restores the process environment when git fails its check 200ms
+   × writes worker shims and the agent environment from the configuration only, without mutating the host environment 87ms
+   ✓ waits for setup when the shim directory holds a file dsh-superagent did not write, and leaves the file alone 83ms
+   ✓ rewrites the blocked-command shims when the Executor settings change them, without a restart 82ms
+   ✓ tells both roles the execution environment through a generated prompt section, and each worker its own ticket's 154ms
+   ✓ lets a worker read the prompt version it works under and the ones it worked under before, also after a restart, and no other 192ms
+   ✓ passes team text with template braces to every Session literally, without reading them as prompt variables 125ms
+   ✓ leaves auto-merge to the delivery requirements, with the agent's own gh and the line threshold 111ms
+   ✓ runs the prepare command once for a new ticket, under the execution root with the ticket's environment, and fails the ticket with its output 195ms
+   ✓ counts a ticket whose directory the host prepared before prepare commands existed as prepared 143ms
+   ✓ runs a GitHub-only deployment: the GitHub part of the Policy decides alone, and the Feishu part has nothing to sync 106ms
+   ✓ credits each human reviewer once in the default delivery requirements on every commit of the PR, never with an empty commit 56ms
+   ✓ shows a failed reply as a problem with its attempts, an error of the reply effects after three, until it is withdrawn 151ms
+     ✓ sends a Ticket's later result after its acknowledgement that failed once, and holds no other Ticket's message in the chat 172ms
+     ✓ stops holding a Ticket's later messages behind one that failed three times, which the overview shows 126ms
+   ✓ keeps the receipt of a message withdrawn while it went out, so its id is not queued again 113ms
+   ✓ resumes several ended tickets on one thread from one message without the launch waiting on itself 294ms
+   ✓ attaches a message to an ended ticket and so resumes it 152ms
+   ✓ rereads a Source's display names on request, reports the new ones and keeps the list when the read fails 57ms
+   ✓ drops a message only when its conversation is gone or not listened to, newest drop first, and keeps it while its Source is off 102ms
+   ✓ reports a dropped acknowledgement as dropped, with its Ticket on the Source status and in the last day's flow 146ms
+   ✓ refuses a settings save with an unknown model or a Source kind that is not installed, an oversized prompt, an unknown revision and a malformed path with 4xx 73ms
+   ✓ records a report, the PR it binds and its relay together, or none of them 120ms
+   ✓ tells the main Session of each requeue of the same Trigger 81ms
+   ✓ keeps replies and acknowledgements to an IM conversation within the IM limit 146ms
+   ✓ refuses a second process on the same state directory before it opens the database, so it migrates nothing 61ms
+   ✓ applies a changed prompt size limit to the next save and request without a restart 92ms
+   ✓ releases the database and the state directory lock when it fails to start, so it can start again in this process 97ms
+   ✓ tells the conversation that the PR merged when work a restart recovered ends with it later 166ms
+   ✓ restarts a worker that was mid-work when the host stopped with the recovery note, and records no end of its turn 136ms
+   ✓ keeps the report of a blocked, failed or ready worker whose turn ends, and relays nothing more 267ms
+   ✓ relays the status-request hint when a worker's turn ends with no text and no report 158ms
+   ✓ fails a ticket at once on a worker error that is not passing, and relays it 163ms
+   ✓ refuses the main Session a bash command that runs sleep and a long job wait, as reports arrive by themselves, and no worker 115ms
+   ✓ reads the main Session's preset from a registry with or without presetForSession, and takes standard's caps when it cannot 169ms
+   ✓ refuses an ended ticket's worker its tools, and restricts the main Session to the tools it may use 103ms
+   ✓ gives an explicit ticket's worker a prompt without the limits of an inferred Mandate 109ms
+   ✓ runs a launch that fails for a passing reason again on the launch backoff three times, then fails its ticket; a failed prepare fails at once 269ms
+   ✓ launches a queued Assignment once when the host resumes, and gives a failed launch's slot back 244ms
+   ✓ shows the settings history when one revision holds values its Source kind no longer accepts, without that revision's changes 89ms
+   ✓ restarts a worker whose shell job the host stop ended with the recovery note, as a worker mid-work 179ms
+   ✓ creates an Executor Session under the bundle's worker preset, and the main Session under its router preset 109ms
+   ✓ selects its own preset again for a main Session or worker a person switched before its first turn, and not after it 204ms
+   ✓ gives a subagent of a worker only the worker's work tools, and none once the ticket ended 110ms
+   ✓ gives a subagent of a worker's subagent the same work tools and guard 127ms
+   ✓ gives the Assignment a restart starts the messages the replaced one had delivered but no step took, once 179ms
+   ✓ ends the main Session's prompt with its Policy section, each rule on one line, and says orchestrator_eval holds no rules 63ms
+   ✓ keeps the Policy the main Session judges by in its prompt, after admission and the rest, as the latest save left it 80ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/environment.spec.ts > ticket directory check > fails when git cannot read the repository's configuration, instead of passing it
+AssertionError: expected [Function] to throw error matching /bad config/ but got '致命错误：文件 .git/config 中错误的配置行 1'
+
+- Expected:
+/bad config/
+
++ Received:
+"致命错误：文件 .git/config 中错误的配置行 1"
+
+ ❯ tests/environment.spec.ts:154:32
+    152|     await git('init', '-q', 'repo')
+    153|     writeFileSync(join(dir, 'repo', '.git', 'config'), '[core\n')
+    154|     await expect(check('repo')).rejects.toThrow(/bad config/)
+       |                                ^
+    155|   })
+    156|   it('reports a failed command\'s exit status', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/runtime.spec.ts > runs setup again while the Feishu bot check failed, and restores the process environment when git fails its check
+AssertionError: expected '/root/.dsh/state/superagent/worker-gi…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"/root/.dsh/state/superagent/worker-gitconfig"
+
+ ❯ tests/runtime.spec.ts:990:41
+    988|   await broken.ready
+    989|   expect(broken.setupProblem).toMatchObject({ place: 'deployment', cod…
+    990|   expect(process.env.GIT_CONFIG_GLOBAL).toBeUndefined()
+       |                                         ^
+    991|   expect(process.env.PATH?.split(':')).not.toContain(join(directory, '…
+    992| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/runtime.spec.ts > writes worker shims and the agent environment from the configuration only, without mutating the host environment
+AssertionError: expected '/root/.dsh/state/superagent/worker-gi…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"/root/.dsh/state/superagent/worker-gitconfig"
+
+ ❯ tests/runtime.spec.ts:1007:41
+    1005|   expect(readFileSync(workerGitConfig(directory), 'utf8')).toContain(`…
+    1006|   // The host process is untouched; the explicit environment is only h…
+    1007|   expect(process.env.GIT_CONFIG_GLOBAL).toBeUndefined()
+       |                                         ^
+    1008|   expect(process.env.GIT_AUTHOR_NAME).toBeUndefined()
+    1009|   expect(process.env.PATH?.split(':')).not.toContain(bin)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 102 passed (105)
+   Start at  22:09:10
+   Duration  14.64s (transform 1.81s, setup 0ms, import 2.36s, tests 12.79s, environment 0ms)
+
