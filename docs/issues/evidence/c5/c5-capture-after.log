@@ -1,3 +1,10 @@
+# C5 After capture — branch head at 869ec781 (code tree; only evidence files are committed after it)
+# tree: /data/project/workspace/dsh-worktrees/slice-96d585fa7995 after `pnpm build`
+# profile c5-after -> the worktree, host 10.126.126.6:3192, stateDir /root/.dsh/state/c5-after
+# seeded by c5-questions-seed.mjs with the same data as the Before state
+# viewport 1440x900, locale zh-CN, color_scheme light, scroll = section top; date 2026-11-13T02:56+08:00
+# command: python3 /tmp/c5-capture.py '<token URL>' docs/issues/evidence/c5 after (the token is not written to this log)
+
 MODE after
 PAGE HEAD: 返回需求列表 | 需求详情支持对关联工单提问 | 需求详情与对齐审阅 | 开放 | 已确认
 ROWS: [('C1 · 提问记录与后台回答', ['C1 · 提问记录与后台回答', '打开 Session', '提问']), ('C2 · 时间线展示问题与回答', ['C2 · 时间线展示问题与回答', '打开 Session', '提问']), ('C3 · Aligner 工单复核对齐结论', ['C3 · Aligner 工单复核对齐结论', '打开 Session', '提问'])]

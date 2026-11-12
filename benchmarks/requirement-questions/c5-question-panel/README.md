@@ -48,7 +48,11 @@ To re-take the screenshots:
 
 ```sh
 node docs/issues/evidence/c5/c5-questions-seed.mjs /root/.dsh/state/c5-before   # and c5-after, or any two state dirs
-dsh --profile c5-before --no-open   # host 10.126.126.6:3191, profile links dsh-superagent at the Before tree
+# Before tree: this branch's code with the C5 feature commit reversed, so it is the current base without C5
+git archive 869ec781 | tar -x -C /tmp/c5-before2
+git diff 00839946^ 00839946 > /tmp/c5-feature.patch && (cd /tmp/c5-before2 && patch -p1 -R --batch < /tmp/c5-feature.patch)
+ln -s <a sibling worktree>/node_modules /tmp/c5-before2/node_modules && (cd /tmp/c5-before2 && pnpm build)
+dsh --profile c5-before --no-open   # host 10.126.126.6:3191, profile links dsh-superagent at /tmp/c5-before2
 dsh --profile c5-after --no-open    # host 10.126.126.6:3192, profile links this worktree after `pnpm build`
 python3 /tmp/c5-capture.py '<printed token URL>' docs/issues/evidence/c5 before   # and after
 ```

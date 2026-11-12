@@ -1,3 +1,10 @@
+# C5 Before capture — baseline = deployment main 72b4c4a8 merged with C4 2eaa51cc, C5 reverted
+# tree: current branch with only the C5 feature commit 00839946 reversed (reverse patch of that commit's diff), built in /tmp/c5-before2
+# profile c5-before -> /tmp/c5-before2, host 10.126.126.6:3191, stateDir /root/.dsh/state/c5-before
+# seeded by c5-questions-seed.mjs: 1 project, 1 requirement, 3 dispatched Tickets that started a Session, 1 answered + 1 failed question
+# viewport 1440x900, locale zh-CN, color_scheme light, scroll = section top; date 2026-11-13T02:56+08:00
+# command: python3 /tmp/c5-capture.py '<token URL>' docs/issues/evidence/c5 before (the token is not written to this log)
+
 MODE before
 PAGE HEAD: 返回需求列表 | 需求详情支持对关联工单提问 | 需求详情与对齐审阅 | 开放 | 已确认
 ROWS: [('C1 · 提问记录与后台回答', ['C1 · 提问记录与后台回答', '打开 Session']), ('C2 · 时间线展示问题与回答', ['C2 · 时间线展示问题与回答', '打开 Session']), ('C3 · Aligner 工单复核对齐结论', ['C3 · Aligner 工单复核对齐结论', '打开 Session'])]
@@ -5,7 +12,7 @@ TICKET ROW: ('C1 · 提问记录与后台回答', ['C1 · 提问记录与后台�
 TICKET ROW: ('C2 · 时间线展示问题与回答', ['C2 · 时间线展示问题与回答', '打开 Session'])
 TICKET ROW: ('C3 · Aligner 工单复核对齐结论', ['C3 · Aligner 工单复核对齐结论', '打开 Session'])
 TIMELINE COUNT: 3
-TIMELINE EVENTS: ['local | 7小时前 |  | 回答里的 Markdown 要能正常显示。', '智能体 | 8小时前 | 智能体 |  | 收到，提问与回答都会回到这里。', 'local | 8小时前 |  | 提问入口请放在关联工单行，别再加一页。']
+TIMELINE EVENTS: ['local | 7小时前 |  | 回答里的 Markdown 要能正常显示。', '智能体 | 8小时前 | 智能体 |  | 收到，提问与回答都会回到这里。', 'local | 9小时前 |  | 提问入口请放在关联工单行，别再加一页。']
 QUESTION EVENTS: []
 SCHEME: {'prefersDark': False, 'bodyBg': 'rgb(255, 255, 255)'}
 SHOT docs/issues/evidence/c5/before-timeline.png

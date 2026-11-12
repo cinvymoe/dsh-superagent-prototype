@@ -18,10 +18,10 @@ env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER
 
 ## 视觉证据
 
-- 两个临时 profile：`~/.dsh/profiles/c5-before`（链接基线树 `/tmp/c5-before`，端口 3191，stateDir `/root/.dsh/state/c5-before`）与 `~/.dsh/profiles/c5-after`（链接本 worktree，端口 3192，stateDir `/root/.dsh/state/c5-after`）；两者除链接树、端口与 stateDir 外完全相同。
+- 两个临时 profile：`~/.dsh/profiles/c5-before`（链接基线树 `/tmp/c5-before2`，端口 3191，stateDir `/root/.dsh/state/c5-before`）与 `~/.dsh/profiles/c5-after`（链接本 worktree，端口 3192，stateDir `/root/.dsh/state/c5-after`）；两者除链接树、端口与 stateDir 外完全相同。
 - 同一 seed：`evidence/c5-questions-seed.mjs`（1 个项目、1 条带三切片对齐的需求、3 张已启动会话的关联工单、1 条 answered + 1 条 failed 提问）。
 - 同一浏览器：Playwright + `/usr/bin/chromium`，视口 1440×900，`locale=zh-CN`，`color_scheme=light`，滚动位置按 section 顶部对齐。
-- Before 需要先用 `git archive 3a1626cc | tar -x -C /tmp/c5-before` 物化并 `pnpm build`；After 用本 worktree `pnpm build` 后的 `lib/`。
+- Before 由本分支代码树反向应用 C5 提交得到（`git archive <head> | tar -x -C /tmp/c5-before2` + `patch -p1 -R`），因为 deployment `main` 在开工后前进到 `72b4c4a8`；两份都 `pnpm build` 后由各自的 profile 加载 `lib/`。
 
 ## 已知限制
 

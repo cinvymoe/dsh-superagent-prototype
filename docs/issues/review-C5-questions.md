@@ -46,7 +46,7 @@
    - `shows every message, question and answer once in newest-first timeline order`：4 条事件按 `asked/asked/回复/评论` 时间倒序排列，5 个 `.dt-md` 文本各出现一次，两个问题事件都带所属工单标签，需求卡片里不含问题文本。
 2. **`docs/005-panel.md` 写明提问与回答；`docs/007-architecture.md` 更新本需求涉及模块的行文；`pnpm vitest run tests/panel-discuss.spec.tsx tests/locales.spec.ts tests/docs.spec.ts` 通过**：通过。两处文档见变更范围；定向 3 files / 58 tests 全绿（`docs/issues/evidence/c5/c5-targeted.log`），`tests/docs.spec.ts` 的 Modules/Tests 表双向校验仍通过（未新增文件，只改描述）。
 3. **`pnpm check` 在最终 head 通过**：通过。`env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL LC_ALL=C pnpm check`（typecheck + 全量 vitest + build），见 `docs/issues/evidence/c5/c5-check.log`；机器相关的既有失败说明见下“风险与限制”。
-4. **PR 描述含同视口、同主题的 before/after 截图并标注基线/改动版本，且说明与「打开 Session」按钮共存**：通过。同一 seeded state（1 个项目、1 条需求、3 张关联工单、2 条问答记录）、同一视口 1440×900、同一浅色主题、同一滚动位置，Before = `3a1626cc`（C4 合入后、C5 之前），After = 本工单 head：`before-tickets.png`/`after-tickets.png` 证明每行 `打开 Session` 与 `提问` 并排；`before-timeline.png`/`after-timeline.png` 证明时间线新增问题与回答；`after-composer.png` 展示内联提问框。截图与抓取日志在 `docs/issues/evidence/c5/`，seed 脚本 `c5-questions-seed.mjs` 可复现。
+4. **PR 描述含同视口、同主题的 before/after 截图并标注基线/改动版本，且说明与「打开 Session」按钮共存**：通过。同一 seeded state（1 个项目、1 条需求、3 张关联工单、2 条问答记录）、同一视口 1440×900、同一浅色主题、同一滚动位置，Before = deployment `main` `72b4c4a8` + C4 `2eaa51cc` 再反向应用 C5 提交（即 C5 之前的基线），After = 本分支代码树 `869ec781`：`before-tickets.png`/`after-tickets.png` 证明每行 `打开 Session` 与 `提问` 并排；`before-timeline.png`/`after-timeline.png` 证明时间线新增问题与回答；`after-composer.png` 展示内联提问框。截图与抓取日志在 `docs/issues/evidence/c5/`，seed 脚本 `c5-questions-seed.mjs` 可复现。
 
 ## 测试证据
 
@@ -62,5 +62,5 @@
 
 - **字段名与判据用词**：冻结判据写的是“body 含 ticketId”，C4 冻结的宿主契约字段是 `ticket`；面板按宿主契约发请求（否则真实宿主 400），测试断言 `{ ticket: «工单 id», text }`。这是同一语义的字段命名差异，已在切片 issue 与本文件中记录。
 - **等待态在截图中不可复现**：seeded 的 `asked` 记录会在宿主启动时被 `resume()` 重新处理，随即因为没有真实 worker 会话落 `failed`，所以截图只呈现 `answered` 与 `failed`；`asked` 的等待渲染由面板用例覆盖。
-- **Stacked PR**：C4（PR #37）尚未合并，本分支含其提交，diff 在 #37 合入前会包含 C4 的改动；合并顺序应为 #37 先、本 PR 后。
+- **Stacked PR**：C4（PR #37）尚未合并，本分支含其提交，diff 在 #37 合入前会包含 C4 的改动。deployment `main` 在开工后前进了 `422a21a4 → 72b4c4a8`（PR #38），本分支已合入该 main 并解决唯一的冲突（`src/app/runtime.ts` 的 `httpHost()` 同时保留 `localQuestions`/`projects` 与 main 新增的 `checkout`/`prepare`），因此本分支自足、可在 #37 之前合并；若 #37 先合并，本 PR 的 diff 只剩 C5。
 - **机器环境相关的既有失败**：不带 `env -u GIT_CONFIG_GLOBAL` 时 `tests/runtime.spec.ts` 的“without mutating the host environment”两个用例失败（代理会话注入了该变量）；未设 `LC_ALL=C` 时 `tests/environment.spec.ts` 的 git 配置用例因中文 locale 输出不匹配失败。两者都与本切片无关，`pnpm check` 证据用干净环境跑出。

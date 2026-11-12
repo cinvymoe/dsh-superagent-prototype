@@ -19,3 +19,5 @@
 | 15 | commit `00839946`、push、开 PR #39 | 成功，head `00839946` |
 | 16 | 记录 PR 的 docs commit `22d73bd6` | push 成功 |
 | 17 | 回归入库（本目录） | 完成 |
+| 18 | deployment `main` 前进到 `72b4c4a8`（PR #38 合并） | `git fetch` 部署仓库 main 后合入；唯一冲突 `src/app/runtime.ts` 的 `httpHost()` 取并集（`localQuestions`/`projects` + `checkout`/`prepare`） |
+| 19 | 合入 main 后复跑定向 / 相关 / typecheck / build / 全量 `pnpm check` | 见 `evidence/c5-*.log` |
