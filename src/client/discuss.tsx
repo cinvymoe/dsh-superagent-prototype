@@ -227,10 +227,12 @@ export function RequirementDetail({ id }: { id: string }) {
   const original = issue.body || issue.title
   const isOriginal = (text: string) => text === original || (!!(issue.images?.length) && text.startsWith(`${original}\n\nImages:`))
   const skipped = timeline.findIndex(trigger => isOriginal(trigger.text))
+  // Newest first: the person keeps the conversation at the top, directly under the follow-up box, so the newest
+  // message is the first row and the earliest one falls to the bottom of the list.
   const events = [
     ...timeline.flatMap((trigger, index) => index === skipped ? [] : [{ at: trigger.at, kind: 'trigger' as const, trigger }]),
     ...replies.map(reply => ({ at: reply.sentAt ?? '', kind: 'reply' as const, reply })),
-  ].sort((a, b) => a.at.localeCompare(b.at))
+  ].sort((a, b) => b.at.localeCompare(a.at))
   return <>
     <PageHead title={issue.title} back={{ label: t('discuss.back'), onClick: () => navigate({ page: 'requirements' }, true) }}>
       <span className="dt-hint">{t('discuss.detail')}</span>{stateTag(t, issue)}{statusTag(t, issue)}</PageHead>
@@ -291,6 +293,14 @@ export function RequirementDetail({ id }: { id: string }) {
       </section>
 
       <Section title={t('discuss.timeline')} count={events.length}>
+        {/* The follow-up box sits above the list: a submitted message lands at the top, right under the box. */}
+        <form className="dt-form dt-timeline-form" onSubmit={event => { void commentSubmit(event) }}>
+          <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
+            placeholder={t('discuss.commentPlaceholder')} aria-label={t('discuss.commentPlaceholder')}
+            onChange={event => setComment(event.target.value)} />
+          <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
+            disabled={busy || !comment.trim()}>{t('discuss.comment')}</Button></div>
+        </form>
         <ul className="dt-list dt-timeline">{events.map((event, index) => <li key={index} className="dt-row dt-event">
           <div className="dt-row-main">
             <div className="dt-row-meta">{event.kind === 'trigger' ? actorName(t, event.trigger.actor) : t('discuss.agent')}
@@ -298,13 +308,6 @@ export function RequirementDetail({ id }: { id: string }) {
             <MarkdownLite text={event.kind === 'trigger' ? event.trigger.text : event.reply.text} />
           </div>
         </li>)}</ul>
-        <form className="dt-form" onSubmit={event => { void commentSubmit(event) }}>
-          <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
-            placeholder={t('discuss.commentPlaceholder')} aria-label={t('discuss.commentPlaceholder')}
-            onChange={event => setComment(event.target.value)} />
-          <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
-            disabled={busy || !comment.trim()}>{t('discuss.comment')}</Button></div>
-        </form>
       </Section>
 
       <Section title={t('discuss.tickets')} count={data!.thread.tickets.length}>

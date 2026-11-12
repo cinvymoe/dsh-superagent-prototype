@@ -7,7 +7,7 @@ import { Prompts, builtInBase, composePrompt, defaultPrompts, policySection, pro
 import { USER_ERRORS, UserError } from '../src/core/index.ts'
 import { KV } from '../src/kv.ts'
 import { SettingsSchema, policyVersion } from '../src/policy.ts'
-import { guides, handoffPolicy, mainAdmissionPolicy, masterPrompt, sharedPrompt, workerPrompt } from '../src/app/context.ts'
+import { guides, handoffPolicy, mainAdmissionPolicy, masterPrompt, sharedPrompt, workerPrompt, executePrompt, nativeExecutePrompt } from '../src/app/context.ts'
 import { promptFile } from '../src/app/skill-files.ts'
 import { packagePath } from '../src/infra/paths.ts'
 import type { Variable } from '../src/app/execution-environment.ts'
@@ -109,6 +109,17 @@ it('lists a ticket\'s execution environment in its prompt, and says setup is inc
     expect(promptParts(defaultPrompts(), 'worker', 'env').at(-1)).toEqual({ name: 'runtime/environment', kind: 'generated', key: 'runtime/environment',
       text: 'env' })
     expect(new Prompts(store, () => 100000, () => undefined, () => false).compose(defaultPrompts(), 'worker')).toContain('dsh-superagent is waiting for setup')
+  })
+})
+
+it('composes the handoff of the execution strategy a slice Ticket pinned, and keeps feature-exec for a caller that names none', () => {
+  withStore(store => {
+    const prompts = promptsOf(store), config = defaultPrompts()
+    expect(prompts.composeExecute(config, 'native')).toBe(`${prompts.compose(config, 'worker')}\n\n${nativeExecutePrompt}`)
+    expect(prompts.composeExecute(config, 'native')).not.toContain('feature_exec_start')
+    expect(prompts.composeExecute(config, 'feature-exec')).toBe(`${prompts.compose(config, 'worker')}\n\n${executePrompt}`)
+    // The former signature, which every older caller still uses, keeps the feature-exec handoff.
+    expect(prompts.composeExecute(config)).toBe(prompts.composeExecute(config, 'feature-exec'))
   })
 })
 
