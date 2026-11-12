@@ -1,9 +1,9 @@
 /** Requirement pages: submit a requirement, list the project's requirements, and review the Aligner's proposal. */
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { REQUIREMENT_IMAGES } from '../limits.ts'
-import { projectRepositories, type LocalImage, type LocalIssue } from '../sources/local-format.ts'
+import { projectRepositories, requirementExecutionMode, type LocalImage, type LocalIssue } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
-import { Button, Icon, Pill, Tag } from './controls.tsx'
+import { Button, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
@@ -57,6 +57,14 @@ function statusTag(t: T, issue: LocalIssue) {
   if (alignment.status === 'confirmed') return <Tag tone="success">{t('discuss.confirmed')}</Tag>
   return <Tag tone="danger">{t('discuss.rejected')}</Tag>
 }
+
+/** The execution mode a requirement's slice Tickets run under: the person's choice, or native when they made none. */
+const executionLabel = (t: T, issue: LocalIssue) => t(requirementExecutionMode(issue) === 'feature-exec'
+  ? 'discuss.executionFeatureExec' : 'discuss.executionNative')
+
+/** The requirement's execution mode as a Tag, on every list row and, once fixed by dispatch, on the detail. */
+const executionTag = (t: T, issue: LocalIssue) =>
+  <Tag tone={requirementExecutionMode(issue) === 'feature-exec' ? 'info' : 'neutral'}>{executionLabel(t, issue)}</Tag>
 
 /** New-requirement page: the current project's head and one description field; each submission becomes a Thread. */
 export function NewRequirementPage() {
@@ -185,8 +193,8 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
             <Icon name="message" size={14} />
             <div className="dt-row-main">
               <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
-                onClick={() => open(issue.id)}>{issue.title}</button></div>
-              <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}
+                onClick={() => navigate({ page: 'requirements', id: issue.id })}>{issue.title}</button></div>
+              <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}{executionTag(t, issue)}
                 <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span>
                 {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}</div>
             </div>
@@ -228,6 +236,8 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   if (error) return <p className="dt-error" role="alert">{error.message}</p>
   if (!issue) return <p className="dt-hint">{t('loading')}</p>
   const alignment = issue.alignment
+  // A requirement that already produced Tickets keeps the execution mode they were dispatched under.
+  const dispatched = data!.thread.tickets.length > 0
   const timeline = data!.thread.timeline
   const replies = data!.replies.filter(reply => reply.status === 'sent')
   // The requirement card above already shows the submitted text, so its original Trigger is left out of the timeline
@@ -236,10 +246,12 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   const original = issue.body || issue.title
   const isOriginal = (text: string) => text === original || (!!(issue.images?.length) && text.startsWith(`${original}\n\nImages:`))
   const skipped = timeline.findIndex(trigger => isOriginal(trigger.text))
+  // Newest first: the person keeps the conversation at the top, directly under the follow-up box, so the newest
+  // message is the first row and the earliest one falls to the bottom of the list.
   const events = [
     ...timeline.flatMap((trigger, index) => index === skipped ? [] : [{ at: trigger.at, kind: 'trigger' as const, trigger }]),
     ...replies.map(reply => ({ at: reply.sentAt ?? '', kind: 'reply' as const, reply })),
-  ].sort((a, b) => a.at.localeCompare(b.at))
+  ].sort((a, b) => b.at.localeCompare(a.at))
   return <>
     <PageHead title={issue.title} back={{ label: t('discuss.back'), onClick: () => navigate(filter === 'pending'
       ? { page: 'requirements' } : { page: 'requirements', query: { filter } }, true) }}>
@@ -278,6 +290,14 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
           <div className="dt-row-meta"><When at={alignment.proposedAt} />
             {alignment.decidedAt && <When at={alignment.decidedAt} />}
             {alignment.reason && <span>{t('discuss.reason')}：{alignment.reason}</span>}</div>
+          {dispatched
+            ? <div className="dt-row-meta">{executionTag(t, issue)}<span>{t('discuss.executionLocked')}</span></div>
+            : alignment.status === 'proposed' && <div className="dt-switch-row">
+              <span className="dt-field-head">{t('discuss.executionSwitch')}<InfoTip text={t('discuss.executionHint')} /></span>
+              <Switch checked={requirementExecutionMode(issue) === 'feature-exec'} label={t('discuss.executionSwitch')}
+                onChange={next => { void act(() => call('POST local/issues/:id/execution', { id,
+                  body: { mode: next ? 'feature-exec' : 'native' } })) }} />
+            </div>}
           {alignment.status === 'proposed' && <div className="dt-actions">
             <Button variant="primary" size="sm" disabled={busy} onClick={() => { void decide('confirm') }}>{t('discuss.confirm')}</Button>
             {!rejecting && <Button variant="outline" size="sm" disabled={busy}
@@ -293,6 +313,14 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
       </section>
 
       <Section title={t('discuss.timeline')} count={events.length}>
+        {/* The follow-up box sits above the list: a submitted message lands at the top, right under the box. */}
+        <form className="dt-form dt-timeline-form" onSubmit={event => { void commentSubmit(event) }}>
+          <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
+            placeholder={t('discuss.commentPlaceholder')} aria-label={t('discuss.commentPlaceholder')}
+            onChange={event => setComment(event.target.value)} />
+          <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
+            disabled={busy || !comment.trim()}>{t('discuss.comment')}</Button></div>
+        </form>
         <ul className="dt-list dt-timeline">{events.map((event, index) => <li key={index} className="dt-row dt-event">
           <div className="dt-row-main">
             <div className="dt-row-meta">{event.kind === 'trigger' ? actorName(t, event.trigger.actor) : t('discuss.agent')}
@@ -300,13 +328,6 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
             <MarkdownLite text={event.kind === 'trigger' ? event.trigger.text : event.reply.text} />
           </div>
         </li>)}</ul>
-        <form className="dt-form" onSubmit={event => { void commentSubmit(event) }}>
-          <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
-            placeholder={t('discuss.commentPlaceholder')} aria-label={t('discuss.commentPlaceholder')}
-            onChange={event => setComment(event.target.value)} />
-          <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
-            disabled={busy || !comment.trim()}>{t('discuss.comment')}</Button></div>
-        </form>
       </Section>
 
       <Section title={t('discuss.tickets')} count={data!.thread.tickets.length}>

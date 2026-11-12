@@ -1,0 +1,11 @@
+(node:1311712) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1311712) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1311713) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/execution-strategy.spec.ts (13 tests) 177ms
+ ✓ tests/prompts.spec.ts (19 tests) 594ms
+
+ Test Files  2 passed (2)
+      Tests  32 passed (32)
+   Start at  22:37:51
+   Duration  1.80s (transform 1.36s, setup 0ms, import 2.04s, tests 772ms, environment 0ms)

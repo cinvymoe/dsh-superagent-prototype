@@ -126,3 +126,16 @@ describe('project edit documentation', () => {
     expect(architecture).toContain('editing one project without changing another project\'s repositories')
   })
 })
+
+describe('requirement message timeline documentation', () => {
+  it('states that the message timeline lists the newest message first with the follow-up box above the list', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('The message timeline lists the newest message first, with the follow-up box above the list')
+    expect(panel).toContain('a submitted message appears at the top, the count grows and the box clears, and the earliest message falls to the bottom')
+  })
+  it('names the newest-first timeline and its top box in the module row and the panel test row', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('where the timeline lists the newest message first and the follow-up box sits above the list so a submitted message lands at the top')
+    expect(architecture).toContain('its newest-first message timeline with the follow-up box above the list (a post appears first and clears the box)')
+  })
+})
