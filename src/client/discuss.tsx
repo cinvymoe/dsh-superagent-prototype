@@ -193,7 +193,7 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
             <Icon name="message" size={14} />
             <div className="dt-row-main">
               <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
-                onClick={() => navigate({ page: 'requirements', id: issue.id })}>{issue.title}</button></div>
+                onClick={() => open(issue.id)}>{issue.title}</button></div>
               <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}{executionTag(t, issue)}
                 <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span>
                 {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}</div>
