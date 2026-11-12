@@ -564,7 +564,7 @@ const TEXT = {
   'agentRole.executor': ['执行器', 'Executor'],
   'agentRoleHint.main': ['主 Session 留空时使用评估模型（设置 › 评估）。', 'When blank, the main Session uses the assessor model (Settings › Eval).'],
   'agentRoleHint.aligner': ['对齐 Agent 留空时使用执行器的有效模型：先看执行器自己的覆盖，再看执行设置里的执行器模型。', 'When blank, the aligner uses the executor\'s effective model: the executor\'s own override first, then the executor model in Execution settings.'],
-  'agentRoleHint.executor': ['执行器留空时使用执行设置里的执行器模型；它的子代理继承这里的可选工具。', 'When blank, the executor uses the executor model in Execution settings; its subagents inherit its optional tools here.'],
+  'agentRoleHint.executor': ['执行器留空时使用执行设置里的执行器模型；它的子代理继承这里的可选工具，工单问答的只读 fork 也使用执行器的模型。', 'When blank, the executor uses the executor model in Execution settings; its subagents inherit its optional tools here, and the read-only fork that answers a Ticket\'s question uses the executor model too.'],
   agentModel: ['角色模型', 'Role model'],
   agentModelHint: ['留空继承该角色的默认模型；保存后用于新建的 Session，已有 Session 保持原选择。', 'Leave empty to inherit the role\'s default model; a save applies to new Sessions, and existing Sessions keep their choice.'],
   agentInherited: ['留空时继承', 'Leaving it empty inherits'],

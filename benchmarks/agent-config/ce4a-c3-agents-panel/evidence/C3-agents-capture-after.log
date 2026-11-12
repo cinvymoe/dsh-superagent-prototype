@@ -1,0 +1,23 @@
+# C3 Agents settings — After capture (this slice, working tree at the ticket branch head)
+# Baseline build in the same profile: main 1724811f (see C3-agents-capture-before.log).
+# After: the ticket worktree /data/project/workspace/dsh-worktrees/slice-ce4a60f73cc5, pnpm typecheck (exit 0) and
+#   pnpm build (exit 0) in the clean env; lib/client.js has zero `node:` references (grep -c returned 0), so the panel
+#   bundle does not pull host code through src/agent-model.ts.
+# Profile: DSH profile agents-capture, webserver 10.126.126.6:3151, stateDir /root/.dsh/state/agents-after,
+#   dsh-superagent linked to the ticket worktree.
+# State: the same proven C3 capture state as Before, settings revision 2 seeded with eval/executor models, one override
+#   per role (main override with effort high, aligner/executor inherited), optional tools turned off, one agents save
+#   in history. The GitHub chain and setup stub CLI are the same; no credentials or private content in the capture.
+# Command: python3 /tmp/c3agents-after-capture.py <token url> docs/evidence/c3-agents
+# Viewport 1440x1100, light, zh-CN, /usr/bin/chromium via Playwright; sessionStorage['dsh-superagent/route'] = settings/agents.
+NAV: ['来源', '评估', '执行', '智能体', '提示词', '部署']
+AGENTS (top): 智能体 | 主 Session ... 对齐 Agent ... 执行器 ... 当前并发 执行中 0 / 3 在执行设置中修改并发 ... 配置历史
+HISTORY: 第 2 次保存 · 管理页 | 10小时前 | 智能体模型（主 Session） | 智能体停用的工具（主 Session）：未设置 → read_image |
+  智能体停用的工具（对齐 Agent）：未设置 → web_search | 智能体停用的工具（执行器）：未设置 → web_fetch todo_write
+SHOTS
+- docs/evidence/c3-agents/after-settings.png — the Settings navigation with 智能体 between 执行 and 提示词 (same route as Before)
+- docs/evidence/c3-agents/after-agents.png — the Agents page: the three role cards, each role's inherited model line and
+  override fields, the required (必需, disabled) and optional tool switches, the subagent-inheritance sentence
+- docs/evidence/c3-agents/after-agents-history.png — the Executor card's 当前并发 执行中 0 / 3 with the link to Execution
+  settings, and the opened 配置历史 with the agents save's role/model/tool change lines
+# The temporary server on 10.126.126.6:3151 was stopped after the capture; the token is not recorded.

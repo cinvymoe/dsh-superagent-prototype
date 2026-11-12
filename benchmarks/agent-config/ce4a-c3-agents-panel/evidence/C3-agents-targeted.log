@@ -1,0 +1,30 @@
+$ pnpm vitest run tests/panel-agents.spec.tsx tests/panel-settings.spec.tsx tests/locales.spec.ts tests/docs.spec.ts
+(node:1747634) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1747662) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-ce4a60f73cc5
+
+(node:1747716) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1747717) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1747723) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1747715) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (16 tests) 33ms
+ ✓ tests/locales.spec.ts (7 tests) 16ms
+ ✓ tests/panel-settings.spec.tsx (6 tests) 1141ms
+   ✓ keeps a person's own value where another save changed the same setting, and says so  321ms
+   ✓ saves the Eval block on the Policy settings and the Executor with its execution environment on the Execution settings, each against its own revision  316ms
+ ✓ tests/panel-agents.spec.tsx (9 tests) 1466ms
+   ✓ adds Agents between Execution and Prompts and keeps the group when the panel remounts  487ms
+
+ Test Files  4 passed (4)
+      Tests  38 passed (38)
+   Start at  03:33:30
+   Duration  4.17s (transform 2.77s, setup 0ms, import 3.90s, tests 2.66s, environment 1.56s)
+
+exit=0
