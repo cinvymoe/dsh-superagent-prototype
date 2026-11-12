@@ -1,5 +1,5 @@
-/** Tests for scripts/dsh-superagent using a temporary checkout path with spaces and stubbed ps, tmux, and dsh binaries. */
-import { execFile, spawn, type ChildProcess } from 'node:child_process'
+/** Tests for scripts/dsh-superagent using a temporary checkout with spaces and stubbed ps, tmux, dsh, pnpm and git fixtures. */
+import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, utimesSync, writeFileSync }
   from 'node:fs'
 import { createServer, type Server } from 'node:http'
@@ -13,6 +13,34 @@ let server: Server | undefined
 let sleepers: ChildProcess[] = []
 const control = (profile: string) => join(root, '.artifacts', 'control', 'profiles', profile)
 const program = (name: string, body: string) => writeFileSync(join(root, 'bin', name), `#!/bin/sh\n${body}\n`, { mode: 0o755 })
+/** Run git in the temporary root with an explicit identity, because the global git configuration names none. */
+function git(...args: string[]): string {
+  return execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args],
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim()
+}
+/** Turn the temporary root into a checkout of acme/widgets on main whose bare remote is one commit ahead. */
+function checkout(): { first: string; second: string } {
+  writeFileSync(join(root, '.gitignore'), ['bin/', 'remotes/', 'ps.txt', 'ps-started.txt', 'tmux.log', 'pane*', 'launched',
+    'held', 'pnpm.log', 'launches', 'current-pid', 'state/', 'rollback.ps', '.artifacts/'].join('\n') + '\n')
+  git('init', '-b', 'main')
+  git('add', '-A')
+  git('commit', '-m', 'the checkout')
+  const first = git('rev-parse', 'HEAD')
+  mkdirSync(join(root, 'remotes', 'acme'), { recursive: true })
+  git('init', '--bare', join(root, 'remotes', 'acme', 'widgets.git'))
+  git('remote', 'add', 'origin', join(root, 'remotes', 'acme', 'widgets.git'))
+  git('push', '-u', 'origin', 'main')
+  writeFileSync(join(root, 'build.txt'), 'the next commit\n')
+  git('add', 'build.txt')
+  git('commit', '-m', 'the next commit')
+  const second = git('rev-parse', 'HEAD')
+  git('push', 'origin', 'main')
+  git('reset', '--hard', first)
+  return { first, second }
+}
+/** The arguments of every pnpm command the stub ran. */
+const builds = (): string[] => existsSync(join(root, 'pnpm.log'))
+  ? readFileSync(join(root, 'pnpm.log'), 'utf8').split('\n').filter(Boolean) : []
 /** Spawn a dummy process whose PID can be listed by the fake ps binary; ignoreInterrupt simulates a hung graceful stop. */
 function sleeper(ignoreInterrupt = false): number {
   const [program, args] = ignoreInterrupt ? ['sh', ['-c', 'trap "" INT; exec sleep 60']] as const : ['sleep', ['60']] as const
@@ -40,6 +68,7 @@ done < "$list"`)
   program('tmux', `for a in "$@"; do printf '%s\\n' "$a"; done >> '${root}/tmux.log'; echo --- >> '${root}/tmux.log'\n`
     + `case "$1" in has-session) exit 1;; new-*) touch '${root}/launched'; cat '${root}/pane';; esac`)
   program('dsh', 'exit 0')
+  program('pnpm', `for a in "$@"; do printf '%s\\n' "$a"; done >> '${root}/pnpm.log'`)
 })
 afterEach(() => {
   server?.close(); server = undefined
@@ -62,6 +91,44 @@ async function answering(state: unknown = READY, always = false): Promise<string
   })
   await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
   return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`
+}
+/** Start a mock management API that answers `GET state` only while the PID recorded in current-pid is alive, as a stopped service answers nothing. */
+async function serving(state: unknown): Promise<string> {
+  server = createServer((_request, response) => {
+    let alive = false
+    try {
+      const pid = Number(readFileSync(join(root, 'current-pid'), 'utf8').trim())
+      if (Number.isInteger(pid) && pid > 0) { process.kill(pid, 0); alive = true }
+    } catch {}
+    if (!alive) { response.writeHead(503).end(); return }
+    response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(state))
+  })
+  await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
+  return `http://127.0.0.1:${(server!.address() as AddressInfo).port}`
+}
+/** The `GET state` answer activate reads: the database directory and the Executor load. */
+const readyState = (running = 0) => ({ health: { runtime: { state: 'ready', detail: '' } },
+  setup: { problem: null, feishuProblem: null, machine: { stateDir: join(root, 'state') } }, load: { running, queued: 0 } })
+/** Write the database activate backs up, with a write-ahead log. */
+function database(text = 'the database'): void {
+  mkdirSync(join(root, 'state'), { recursive: true })
+  writeFileSync(join(root, 'state', 'orchestrator.sqlite'), text)
+  writeFileSync(join(root, 'state', 'orchestrator.sqlite-wal'), 'the write-ahead log')
+}
+/** Install a tmux stub whose launch records the PID in `pane` as the live service; the first launch of rollback mode prints none. */
+function launching(skipFirst = false): void {
+  program('tmux', `for a in "$@"; do printf '%s\\n' "$a"; done >> '${root}/tmux.log'; echo --- >> '${root}/tmux.log'
+case "$1" in
+  has-session) exit 1;;
+  new-*)
+    touch '${root}/launched'
+    n=$(cat '${root}/launches' 2>/dev/null); n=\${n:-0}
+    n=$((n+1)); printf '%s\\n' "$n" > '${root}/launches'
+    ${skipFirst ? '[ "$n" = 1 ] && exit 0\n    ' : ''}pid=$(cat '${root}/pane')
+    printf '%s\\n' "$pid" > '${root}/current-pid'
+    printf '%s node node /opt/dsh --profile superagent --no-open\\n' "$pid" >> '${root}/ps-started.txt'
+    printf '%s\\n' "$pid";;
+esac`)
 }
 const status = async (profile: string, url = 'http://127.0.0.1:9') =>
   JSON.parse((await run('status', '--profile', profile, '--url', url)).stdout) as { pids: number[]; manually_stopped: boolean }
@@ -232,3 +299,172 @@ it('does not signal a process that took the recorded service PID, and keeps a st
   expect(await run('stop', '--stop-timeout', '1')).toMatchObject({ code: 1, stderr: expect.stringContaining('Graceful stop timed out') })
   expect(existsSync(join(control('superagent'), 'manually-stopped'))).toBe(true)
 }, 20_000)
+
+it('fast-forwards to the remote main, builds, and builds nothing when it is already there', async () => {
+  const { first, second } = checkout()
+  const ahead = await run('prepare', '--repository', 'acme/widgets')
+  expect(ahead).toMatchObject({ code: 0 })
+  expect(ahead.stdout).toContain(`prepare: fast-forwarded from ${first.slice(0, 12)} to ${second.slice(0, 12)} on main`)
+  expect(ahead.stdout).toContain('$ pnpm install --frozen-lockfile')
+  expect(ahead.stdout).toContain('$ pnpm build')
+  expect(git('rev-parse', 'HEAD')).toBe(second)
+  // A fast-forward produces no merge commit: the new commit has one parent.
+  expect(git('rev-list', '--parents', '-n', '1', 'HEAD').split(' ')).toHaveLength(2)
+  expect(builds()).toEqual(['install', '--frozen-lockfile', 'build'])
+  const idempotent = await run('prepare', '--repository', 'acme/widgets')
+  expect(idempotent).toMatchObject({ code: 0 })
+  expect(idempotent.stdout).toContain(`prepare: up to date at ${second.slice(0, 12)} on main`)
+  expect(builds()).toEqual(['install', '--frozen-lockfile', 'build'])
+}, 60_000)
+it('resets the checkout to the previous commit and rebuilds it when the new build fails', async () => {
+  const { first } = checkout()
+  // The first build the stub runs fails; the rebuild after the reset succeeds.
+  program('pnpm', `case "$*" in *build*) if [ ! -f '${root}/failed' ]; then touch '${root}/failed'; exit 1; fi;; esac
+for a in "$@"; do printf '%s\\n' "$a"; done >> '${root}/pnpm.log'`)
+  const failed = await run('prepare', '--repository', 'acme/widgets')
+  expect(failed).toMatchObject({ code: 1,
+    stderr: expect.stringContaining(`prepare: pnpm build exited with code 1; the checkout is back at ${first.slice(0, 12)} and rebuilt.`) })
+  expect(git('rev-parse', 'HEAD')).toBe(first)
+  expect(builds()).toEqual(['install', '--frozen-lockfile', 'install', '--frozen-lockfile', 'build'])
+}, 60_000)
+it('refuses prepare on a dirty checkout, a detached HEAD or another branch, leaving HEAD where it was', async () => {
+  const { first } = checkout()
+  writeFileSync(join(root, 'dirty.txt'), 'uncommitted\n')
+  const dirty = await run('prepare', '--repository', 'acme/widgets')
+  expect(dirty).toMatchObject({ code: 1, stderr: expect.stringContaining('this checkout has uncommitted changes') })
+  expect(git('rev-parse', 'HEAD')).toBe(first)
+  rmSync(join(root, 'dirty.txt'))
+  git('checkout', '--detach')
+  expect(await run('prepare', '--repository', 'acme/widgets'))
+    .toMatchObject({ code: 1, stderr: expect.stringContaining('a detached HEAD; check out main') })
+  git('checkout', '-b', 'feature')
+  expect(await run('prepare', '--repository', 'acme/widgets'))
+    .toMatchObject({ code: 1, stderr: expect.stringContaining('is on feature; check out main') })
+  expect(git('rev-parse', 'HEAD')).toBe(first)
+  expect(builds()).toEqual([])
+}, 60_000)
+it('refuses to fast-forward when the local main has commits the remote does not have', async () => {
+  checkout()
+  writeFileSync(join(root, 'local.txt'), 'local work\n')
+  git('add', 'local.txt')
+  git('commit', '-m', 'local work')
+  const diverged = git('rev-parse', 'HEAD')
+  const refused = await run('prepare', '--repository', 'acme/widgets')
+  expect(refused).toMatchObject({ code: 1, stderr: expect.stringContaining('this checkout has commits origin/main does not have') })
+  expect(git('rev-parse', 'HEAD')).toBe(diverged)
+  expect(builds()).toEqual([])
+}, 60_000)
+it('refuses a --repository the checkout has no remote for, and a missing or malformed one', async () => {
+  const { first } = checkout()
+  const unmatched = await run('prepare', '--repository', 'other/repo')
+  expect(unmatched).toMatchObject({ code: 1, stderr: expect.stringContaining('No remote of this checkout names other/repo') })
+  expect(unmatched.stderr).toContain('git remote add origin')
+  expect(await run('prepare')).toMatchObject({ code: 1, stderr: expect.stringContaining('prepare needs --repository <owner/name>') })
+  expect(await run('activate', '--repository', 'acme')).toMatchObject({ code: 1, stderr: expect.stringContaining('must be owner/name') })
+  expect(git('rev-parse', 'HEAD')).toBe(first)
+  expect(builds()).toEqual([])
+}, 60_000)
+it('refuses prepare while another control operation holds the lock, leaving HEAD where it was', async () => {
+  const { first } = checkout()
+  mkdirSync(control('superagent'), { recursive: true })
+  const held = join(root, 'held')
+  const holder = spawn('python3', ['-c', `import fcntl, pathlib, time
+lock = open(${JSON.stringify(join(control('superagent'), 'operation.lock'))}, 'a')
+fcntl.flock(lock, fcntl.LOCK_EX)
+pathlib.Path(${JSON.stringify(held)}).touch()
+time.sleep(30)`], { stdio: 'ignore' })
+  sleepers.push(holder)
+  while (!existsSync(held)) await new Promise(resolve => setTimeout(resolve, 50))
+  expect(await run('prepare', '--repository', 'acme/widgets')).toMatchObject({ code: 1,
+    stderr: expect.stringContaining('Another dsh-superagent control operation is in progress') })
+  expect(git('rev-parse', 'HEAD')).toBe(first)
+  expect(builds()).toEqual([])
+}, 60_000)
+it('activates a new commit: backs up the database and restarts on it', async () => {
+  const { second } = checkout()
+  database()
+  const old = sleeper(), next = sleeper()
+  processes(service(old))
+  writeFileSync(join(root, 'current-pid'), `${old}\n`)
+  writeFileSync(join(root, 'pane'), `${next}\n`)
+  launching()
+  const url = await serving(readyState())
+  const activated = await run('activate', '--repository', 'acme/widgets', '--url', url, '--timeout', '10', '--stop-timeout', '5')
+  expect(activated).toMatchObject({ code: 0 })
+  expect(activated.stdout).toContain('dsh-superagent stopped.')
+  expect(activated.stdout).toContain('activate: backed up the database to ')
+  expect(activated.stdout).toContain(`activate: ${second.slice(0, 12)} is running on main.`)
+  expect(git('rev-parse', 'HEAD')).toBe(second)
+  expect(readFileSync(join(control('superagent'), 'service.pid'), 'utf8')).toBe(`${next}\n`)
+  expect(existsSync(join(control('superagent'), 'manually-stopped'))).toBe(false)
+  const backups = readdirSync(join(root, '.artifacts', 'backups'))
+  expect(backups).toHaveLength(1)
+  expect(backups[0]).toMatch(/^orchestrator-superagent-\d{8}-\d{6}/)
+  const backup = join(root, '.artifacts', 'backups', backups[0]!)
+  expect(readFileSync(join(backup, 'orchestrator.sqlite'), 'utf8')).toBe('the database')
+  expect(readFileSync(join(backup, 'orchestrator.sqlite-wal'), 'utf8')).toBe('the write-ahead log')
+  expect(builds()).toEqual(['install', '--frozen-lockfile', 'build'])
+}, 60_000)
+it('skips activation while Executor Sessions are working', async () => {
+  const old = sleeper()
+  processes(service(old))
+  writeFileSync(join(root, 'current-pid'), `${old}\n`)
+  const url = await serving(readyState(2))
+  const idle = await run('activate', '--repository', 'acme/widgets', '--if-idle', '--url', url)
+  expect(idle).toMatchObject({ code: 0,
+    stdout: expect.stringContaining('2 Executor Session(s) are still working; activation is skipped.') })
+  expect(existsSync(join(root, '.artifacts', 'backups'))).toBe(false)
+  expect(() => process.kill(old, 0)).not.toThrow()
+}, 30_000)
+it('skips activation after an intentional stop without reading the service', async () => {
+  mkdirSync(control('superagent'), { recursive: true })
+  writeFileSync(join(control('superagent'), 'manually-stopped'), '2026-01-01T00:00:00+0000\n')
+  const skipped = await run('activate', '--repository', 'acme/widgets', '--respect-stop', '--url', 'http://127.0.0.1:9')
+  expect(skipped).toMatchObject({ code: 0, stdout: expect.stringContaining('Intentional stop is active; activation skipped.') })
+  expect(existsSync(join(root, '.artifacts', 'backups'))).toBe(false)
+}, 20_000)
+it('refuses to activate while no service answers, because the state and database are unknown', async () => {
+  checkout()
+  const refused = await run('activate', '--repository', 'acme/widgets', '--url', 'http://127.0.0.1:9')
+  expect(refused).toMatchObject({ code: 1, stderr: expect.stringContaining('activate: nothing answers at http://127.0.0.1:9') })
+  expect(builds()).toEqual([])
+  expect(existsSync(join(root, 'tmux.log'))).toBe(false)
+}, 30_000)
+it('skips activation on an up-to-date checkout when --only-when-behind asks for it', async () => {
+  checkout()
+  database()
+  const old = sleeper()
+  processes(service(old))
+  writeFileSync(join(root, 'current-pid'), `${old}\n`)
+  const url = await serving(readyState())
+  expect((await run('prepare', '--repository', 'acme/widgets')).code).toBe(0)
+  const skipped = await run('activate', '--repository', 'acme/widgets', '--only-when-behind', '--url', url)
+  expect(skipped).toMatchObject({ code: 0, stdout: expect.stringContaining('activate: already up to date at ') })
+  expect(skipped.stdout).toContain('nothing to activate.')
+  expect(skipped.stdout).not.toContain('backed up')
+  expect(existsSync(join(root, '.artifacts', 'backups'))).toBe(false)
+  expect(() => process.kill(old, 0)).not.toThrow()
+}, 60_000)
+it('rolls the checkout, the database and the service back when the new build does not start', async () => {
+  const { first } = checkout()
+  database('the old database')
+  const old = sleeper(), previous = sleeper()
+  processes(service(old))
+  writeFileSync(join(root, 'current-pid'), `${old}\n`)
+  writeFileSync(join(root, 'pane'), `${previous}\n`)
+  launching(true)
+  const url = await serving(readyState())
+  const failed = await run('activate', '--repository', 'acme/widgets', '--url', url, '--timeout', '2', '--stop-timeout', '5')
+  expect(failed).toMatchObject({ code: 1 })
+  expect(failed.stdout).toContain('activate: the new build did not start (Startup health check timed out')
+  expect(failed.stdout).toContain(`rolling back to ${first.slice(0, 12)}.`)
+  expect(failed.stdout).toContain('activate: restored the database from ')
+  expect(failed.stdout).toContain(`activate: rolled back to ${first.slice(0, 12)}; the previous version is running again.`)
+  expect(git('rev-parse', 'HEAD')).toBe(first)
+  expect(readFileSync(join(root, 'state', 'orchestrator.sqlite'), 'utf8')).toBe('the old database')
+  expect(readFileSync(join(root, 'state', 'orchestrator.sqlite-wal'), 'utf8')).toBe('the write-ahead log')
+  expect(builds()).toEqual(['install', '--frozen-lockfile', 'build', 'install', '--frozen-lockfile', 'build'])
+  expect(readFileSync(join(root, 'ps-started.txt'), 'utf8'))
+    .toContain(`${previous} node node /opt/dsh --profile superagent --no-open`)
+  expect(readFileSync(join(control('superagent'), 'service.pid'), 'utf8')).toBe(`${previous}\n`)
+}, 60_000)

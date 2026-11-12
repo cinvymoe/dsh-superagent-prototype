@@ -130,6 +130,27 @@ Each profile stores logs and control files under `.artifacts/`:
 
 Open the URL printed in the log, then choose **Superagent** in the sidebar.
 
+### Prepare and activate a local checkout
+
+A profile whose plugin is a local checkout (`dsh plugin add "link:<checkout>"`) loads built files, so a merged commit needs a build before a restart. Two actions do the upgrade steps for a checkout this script manages:
+
+```sh
+scripts/dsh-superagent prepare --repository acme/widgets
+scripts/dsh-superagent activate --repository acme/widgets
+```
+
+Both actions take `--repository owner/name`, exit 1 without it, and refuse a malformed value. `prepare` finds the remote whose URL's last two path segments name that repository: https, SSH (`git@host:owner/name`), and local-path forms work, ignoring case and a `.git` suffix, with `origin` preferred and otherwise the first remote by name. It refuses, changing nothing, unless HEAD is on `main` and the worktree is clean, and it refuses when local `main` has commits the remote does not have. Otherwise it fetches `main` into `refs/dsh-superagent/main`, fast-forwards with `git merge --ff-only` (never a merge commit), then prints and runs `pnpm install --frozen-lockfile` and `pnpm build` in the checkout; pnpm must be on PATH. When HEAD already is the remote main it prints `prepare: up to date at <sha> on main` and builds nothing; when it moves it prints `prepare: fast-forwarded from <sha> to <sha> on main` before the two commands. A failed install or build resets the checkout to the commit from before and rebuilds it, then exits 1.
+
+`activate` merges and restarts in one step. It first reads `GET state`: `setup.machine.stateDir` locates `<stateDir>/orchestrator.sqlite`, and `load.running` counts the Executor Sessions at work. Nothing answering means exit 1, because the state and database must be known before anything is stopped. It then runs `prepare`, stops the service as `restart` does (not an intentional stop, so no `manually-stopped` marker), copies the database and its `-wal` file into `.artifacts/backups/orchestrator-<profile>-<stamp>/`, keeps the newest ten backup directories and prints the new one's path, starts the service and waits for the same health check as `start`. It prints `activate: <sha> is running on main.` and returns that health check's exit code.
+
+| Flag | Effect |
+| --- | --- |
+| `--if-idle` | Exit 0 without stopping anything while `load.running` is above zero, because Executor Sessions are working |
+| `--only-when-behind` | Exit 0 when `prepare` left HEAD where it was, so an up-to-date checkout is not restarted |
+| `--respect-stop` | Exit 0 without reading the service while the profile's `manually-stopped` marker exists |
+
+A database migrated by a newer version cannot be opened by an older one, which is why activation backs it up first. When the new build does not become healthy, `activate` stops whatever it left running, resets the checkout to the commit from before `prepare`, restores the backed-up database (deleting the failed version's `-wal` and `-shm` files first), rebuilds, and starts the previous version. It prints `activate: the new build did not start (...); rolling back to <sha>.`, `activate: restored the database from ...`, and `activate: rolled back to <sha>; the previous version is running again.`, then exits 1, with the previous version running again from the restored database.
+
 ### Hourly check
 
 Create the hourly check in the DeepSeek Harness profile you normally use, not in `superagent`. It must keep running when the agent service is down. Ask an agent in that profile to create an hourly schedule using this prompt, with the checkout path filled in:
@@ -239,6 +260,8 @@ From an allowed GitHub account, open an Issue or post a comment containing `@<ag
 
 A restart ends running Assignments and starts replacements with recovery notes. Team text and overridden prompt parts are retained; parts without overrides follow the new defaults. Review parts marked **Default updated** after upgrading.
 
+For a checkout the script manages, `activate` performs steps 2 to 4 in one action, backing up the database and rolling back when the new build does not start; see Prepare and activate a local checkout above. `prepare` only merges and builds.
+
 A database migrated by a newer version cannot be opened by an older one. Rollback therefore requires the pre-upgrade backup. After upgrading DeepSeek Harness itself, restart the running instance so the panel loads matching artifacts.
 
 ### Agent presets
@@ -267,6 +290,14 @@ Setup problems appear on the overview with a link to the fix, in the panel's lan
 | `status` exits 2 | A part reports an error, which a restart does not fix: `errors` names each part, as listed under Management API, with its detail; each part clears its own entry once it works again |
 | `status` exits 3 | Setup waits: `setup` says what is missing, and the overview links to the setting that fixes it |
 | `status` exits 1 | The service does not run, runs twice, does not answer, or its runtime reports an error; the output and the newest log say which |
+| `prepare: this checkout is on a detached HEAD` or `… is on <branch>; check out main` | The checkout is not on `main`: switch to `main`, then run the command again |
+| `prepare: this checkout has uncommitted changes` | Commit or stash them; a build over a dirty worktree is refused |
+| `prepare: this checkout has commits <remote>/main does not have` | Local `main` diverged: merge or discard those commits. `prepare` only fast-forwards and never creates a merge commit |
+| `No remote of this checkout names <owner/name>` | Add one with `git remote add origin <url of owner/name>`, or pass the repository an existing remote names |
+| `prepare needs --repository <owner/name>` or `--repository must be owner/name` | Pass `--repository owner/name` |
+| `pnpm must be on PATH to install and build the checkout.` | Install pnpm and put it on PATH, then run the command again |
+| `activate: nothing answers at …; start the service once` | The state and database are unknown while the service is down: run `start`, then `activate` |
+| `activate: the new build did not start (…); rolling back to …` | The new commit's build does not start. The lines after it name each rollback step, and the previous version runs again from its restored database. Read the newest log, fix the build, then try again |
 | `… timed out after 90 s`, `… was stopped by …`, `… exited with code …` or `… could not run: …` | A CLI failed without printing why; run the named program by hand as the operator's user to see its own message |
 | The panel says dsh-superagent is not answering | It is restarting, or did not start because of its configuration; the DeepSeek Harness log names the cause |
 | `dsh-superagent configuration has keys it does not use` (log) | Remove the named keys; the message says where each value lives now |
