@@ -28,7 +28,7 @@ env -u GIT_CONFIG_GLOBAL -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER
 git diff --check
 ```
 
-Expected: typecheck clean; targeted 6 files / 47 tests; full `pnpm check` passes (63 files / 1257 tests + build).
+Expected: typecheck clean; targeted 6 files / 49 tests; full `pnpm check` passes (63 files / 1268 tests + build) on the post-merge base.
 
 ## Visual evidence
 
