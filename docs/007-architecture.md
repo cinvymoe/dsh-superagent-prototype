@@ -200,7 +200,7 @@ That context supplies deployment and commands, setup readiness (`ready`, `config
 
 `prepare(ticket, outcome)` supplies the Engine's `prepareTicket` hook: short name, directory and `ticketExecution` assignment text. It resolves the directory root from the local project's `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`, and records an explicitly configured root on the Ticket's Execution so a later settings change cannot move it. `workerSessionId(ticket.id)` derives the Session id.
 
-`prepareDirectory` validates an explicit root before creating anything: it must exist, be a directory and accept a write. A failure throws `PrepareFailed` with the absolute path and reason, without creating a directory or falling back to the default root; the default root is still created when missing.
+`prepareDirectory` validates an explicit root before creating anything: it must exist, be a directory and accept a write. A failure throws `PrepareFailed` with the absolute path and reason, without creating a directory or falling back to the default root; the default root is still created when missing. The prepare command runs with the selected root as its working directory, so it creates only the checkout at `$DSH_SUPERAGENT_DIR` and does not choose the root.
 
 `WorkerSlots` reserves capacity before a launch or a delivery that wakes an idle worker. A human message can use one slot beyond `maxWorkers`, and wakes have priority over launches. `activeCount` supplies panel load.
 
@@ -300,7 +300,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/limits.ts` | The limits of the values a person sets, which the settings schemas check and the panel's fields offer |
 | `src/kv.ts` | `KV`: every family of `kv` records with its key, its value's type and its owner, and the `Key` and `Family` types the Store and `SourceContext.state` take |
 | `src/navigation.ts` | Opens a DeepSeek Harness Session from the panel once the host's catalog lists it |
-| `src/core/model.ts` | The domain types, among them the typed Ticket and `MandateBasis`, with `threadKey`, `ticketOutcome`, `reached`, `followupOwners`, `settled`, `waitsForPerson`, `liveTicket`, `runningAssignment`, `latestAssignment` and `latestReport` |
+| `src/core/model.ts` | The domain types, among them the typed Ticket, `Execution` with its optional explicit `worktreeRoot`, and `MandateBasis`, with `threadKey`, `ticketOutcome`, `reached`, `followupOwners`, `settled`, `waitsForPerson`, `liveTicket`, `runningAssignment`, `latestAssignment` and `latestReport` |
 | `src/core/ports.ts` | The ports: `Repositories`, `Policy`, `SourceScope`, `Assessor`, `Executor`, `Outbox`, and the domain events |
 | `src/core/engine.ts` | The Engine, the core's entry point, and the role interfaces `EngineForSources`, `EngineForMainSession`, `EngineForPeople`, `EngineForSettings` and `EngineForExecutor` |
 | `src/core/part.ts` | `EnginePart`, the base of the Engine's parts, and `EngineOptions` |
@@ -339,7 +339,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory-root resolution (project `worktreeRoot` > `executor.directory` > `<stateDir>/work`) and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
 | `src/app/links.ts` | `sourceLink`, the page of a Trigger's message, and `candidateCard` |
-| `src/app/local.ts` | `LocalIssues`: local projects, the issue records bound to them, their comments as human Triggers, and the read-only alignment proposal a person confirms or sends back |
+| `src/app/local.ts` | `LocalIssues`: local projects with their optional absolute worktree root, the issue records bound to them, their comments as human Triggers, and the read-only alignment proposal a person confirms or sends back |
 | `src/app/cards.ts` | Compact cards of Triggers, Tickets, Threads and Decisions for models, the closed set of ticket card states `TICKET_STATES`, and `textPage` |
 | `src/app/resources.ts` | `RESOURCES` and `readResource`: what `orchestrator_read` reads, for each role |
 | `src/app/tools/tool.ts` | The `Tool` type, `readTool`, the `orchestrator_read` of both roles, and `AcknowledgementSchema` |
@@ -354,7 +354,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/views/sources.ts` | The Source status: each Source instance's state, its last day's counts, and what it filtered and dropped in that day |
 | `src/app/views/settings.ts` | The settings page's view: each block with its revision, each Source's settings with its kind's form, and the execution environment |
 | `src/app/views/overview.ts` | The overview: Tickets that need a person, problems, the last day's flow and the Executor's load |
-| `src/executor/dsh.ts` | The DshExecutor, `WorkerSlots`, `ticketExecution`, `inputMessage` and `mandateInstructions` |
+| `src/executor/dsh.ts` | The DshExecutor, its `prepareDirectory` validation of an explicit worktree root, `WorkerSlots`, `ticketExecution`, `inputMessage` and `mandateInstructions` |
 | `src/executor/background.ts` | A worker's background work in DeepSeek Harness, the shell jobs its Session owns (`ctx.jobs`) and its subagents (`ctx.subagents`): `runningJobs`, `untilQuiet`, `killJobs`, `collectJobs`, `stopSubagents`, `stopBackground`, `until`, and `cancelled`, the workers whose turn a stop of their subagents cancelled |
 | `src/infra/commands.ts` | `Commands`, the CLI transport: `run`; `api` and `pages`, limited to the configured repository and validated; `lark` as the bot; `git`. `CliError` carries the code a command's output reports, such as a GitHub HTTP status, and a command that prints nothing fails with how it ended, never with its arguments; `validItems` skips and counts the malformed items of a list |
 | `src/infra/environment.ts` | The agent's process environment: command shims, the git configuration and credential helper, `runAsWorker`, and the checks of the environment and of a Ticket's directory |
@@ -372,7 +372,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
 | `src/sources/github-read.ts` | CI snapshots, repository reads, the `github/` resources, and `githubThreadContext`: an Issue's or pull request's conversation by page |
 | `src/sources/local.ts` | The local panel kind and plugin entry, exported as `./local-watch`: human Triggers, a Channel that needs no transport, and the default local policy |
-| `src/sources/local-format.ts` | The local project, issue, slices and alignment proposal, shared by the host and the panel |
+| `src/sources/local-format.ts` | The local project (with its optional worktree root), issue, slices and alignment proposal, shared by the host and the panel |
 | `src/sources/feishu.ts` | The Feishu kind and plugin entry, exported as `./feishu-watch` |
 | `src/sources/feishu-trigger.ts` | Feishu messages as Triggers, by one rule for live events, history pages and topic pages |
 | `src/sources/feishu-loops.ts` | The Feishu loops: the event consumer, history recovery, chat names and polling of subscribed topics |
@@ -384,7 +384,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/client/app.tsx` | The panel: header, search, glossary, tabs and the page of the current route |
 | `src/client/provider.tsx` | What every page reads from its host: copy, calls, navigation, notices, the state poll, and `restart`, which reads the state quickly while dsh-superagent restarts |
 | `src/client/api.ts` | Calls and polls of the management API, typed by `src/app/api.ts`, and the Decision filters of the Eval status |
-| `src/client/discuss.tsx` | The local project and issue board: create a project with its repository, submit a requirement, read its discussion, and confirm or send back the Aligner's proposal |
+| `src/client/discuss.tsx` | The local project and issue board: create a project with its name, repository and optional worktree root, submit a requirement, read its discussion, and confirm or send back the Aligner's proposal |
 | `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads, and the route memory with the settings group opened last |
 | `src/client/overview.tsx` | The overview |
 | `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
@@ -412,8 +412,8 @@ Some generic modules still refer directly to GitHub or Feishu:
 | --- | --- |
 | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
-| `tests/local.spec.ts` | The local issue board: projects, a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
-| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, and dispatching a confirmed plan's slices as tickets |
+| `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, a requirement and its comments as human Triggers, the Aligner's proposal and a person's review, and closing |
+| `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, dispatching a confirmed plan's slices as tickets, and project worktree roots |
 | `tests/panel-discuss.spec.tsx` | The Discuss board: project creation with an optional worktree root, requirement submission, and project tags |
 | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
 | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |

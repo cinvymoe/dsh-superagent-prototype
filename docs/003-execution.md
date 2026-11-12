@@ -22,7 +22,7 @@ An `idle` Ticket has finished its turn without an outstanding question. A Trigge
 
 ## The Executor
 
-Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under one root, chosen in this order: the local project's `worktreeRoot`, the Executor's `directory`, then `<stateDir>/work`. The chosen root is recorded on the Ticket as `execution.worktreeRoot` only when it was configured explicitly; a later settings change does not move an accepted Ticket. A Ticket created from a confirmed alignment slice starts the feature-exec `execute` flow, which ends at an open PR; review and merge stay with a person.
+Each Ticket gets an Executor Session named `worker-<ticket id>` and a directory named after the Ticket's short name. Directories are created under one root, chosen in this order: the local project's `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`. The panel labels `executor.directory` **Ticket directory root**. When the chosen root was configured explicitly, it is recorded on the Ticket as `execution.worktreeRoot`; a later settings change does not move an accepted Ticket.
 
 Executor Sessions run commands without approval as the operator's OS user. Their `dsh-superagent-worker` preset contains the tools needed for work and moves foreground shell commands to background jobs after 5 seconds. This lets a worker receive new messages at the next step instead of waiting for a long command to finish.
 
@@ -48,9 +48,9 @@ Worker subagents, including nested ones, use DeepSeek Harness's `standard` prese
 
 ### Preparing a Ticket directory
 
-Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` in the chosen root. It has ten minutes to finish. Without a prepare command, the worker starts in an empty directory.
+Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` and the chosen root as its working directory. It has ten minutes to finish. The command creates the checkout; it does not choose the root. Without a prepare command, the worker starts in an empty directory.
 
-An explicitly configured root (a project's `worktreeRoot` or the Executor's non-empty `directory`) is checked before anything is created: it must exist, be a directory and accept a write. A missing, non-directory or read-only root fails the Ticket with the absolute path and the reason; no directory is created and the launch never falls back to the default root. Fix the root, then retry the Ticket or write on its Thread. The default `<stateDir>/work` is still created when missing.
+An explicitly configured root (a project's `worktreeRoot` or a non-empty `executor.directory`) is checked before anything is created: it must exist, be a directory and accept a write. A missing, non-directory or read-only root fails the Ticket with the absolute path and the reason; the launch never creates that root, never creates the Ticket directory under the default root, and never falls back. Fix the root, then retry the Ticket or write on its Thread: preparation runs again. The default `<stateDir>/work` is different: it is still created when missing.
 
 A failed command fails the Ticket and records its output. A retry or a person's message on one of the Ticket's Threads tries preparation again. A typical command uses `git worktree` to create a checkout. A pull request belongs to the Ticket when its branch's last path segment matches the Ticket's short name.
 

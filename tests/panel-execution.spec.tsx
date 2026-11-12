@@ -108,6 +108,15 @@ it('links a question to its Channel, folds consecutive automated messages among 
   expect(document.querySelector('[role="tooltip"]')).toBeNull()
 })
 
+it('tells a person that an explicitly configured ticket directory root must exist and be writable', async () => {
+  await mount()
+  await click(zh['tab.execution'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  const root = field<HTMLInputElement>(zh.executionDirectory).closest('.dt-field')!.querySelector<HTMLElement>('.dt-info')!
+  await act(async () => { root.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toContain('显式配置时必须已存在且可写')
+})
+
 it('offers a Ticket awaiting review its review place and Session in the page head', async () => {
   const t1 = server.ticketDetails.t1!
   server.ticketDetails.t1 = { ...t1, stage: 'person', action: 'review', threads: [threadSummary(),
