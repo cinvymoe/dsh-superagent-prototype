@@ -57,7 +57,11 @@ export function ProjectBar({ route }: { route: Route }) {
     // A switch on one of the two requirement tabs keeps that tab; every other tab lands on the requirement list. These
     // switches replace the entry so browsing projects does not grow the back stack.
     if (route.page === 'newRequirement') navigate({ page: 'newRequirement' }, true)
-    else if (route.page === 'requirements' && route.id === undefined && !route.create) navigate({ page: 'requirements' }, true)
+    else if (route.page === 'requirements' && route.id === undefined && !route.create) {
+      // The requirement list keeps its processing-status filter across projects; the project form keeps its own landing.
+      const filter = route.edit === undefined ? route.query?.filter ?? 'pending' : 'pending'
+      navigate(filter === 'pending' ? { page: 'requirements' } : { page: 'requirements', query: { filter } }, true)
+    }
     else navigate({ page: 'requirements' })
   }, [current, setProject, navigate, route])
   // Arrow keys, Home and End move the selection with the roving tab, as the page tabs do.
