@@ -151,6 +151,46 @@ Both actions take `--repository owner/name`, exit 1 without it, and refuse a mal
 
 A database migrated by a newer version cannot be opened by an older one, which is why activation backs it up first. When the new build does not become healthy, `activate` stops whatever it left running, resets the checkout to the commit from before `prepare`, restores the backed-up database (deleting the failed version's `-wal` and `-shm` files first), rebuilds, and starts the previous version. It prints `activate: the new build did not start (...); rolling back to <sha>.`, `activate: restored the database from ...`, and `activate: rolled back to <sha>; the previous version is running again.`, then exits 1, with the previous version running again from the restored database.
 
+### After a merge: make the running version match the checkout
+
+Four steps make the running version match the checkout. dsh-superagent loads its built files at startup, and Node caches those modules, so neither the plugin nor its panel can replace the code of the instance that loaded them. A merged pull request changes the repository, not the running process.
+
+1. **Merge the pull request.** Nothing on this machine changes yet.
+
+2. **Refresh and rebuild the checkout.** Choose **Pull and build** in the **Running checkout** block of **Settings → Deployment**, or run the same action in the checkout:
+
+   ```sh
+   scripts/dsh-superagent prepare --repository acme/widgets
+   ```
+
+   A merge prints `prepare: fast-forwarded from <old sha> to <new sha> on main`, then runs and prints `$ pnpm install --frozen-lockfile` and `$ pnpm build`, and exits 0. An up-to-date checkout prints `prepare: up to date at <sha> on main`, builds nothing and exits 0. A refusal changes nothing and exits 1; a failed install or build resets the checkout to the previous commit, rebuilds it and exits 1. The page shows the run's log path when it fails. Nothing restarts, so the running instance keeps the old code and, after a merge, the page shows **Takes effect after a restart** (`restartRequired`, also on `GET deployment/checkout`).
+
+3. **Restart per deployment form.** `prepare` stops after the build; the form decides who restarts:
+
+   | Deployment form | How the new build starts |
+   | --- | --- |
+   | A dedicated profile such as `superagent`, started by this script | `scripts/dsh-superagent restart --profile superagent`, or `scripts/dsh-superagent activate --repository acme/widgets`, which merges the checkout, backs up the database, restarts the service and rolls back when the new build is unhealthy |
+   | A host profile, the plugin loaded into a DSH instance another supervisor owns, such as a DSH Web instance a systemd unit starts (for example the unit `dsh-web.service` on port 8399) | Restart that process the way its supervisor does, for example `systemctl restart dsh-web` for that unit, then wait for the panel to answer; the plugin cannot restart it |
+
+   `prepare` is shared by both forms; `restart` and `activate` restart the profile's process in this script's tmux session `dsh-<profile>`, so never point them at a host profile: they would stop the process its supervisor owns and relaunch it under the script's tmux session. The plugin never restarts the process that loaded it.
+
+4. **Verify.** Once the process runs the new build, the route answers with the new commit and no pending restart:
+
+   ```sh
+   curl -s -H 'x-orchestrator-request: 1' http://127.0.0.1:3082/orchestrator/api/deployment/checkout | jq '{head, restartRequired}'
+   ```
+
+   ```json
+   {
+     "head": "<new sha>",
+     "restartRequired": false
+   }
+   ```
+
+   The **Running checkout** block shows the same commit without the **Takes effect after a restart** badge, and `scripts/dsh-superagent status` exits 0.
+
+`prepare` exits 0 when the checkout was up to date or was merged and built, and 1 when it refused or a build failed. `activate` exits 0 when it skipped — an up-to-date checkout with `--only-when-behind`, working Executor Sessions with `--if-idle`, an intentional stop with `--respect-stop` — and 1 when it refused, `prepare` failed or it rolled back. When it activated, it returns the health check's code: 0 healthy, 2 when a part reports an error, 3 when setup waits. `restart` uses the four codes of `status`.
+
 ### Hourly check
 
 Create the hourly check in the DeepSeek Harness profile you normally use, not in `superagent`. It must keep running when the agent service is down. Ask an agent in that profile to create an hourly schedule using this prompt, with the checkout path filled in:
@@ -160,6 +200,14 @@ Check dsh-superagent: run `scripts/dsh-superagent --profile superagent status` i
 ```
 
 `--respect-stop` preserves an intentional stop. Only `stop` writes the marker; `start` clears it. `restart` writes no marker, so the check can recover a restart whose shutdown timed out.
+
+The same schedule can also make a merged checkout effective while nobody works, when the checkout belongs to a dedicated profile such as `superagent`. It cannot for a host profile: nothing here restarts a process another supervisor owns. Add a second hourly schedule with this prompt:
+
+```text
+Make a merged checkout of dsh-superagent effective: in <checkout> run `scripts/dsh-superagent --profile superagent activate --repository <owner/name> --only-when-behind --if-idle --respect-stop`. Exit 0 with `activate: already up to date at <sha> on main; nothing to activate.`, `activate: <n> Executor Session(s) are still working; activation is skipped.` or `Intentional stop is active; activation skipped.`: do nothing and say nothing. Exit 0 with `activate: <sha> is running on main.`: the running version changed, so report that single line. Exit 2: do not restart; tell me each part under `errors` with its detail, unless you already told me about the same ones. Exit 3: do not restart; tell me what `setup` says setup needs, unless you already told me. If it exits 1 or prints a `rolling back to` line, read the newest .artifacts/dsh-superagent-superagent-*.log and the Troubleshooting section of docs/006-deployment.md, fix what you can, and tell me what failed, what you did and whether the previous version runs again.
+```
+
+Both prompts report only when a check acted or failed. An unchanged checkout, a skipped activation and a healthy service stay silent.
 
 ## Settings
 
@@ -301,6 +349,10 @@ Setup problems appear on the overview with a link to the fix, in the panel's lan
 | `pnpm must be on PATH to install and build the checkout.` | Install pnpm and put it on PATH, then run the command again |
 | `activate: nothing answers at …; start the service once` | The state and database are unknown while the service is down: run `start`, then `activate` |
 | `activate: the new build did not start (…); rolling back to …` | The new commit's build does not start. The lines after it name each rollback step, and the previous version runs again from its restored database. Read the newest log, fix the build, then try again |
+| The page still shows **Takes effect after a restart** after a successful pull and build | The process still runs the code it loaded at startup, because the pull and build changed the disk only: restart it for its deployment form, with `restart --profile superagent`, `activate`, or its supervisor for a host profile |
+| `activate: <n> Executor Session(s) are still working; activation is skipped.` | Executor Sessions are busy, so `--if-idle` skipped the activation: retry when they finish, or drop `--if-idle` to restart now |
+| `Intentional stop is active; activation skipped.` | A `stop` wrote the manually-stopped marker, so `--respect-stop` skipped the activation: `start` clears the marker, then activate again |
+| The **Running checkout** block names a checkout other than the one you built | Another DSH process or profile serves the panel: build and restart the checkout that process loads |
 | `… timed out after 90 s`, `… was stopped by …`, `… exited with code …` or `… could not run: …` | A CLI failed without printing why; run the named program by hand as the operator's user to see its own message |
 | The panel says dsh-superagent is not answering | It is restarting, or did not start because of its configuration; the DeepSeek Harness log names the cause |
 | `dsh-superagent configuration has keys it does not use` (log) | Remove the named keys; the message says where each value lives now |

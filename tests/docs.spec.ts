@@ -139,3 +139,25 @@ describe('requirement message timeline documentation', () => {
     expect(architecture).toContain('its newest-first message timeline with the follow-up box above the list (a post appears first and clears the box)')
   })
 })
+
+describe('local checkout flow documentation', () => {
+  it('walks a merged pull request to a running version with the expected script output', () => {
+    const deployment = prose('docs/006-deployment.md')
+    expect(deployment).toContain('A merged pull request changes the repository, not the running process.')
+    expect(deployment).toContain('prepare: fast-forwarded from <old sha> to <new sha> on main')
+    expect(deployment).toContain('"restartRequired": false')
+    expect(deployment).toContain('The plugin never restarts the process that loaded it.')
+    expect(deployment).toContain('never point them at a host profile')
+    expect(deployment).toContain('--only-when-behind --if-idle --respect-stop')
+    expect(deployment).toContain('Both prompts report only when a check acted or failed.')
+  })
+  it('names the running checkout and the pull-and-build action in the panel document', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('**Running checkout**, the checkout the running plugin loads')
+    expect(panel).toContain('**Pull and build**')
+  })
+  it('states in the architecture document that rebuilt code needs the loading process to restart', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('A rebuilt checkout takes effect only when the process that loaded it restarts')
+  })
+})
