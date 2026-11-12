@@ -28,6 +28,7 @@ import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import type { LocalIssues } from './local.ts'
+import { QUESTION_CHARS, type LocalQuestions } from './local-questions.ts'
 import type { Projects } from './projects.ts'
 import { REQUIREMENT_BODY_BYTES } from '../limits.ts'
 
@@ -45,6 +46,7 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly local: LocalIssues
+  readonly localQuestions: LocalQuestions
   readonly projects: Projects
   dispatchPlan(issueId: string): Ticket[]
   /** Resolves once startup finishes or setup determines what is still missing. */
@@ -160,6 +162,7 @@ const PromptsQuery = z.object({ revision: count.optional(), offset: count.defaul
 const SourceBlock = z.templateLiteral(['source:', z.string().regex(/^[a-z][a-z0-9-]*$/)])
 const SettingsBlockSchema = z.union([z.enum(['policy', 'eval', 'executor']), SourceBlock])
 const SaveRequest = z.object({ value: z.unknown(), revision: z.number().int().nonnegative() })
+const QuestionRequest = z.object({ ticket: z.string().trim().min(1), text: z.string().trim().min(1).max(QUESTION_CHARS) })
 
 function routes(runtime: HttpHost): Routes {
   const { store } = runtime
@@ -269,6 +272,18 @@ function routes(runtime: HttpHost): Routes {
       const issue = runtime.local.close(params.id)
       if (!issue) throw new RouteError(404, 'Local issue not found')
       return { issue: runtime.local.view(issue) }
+    },
+    // Asking records `asked` and returns at once; the answer lands on the requirement record in the background.
+    'POST local/issues/:id/questions': async ({ params, body }) => {
+      const input = QuestionRequest.parse(await body())
+      const asked = runtime.localQuestions.ask(params.id, input.ticket, input.text)
+      if (!asked) throw new RouteError(404, 'Local issue not found')
+      return { issue: runtime.local.view(asked.issue), question: asked.question }
+    },
+    'POST local/issues/:id/questions/:questionId/retry': ({ params }) => {
+      const retried = runtime.localQuestions.retry(params.id, params.questionId)
+      if (!retried) throw new RouteError(404, 'Local question not found')
+      return { issue: runtime.local.view(retried.issue), question: retried.question }
     },
     'POST tickets/:id/retry': ({ params }) => { const id = ticket(params.id); runtime.engine.retryTicket(id); return { retried: true } },
     'POST tickets/:id/stop': ({ params }) => { const id = ticket(params.id); runtime.engine.stopTicket(id); return { stopped: true } },

@@ -8,7 +8,7 @@ import type { SettingsView } from './views/settings.ts'
 import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
-import type { LocalImageInput, LocalIssueView, LocalProject, LocalSlice } from '../sources/local-format.ts'
+import type { LocalImageInput, LocalIssueView, LocalProject, LocalQuestion, LocalSlice } from '../sources/local-format.ts'
 import type { ExecutionMode } from '../core/model.ts'
 import type { Receipt } from './store.ts'
 
@@ -47,6 +47,8 @@ export interface Api {
   'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string }; response: { issue: LocalIssueView; tickets: { id: string; title: string }[] } }
   'POST local/issues/:id/execution': { body: { mode: ExecutionMode }; response: { issue: LocalIssueView } }
   'POST local/issues/:id/close': { response: { issue: LocalIssueView } }
+  'POST local/issues/:id/questions': { body: { ticket: string; text: string }; response: { issue: LocalIssueView; question: LocalQuestion } }
+  'POST local/issues/:id/questions/:questionId/retry': { response: { issue: LocalIssueView; question: LocalQuestion } }
   'POST tickets/:id/retry': { response: { retried: true } }
   'POST tickets/:id/stop': { response: { stopped: true } }
   'POST executor/pause': { body: { paused: boolean }; response: { paused: boolean } }

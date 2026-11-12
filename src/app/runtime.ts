@@ -31,6 +31,8 @@ import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
 import { LocalIssues } from './local.ts'
+import { LocalQuestions } from './local-questions.ts'
+import { Questions } from './questions.ts'
 import { Projects } from './projects.ts'
 import type { LocalProject } from '../sources/local-format.ts'
 import type { LinkTarget } from './views/records.ts'
@@ -74,6 +76,7 @@ export class Runtime extends Service implements SourceHost {
   readonly engine: Engine
   readonly passes: Passes
   readonly local: LocalIssues
+  readonly localQuestions: LocalQuestions
   readonly projects: Projects
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
@@ -165,6 +168,10 @@ export class Runtime extends Service implements SourceHost {
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
       this.local = new LocalIssues({ store, stateDir: machine.stateDir, receive: trigger => this.passes.receive(trigger) })
+      // Asking is answered in the background, so a request never waits for a forked Session; a stop leaves the question `asked`.
+      this.localQuestions = new LocalQuestions({ store, local: this.local,
+        answers: new Questions({ context: ctx, store, sessions, lifetime: this.lifetime }), lifetime: this.lifetime,
+        warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       this.projects = new Projects({ store, local: this.local, settings: this.settings })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
@@ -263,6 +270,7 @@ export class Runtime extends Service implements SourceHost {
     // If stop() was called while awaiting setup, session creation, or policy sync, do not start background loops.
     if (this.closing()) return
     this.executor.resume()
+    this.localQuestions.resume()
     this.passes.start()
     this.effects.start()
     this.runtimeHealth.set({ state: 'ready', detail: 'Orchestrator is ready', at: now() })
@@ -271,7 +279,7 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
-      projects: this.projects,
+      localQuestions: this.localQuestions, projects: this.projects,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
@@ -288,7 +296,7 @@ export class Runtime extends Service implements SourceHost {
       const ids = [this.masterId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
       const agents = ids.map(id => this.ctx.agents.get(id as SessionId)).filter((agent): agent is Agent => agent !== undefined)
       for (const agent of agents) agent.cancel({ kind: 'user' }, { keepInbox: true })
-      await Promise.allSettled([passes, this.effects.drain(), ...agents.map(agent => agent.whenIdle())])
+      await Promise.allSettled([passes, this.effects.drain(), this.localQuestions.stop(), ...agents.map(agent => agent.whenIdle())])
       // The workers' jobs and subagents stop too: their ends would start worker turns without the tool limits released below.
       await this.executor.shutdown()
       this.executor.dispose()

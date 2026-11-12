@@ -201,6 +201,11 @@ const TEXT = {
   'userError.issueImageData': ['图片 {name} 不是有效的 base64 图片数据。', 'Image {name} is not valid base64 image data.'],
   'userError.executionMode': ['执行模式必须是 native 或 feature-exec。', 'Execution mode must be native or feature-exec.'],
   'userError.executionLocked': ['需求已有派发工单，执行模式不可再修改。', 'A requirement that has dispatched tickets keeps its execution mode.'],
+  'userError.questionText': ['提问需要填写内容。', USER_ERRORS.questionText[1]],
+  'userError.questionTicket': ['只能对这条需求派发过的工单提问。', USER_ERRORS.questionTicket[1]],
+  'userError.questionNoSession': ['这个工单还没有启动执行会话，等它运行后再提问。', USER_ERRORS.questionNoSession[1]],
+  'userError.questionNotFailed': ['只有失败的问题可以重试。', USER_ERRORS.questionNotFailed[1]],
+  'userError.questionLimit': ['一条需求最多保留 {max} 个提问。', USER_ERRORS.questionLimit[1]],
   // Overview
   sourceError: ['{source} 来源异常', '{source} Source failing'],
   needsYouNone: ['没有待处理的工单。', 'No pending Tickets.'],

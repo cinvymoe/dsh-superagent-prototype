@@ -58,6 +58,11 @@ export const USER_ERRORS = {
   issueImageType: ['refused', 'Image {name} must be a PNG, JPEG, WebP or GIF image'],
   issueImageSize: ['refused', 'Image {name} is larger than {max} bytes'],
   issueImageData: ['refused', 'Image {name} is not valid base64 image data'],
+  questionText: ['refused', 'A question needs text'],
+  questionTicket: ['refused', 'A question is only about one of the requirement\'s dispatched Tickets'],
+  questionNoSession: ['refused', 'The Ticket has not started its worker Session yet; ask once it has run'],
+  questionNotFailed: ['refused', 'Only a failed question can be retried'],
+  questionLimit: ['refused', 'A requirement keeps at most {max} questions'],
 } as const satisfies Record<string, readonly ['missing' | 'refused', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
 

@@ -475,6 +475,27 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     return { issue: issueView(next) }
   } },
+  // Requirement questions: recorded as asked at once; the background answer the host queues is not part of the panel's model.
+  'POST local/issues/:id/questions': { body: true, answer: ({ params, body }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    if (!issue) return refuse(404, 'Local issue not found')
+    const question = { id: `qn-${String((issue.questions ?? []).length).padStart(8, '0')}`, ticket: body.ticket as string,
+      text: body.text as string, status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
+    const next = { ...issue, questions: [...issue.questions ?? [], question] }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: issueView(next), question }
+  } },
+  'POST local/issues/:id/questions/:questionId/retry': { answer: ({ params }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    const question = issue?.questions?.find(item => item.id === params.questionId)
+    if (!issue || !question) return refuse(404, 'Local question not found')
+    if (question.status !== 'failed') return refuse(400, 'Only a failed question can be retried', { code: 'questionNotFailed' })
+    const retried = { ...question, status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
+    delete retried.answer; delete retried.error; delete retried.answeredAt
+    const next = { ...issue, questions: (issue.questions ?? []).map(item => item.id === params.questionId ? retried : item) }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: issueView(next), question: retried }
+  } },
   'POST local/issues/:id/close': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
