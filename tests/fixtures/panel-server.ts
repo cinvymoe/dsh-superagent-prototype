@@ -123,6 +123,8 @@ export interface PanelServer {
   localComments: Record<string, TriggerRow[]>
   /** Sent agent replies shown on a requirement's thread, keyed by issue id. */
   localReplies: Record<string, Receipt[]>
+  /** Requirements whose confirmed alignment already dispatched tickets, so their execution mode is read-only. */
+  dispatchedIssues: Set<string>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
     worktreeRoot?: string; createdAt: string; updatedAt: string }[]
   /** When set, the create-requirement route refuses with this JSON error (and creates nothing). */
@@ -296,7 +298,7 @@ function initial(): PanelServer {
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
     tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
-    localComments: {}, localReplies: {},
+    localComments: {}, localReplies: {}, dispatchedIssues: new Set(),
     localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
@@ -447,8 +449,23 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     const next = { ...issue, alignment: { ...issue.alignment, status: body.decision === 'confirm' ? 'confirmed' as const : 'rejected' as const,
       decidedAt: '2026-09-23T00:00:00Z', ...(body.decision === 'reject' && body.reason ? { reason: body.reason } : {}) } }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    // A confirmed alignment dispatches the slices, so the requirement's execution mode is read-only from then on.
+    if (body.decision === 'confirm') server.dispatchedIssues.add(params.id)
     return { issue: next, tickets: body.decision === 'confirm'
       ? next.alignment.slices.map(slice => ({ id: `ticket-${slice.id}`, title: `${slice.id} · ${slice.title}` })) : [] }
+  } },
+  'POST local/issues/:id/execution': { body: true, answer: ({ params, body }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    if (!issue) return refuse(404, 'Local issue not found')
+    if (body.mode !== 'native' && body.mode !== 'feature-exec') {
+      return refuse(400, 'Execution mode must be native or feature-exec', { code: 'executionMode' })
+    }
+    if (server.dispatchedIssues.has(params.id)) {
+      return refuse(400, 'A requirement that has dispatched tickets keeps its execution mode', { code: 'executionLocked' })
+    }
+    const next = { ...issue, execution: body.mode, updatedAt: '2026-09-23T00:00:00Z' }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: next }
   } },
   'POST local/issues/:id/close': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)

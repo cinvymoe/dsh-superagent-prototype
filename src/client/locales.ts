@@ -188,6 +188,8 @@ const TEXT = {
   'userError.issueImageType': ['图片 {name} 必须是 PNG、JPEG、WebP 或 GIF。', 'Image {name} must be a PNG, JPEG, WebP or GIF image.'],
   'userError.issueImageSize': ['图片 {name} 超过 {max} 字节。', 'Image {name} is larger than {max} bytes.'],
   'userError.issueImageData': ['图片 {name} 不是有效的 base64 图片数据。', 'Image {name} is not valid base64 image data.'],
+  'userError.executionMode': ['执行模式必须是 native 或 feature-exec。', 'Execution mode must be native or feature-exec.'],
+  'userError.executionLocked': ['需求已有派发工单，执行模式不可再修改。', 'A requirement that has dispatched tickets keeps its execution mode.'],
   // Overview
   sourceError: ['{source} 来源异常', '{source} Source failing'],
   needsYouNone: ['没有待处理的工单。', 'No pending Tickets.'],

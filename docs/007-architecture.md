@@ -520,7 +520,7 @@ The main Session has 14 application tools:
 
 Settings saves select `policy`, `eval`, `executor`, `pause`, or `source`; the last also names its Source id. A prompt save with `preview: true` composes text without saving.
 
-The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_image`, `job_output`, `job_list` and `job_kill`. Avoiding code reads is a prompt rule, not a tool restriction.
+The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_image`, `job_output`, `job_list` and `job_kill`. When the host provides billion-context's compression tools (`compress`, `decompress`, `search_context`, `acp_status`, `acp_cache`, `acp_read_original_image`), its restriction also allows them; the allow list is recomputed on `tools/change`, so tools registered after the Session was created are included. A host without the plugin keeps the seven built-ins. Avoiding code reads is a prompt rule, not a tool restriction.
 
 ### Presets and wait limits
 

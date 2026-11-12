@@ -1,0 +1,53 @@
+$ pnpm build
+(node:1370471) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ tsdown
+(node:1370490) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ℹ tsdown v0.22.14 powered by rolldown v1.2.7
+ℹ config file: /data/project/workspace/dsh-worktrees/session-billion-context-6f94b843ab41/tsdown.config.ts 
+ℹ entry: src/index.ts, src/sources/github.ts, src/sources/feishu.ts, src/sources/local.ts, src/worker-shell.ts
+ℹ target: es2024
+ℹ tsconfig: tsconfig.json
+ℹ entry: src/client/index.tsx
+ℹ target: node22.19.0
+ℹ tsconfig: tsconfig.json
+ℹ Build start
+
+ WARN  We recommend using the ESM format instead of CommonJS.
+The ESM format is compatible with modern platforms and runtimes, and most new libraries are now distributed only in ESM format.
+Learn more at https://nodejs.org/en/learn/modules/publishing-a-package#how-did-we-get-here
+
+ℹ Cleaning 17 files
+ℹ [CJS] lib/client.js  416.98 kB │ gzip: 98.21 kB
+ℹ [CJS] 1 files, total: 416.98 kB
+✔ Build complete in 3775ms
+ℹ [ESM] lib/index.js                 497.94 kB │ gzip: 140.31 kB
+ℹ [ESM] lib/github-watch.js           40.00 kB │ gzip:  12.37 kB
+ℹ [ESM] lib/worker-shell.js            0.97 kB │ gzip:   0.50 kB
+ℹ [ESM] lib/feishu-watch.js            0.60 kB │ gzip:   0.29 kB
+ℹ [ESM] lib/local-watch.js             0.30 kB │ gzip:   0.18 kB
+ℹ [ESM] lib/feishu-D0mOFqZz.js        48.41 kB │ gzip:  14.60 kB
+ℹ [ESM] lib/poll-4nQ0uadk.js          43.51 kB │ gzip:  15.40 kB
+ℹ [ESM] lib/github-pull-B5WHLYJF.js   32.94 kB │ gzip:  10.20 kB
+ℹ [ESM] lib/local-DFjJERjL.js          3.55 kB │ gzip:   1.52 kB
+ℹ [ESM] lib/index.d.ts                26.73 kB │ gzip:   8.26 kB
+ℹ [ESM] lib/feishu-watch.d.ts          5.98 kB │ gzip:   2.00 kB
+ℹ [ESM] lib/local-watch.d.ts           3.82 kB │ gzip:   1.50 kB
+ℹ [ESM] lib/worker-shell.d.ts          2.28 kB │ gzip:   0.65 kB
+ℹ [ESM] lib/github-watch.d.ts          0.43 kB │ gzip:   0.24 kB
+ℹ [ESM] lib/kind-COeYxPwt.d.ts        37.06 kB │ gzip:   9.42 kB
+ℹ [ESM] lib/intake-oj8S5GfX.d.ts      32.39 kB │ gzip:  10.07 kB
+ℹ [ESM] 16 files, total: 776.91 kB
+[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 3.9s of this 4.0s build (97%).
+The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+  - rolldown-plugin-dts:generate load (75%, 3.0s, 45 calls)
+Additional hook time came from the hooks below and from hooks under 1s.
+3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
+  - rolldown-plugin-dts:resolver resolveId (316 calls)
+  - tsdown:deps resolveId (76 calls)
+  - rolldown-plugin-dts:fake-js transform (45 calls)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✔ Build complete in 4221ms
+exit=0
