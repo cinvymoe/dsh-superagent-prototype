@@ -1,0 +1,28 @@
+(node:1502843) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1502860) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-8542a15caed3
+
+(node:1502936) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1502943) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1502935) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1502942) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (14 tests) 40ms
+ ✓ tests/locales.spec.ts (6 tests) 15ms
+(node:1502936) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1502935) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (13 tests) 417ms
+ ✓ tests/local-align.spec.ts (24 tests) 3371ms
+   ✓ lets only the create-requirement route carry a body above the management limit  320ms
+
+ Test Files  4 passed (4)
+      Tests  57 passed (57)
+   Start at  00:44:29
+   Duration  4.88s (transform 2.03s, setup 0ms, import 2.91s, tests 3.84s, environment 1ms)
+
