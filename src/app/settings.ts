@@ -73,8 +73,8 @@ export interface SettingsHost {
   /** DSH Cordis context used to validate and resolve role models. */
   readonly context: Context
   readonly lifetime: AbortSignal
-  /** Session manager through which the main Session is notified of saved settings. */
-  readonly sessions: Pick<Sessions, 'notify' | 'delivery'>
+  /** Session manager through which the main Session is notified of saved settings, and running Sessions re-read Agent tools. */
+  readonly sessions: Pick<Sessions, 'notify' | 'delivery' | 'agentsChanged'>
   /** Source host passed to source kinds' policy syncs and label refreshes. */
   readonly sourceHost: SourceHost
   /** Setup state, account/command checks, and restart trigger when setup-read fields change. */
@@ -202,6 +202,9 @@ export class Settings {
       if (origin !== 'tool') sessions.notify(...settingsNotice(block, changedPaths(old, settings)))
       if (before !== after) engine.policyChanged(before, after, effects)
     })
+    // A saved agents block reaches every running Session at its next step: its tool restriction is reinstalled here, while
+    // a model override waits for the next Session of its role, as a Session keeps the model it started with.
+    if (block === 'agents') sessions.agentsChanged()
     // Rewrite worker command shims immediately when `blockedCommands` changes.
     const blocked = settings.executor.blockedCommands
     const changed = blocked.join(' ') !== old.executor.blockedCommands.join(' ')

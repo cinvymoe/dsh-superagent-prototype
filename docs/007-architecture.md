@@ -224,7 +224,7 @@ Its `context`, `read` and `decide` methods serve `orchestrator_eval`, `orchestra
 
 Every save declares its origin: `panel`, `tool` or `sync`. Only `panel` can change the execution environment or fields listed in `SETUP_FIELDS` (`src/deployment.ts`).
 
-The `agents` block holds the three configured Agent roles, `main` (the main Session), `aligner` and `executor`, each with an optional `model` override (`null` inherits the role's default model) and the `disabledTools` it turns off. Only `panel` may save it: a model or tool change reaches every Session of the role. A save is checked against the role's catalog (`src/app/agent-tools.ts`), so a required tool cannot be turned off and an unknown name is refused, while reading stays lenient so a stored name the catalog later dropped is ignored at run time rather than failing an upgrade. Saving the block changes no running Session and no `policyVersion`.
+The `agents` block holds the three configured Agent roles, `main` (the main Session), `aligner` and `executor`, each with an optional `model` override (`null` inherits the role's default model) and the `disabledTools` it turns off. Only `panel` may save it: a model or tool change reaches every Session of the role. A save is checked against the role's catalog (`src/app/agent-tools.ts`), so a required tool cannot be turned off and an unknown name is refused, while reading stays lenient so a stored name the catalog later dropped is ignored at run time rather than failing an upgrade. Saving the block reinstalls the tools of running Sessions through `Sessions.agentsChanged` for their next step, while a model override waits for the next Session of its role; it keeps `policyVersion` unchanged.
 
 A Policy-version change calculates `policyEffects`, records which Tickets were notified, and calls `Engine.policyChanged`. `syncable` and `sync(id)` refresh a Source's Policy part. `refreshLabels(id)` refreshes display names.
 
@@ -238,7 +238,9 @@ Validation inherits an omitted base from the saved override, drops removed parts
 
 ### Sessions
 
-`Sessions` (`src/app/sessions.ts`) manages DeepSeek Harness Sessions for both roles. `ensure` creates a Session with its role's model. `install` follows agent events and registers prompts, skills and tools for managed Sessions.
+`Sessions` (`src/app/sessions.ts`) manages DeepSeek Harness Sessions for both roles. `ensure` creates a Session with its role's effective model and decorates it; `answer` gives a Ticket's question fork the executor role's model. `install` follows agent events and registers prompts, skills and tools for managed Sessions.
+
+The `agents` block reaches those registrations at run time. Each Session's binding keeps a `tools` refresh that recomputes its allow list from `roleTools` (`src/app/agent-tools.ts`), the host's available tools and, for a slice Ticket, its pinned strategy's execution tools. A new Session installs it during decoration; `Settings.save` calls `Sessions.agentsChanged` after saving the block, which reinstalls the restriction of every decorated Session and subagent, installing the new filter before lifting the old one. The main Session shares this path with its `tools/change` recomputation, so compression tools registered later stay included. `roleModel` (`src/app/role-models.ts`) resolves a role's override chain and `workerRole` picks `aligner` for a Ticket accepted for alignment, so this module only maps the configured block onto Sessions and leaves an existing Session's model alone.
 
 `prompt` delivers once per request id. `relay` and `notify` enqueue main-Session messages handled by the `relay` and `notice` effects. `src/app/notices.ts` defines their content; `delivery` checks whether a message arrived.
 
@@ -337,13 +339,13 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/prompts.ts` | Prompts, `builtInParts`, the built-in parts a team may override, and `promptParts`, the order of a role's prompt sections |
 | `src/app/context.ts` | The built-in prompt text, read from `prompts/`, and the transcript entries Sessions read |
 | `src/app/skill-files.ts` | Packaged text: `promptFile`, which joins a file's one-sentence lines into paragraphs, and the bundled skills |
+| `src/app/role-models.ts` | `roleModel`, a role's effective model (its `agents` override, else `eval.model`, `executor.model`, or the executor's effective model for an aligner), `workerRole`, and the seeding of a new Session with its role's model |
 | `src/app/sessions.ts` | Sessions |
-| `src/app/agent-tools.ts` | Every Agent role's tool catalog: the presets its Sessions run under, the tools it cannot turn off, the optional ones a person may, and the check a saved `agents` block runs |
+| `src/app/agent-tools.ts` | Every Agent role's tool catalog: the presets its Sessions run under, the tools it cannot turn off, the optional ones a person may, `roleTools` for the allow list a role's Sessions actually run with, and the check a saved `agents` block runs |
 | `src/app/execution-strategy.ts` | The execution strategies a slice Ticket runs, by the contract version its plan pinned: the execution tools and pre-run guard each mode gives a worker, the feature-exec fallback of a Ticket dispatched before strategies were pinned, the fallback to the current version, and the native degradation of a host that registered no feature-exec service |
 | `src/app/questions.ts` | `Questions`: one question about a Ticket, answered in a Session forked off its worker at the latest completed turn, given the answer prompt and only the reading tools, read for its answer and archived, with no Trigger, Eval, Ticket or Assignment written |
 | `src/app/delivery.ts` | `AgentDelivery`: delivers a message to a DeepSeek Harness agent once per request id, also across a restored Session |
 | `src/app/retry-health.ts` | `RetryHealth`: which Sessions wait on a model budget retry, for the `models` health entry |
-| `src/app/role-models.ts` | Resolves the Eval and Executor models, and seeds a new Session with its role's model |
 | `src/app/assessment.ts` | The MasterAssessor, the assessment schema and the window `orchestrator_eval` answers |
 | `src/app/execution-environment.ts` | The execution environment: its variables, a Ticket's values, the directory-root resolution (project `worktreeRoot` > `executor.directory` > `<stateDir>/work`) and the lines of the prompt section, which `src/app/prompts.ts` fills into its template |
 | `src/app/source-context.ts` | `sourceContextOf`: each Source kind's `SourceContext` |
@@ -445,20 +447,20 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/followups.spec.ts` | A person's follow-up on a Ticket's Thread: its notice to the main Session, the tools that act on it, what a burst costs; a worker's hand-back and context follow, and the main Session's note |
 | `tests/health.spec.ts` | One health entry per part, each cleared by its own next success |
 | `tests/delivery.spec.ts` | `AgentDelivery` |
-| `tests/retry-health.spec.ts`, `tests/role-models.spec.ts` | Model budget retries, and the models of the two roles |
-| `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP |
+| `tests/retry-health.spec.ts`, `tests/role-models.spec.ts` | Model budget retries, and the seeding of a new Session with its role's model |
+| `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP; a saved `agents` block reaching the main Session, a running Executor and its subagents at their next step, and model overrides reaching only new Sessions |
 | `tests/tools.spec.ts` | The Sessions' tools: what `orchestrator_read` reads for each role, and the shapes and checks of the other main Session tools |
 | `tests/questions.spec.ts` | A Ticket's question: the answer from a Session forked off its worker at the latest completed turn, the answer prompt and exactly the four reading tools, the archive after the answer, the no-session, no-completed-turn, failed-fork, timeout and empty-answer failures, and the Ticket left unchanged |
 | `tests/runtime-concurrency.spec.ts` | Work that overlaps: Triggers during a pass, Tickets that change during deliveries and launches |
 | `tests/http.spec.ts` | The same-origin and loopback checks, the status of each kind of failure, the body limit, path parameters and queries |
 | `tests/settings.spec.ts` | Settings saves that race a model or account check, a Policy sync that a save outran, the refusals of the pause, a sync and a block, and an `agents` save outside the panel |
-| `tests/agent-config.spec.ts` | The `agents` settings block: the three roles' tool catalog and presets, `GET settings` with the block and its catalog, a save's revision and history diff, the refusals of a required tool, an unknown tool, an unavailable model and a non-panel origin, and a stored tool name the catalog dropped |
+| `tests/agent-config.spec.ts` | The `agents` settings block: the three roles' tool catalog and presets, role order and the optional tools turned off, each role's effective model, an aligner's own set beside an executor's, `GET settings` with the block and its catalog, a save's revision and history diff, the refusals of a required tool, an unknown tool, an unavailable model and a non-panel origin, and a stored tool name the catalog dropped |
 | `tests/views.spec.ts` | What the management views derive from the Store, such as the Thread a dropped message belongs to |
 | `tests/timeline.spec.ts` | A Thread's pages and a Trigger's neighbours by time and then id, with every received Trigger's time in one form |
 | `tests/migration.spec.ts` | The schema 11 migration: every stored record in its current shape, and the refusal of older schemas |
 | `tests/store.spec.ts` | Repositories and their working sets, in SQLite as in memory, the kv area, with every key of `KV` spelled only in `src/kv.ts` and the migration, settings history and queries |
 | `tests/prompts.spec.ts` | Prompt validation, assembly and versions |
-| `tests/execution-strategy.spec.ts` | The execution-strategy seam: resolving a pinned strategy for a legacy, native, feature-exec, unknown-version and service-less host, the worker's tool set and pre-run guard, and the native and feature-exec handoffs |
+| `tests/execution-strategy.spec.ts` | The execution-strategy seam: resolving a pinned strategy for a legacy, native, feature-exec, unknown-version and service-less host, the worker's tool set and pre-run guard, the execution tools a configured executor keeps, and the native and feature-exec handoffs |
 | `tests/cards.spec.ts` | The rules the built-in text must state, file by file |
 | `tests/model-surface.spec.ts` | Everything models read: tools, prompts, skills and inputs, checked against the tool schemas, the execution environment and the glossary, within a size budget per role |
 | `tests/deployment.spec.ts`, `tests/environment.spec.ts`, `tests/index.spec.ts` | The plugin configuration and setup, the agent's process environment, the plugin entry |
@@ -530,7 +532,7 @@ The main Session has 14 application tools:
 
 Settings saves select `policy`, `eval`, `executor`, `agents`, `pause`, or `source`; the last also names its Source id. A prompt save with `preview: true` composes text without saving.
 
-The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_image`, `job_output`, `job_list` and `job_kill`. When the host provides billion-context's compression tools (`compress`, `decompress`, `search_context`, `acp_status`, `acp_cache`, `acp_read_original_image`), its restriction also allows them; the allow list is recomputed on `tools/change`, so tools registered after the Session was created are included. A host without the plugin keeps the seven built-ins. Avoiding code reads is a prompt rule, not a tool restriction.
+The main Session also has DeepSeek Harness's `skill`, `bash`, `read`, `read_image`, `job_output`, `job_list` and `job_kill`, minus the optional tools the `agents.main` block turns off. When the host provides billion-context's compression tools (`compress`, `decompress`, `search_context`, `acp_status`, `acp_cache`, `acp_read_original_image`), its restriction also allows them; the allow list is recomputed on `tools/change` and after an `agents` save, so tools registered after the Session was created are included and a turned-off tool is masked from the next step. A host without the plugin keeps the seven built-ins. Avoiding code reads is a prompt rule, not a tool restriction.
 
 ### Presets and wait limits
 
@@ -561,7 +563,7 @@ An align Ticket (`mode: 'align'`) also gets `orchestrator_align`, which publishe
 
 A Ticket created from a confirmed slice carries `plan: { issueId, sliceId, acceptance }` and `mode: 'work'`; its assignment carries the acceptance criteria as a list so the worker does not have to reconstruct them from the issue thread; its `dependsOn` lists the Tickets its slice's dependencies became. `DshExecutor.launchQueued` throws `Later` while any dependency is still live, so a dependent slice waits for a worker slot only once its predecessors ended. Slice Tickets are keyed by issue and slice, which makes confirmation idempotent.
 
-The worker preset is defined in `cordis.patch.yml` and selected through `WORKER_PRESET`. `WORK_TOOLS` in `src/app/sessions.ts` retains available file, search, shell, job, web, skill, todo and subagent tools. Workers do not receive tools for asking or presenting to a person, changing the profile, scheduling work outside worker slots, starting or messaging other Sessions, or editing external documents. Tool calls are refused after the Ticket ends.
+The worker preset is defined in `cordis.patch.yml` and selected through `WORKER_PRESET`. `WORK_TOOLS` in `src/app/agent-tools.ts` retains available file, search, shell, job, web, skill, todo and subagent tools, and the `agents` block subtracts the optional ones a person turned off; required tools stay, and a slice Ticket's execution tools join the list from its pinned strategy. Workers do not receive tools for asking or presenting to a person, changing the profile, scheduling work outside worker slots, starting or messaging other Sessions, or editing external documents. Tool calls are refused after the Ticket ends.
 
 ### Result shapes and assessment context
 

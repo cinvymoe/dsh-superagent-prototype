@@ -42,6 +42,23 @@ export function agentCatalog(): { role: AgentRole; preset: string; required: str
   return AGENT_ROLES.map(role => ({ role, preset: AGENT_TOOLS[role].preset, required: [...AGENT_TOOLS[role].required],
     optional: [...AGENT_TOOLS[role].optional] }))
 }
+/** A role's catalog order: the main Session's built-ins, else the work tools, which keeps a Session's allow list stable. */
+export function orderedTools(role: AgentRole): readonly string[] {
+  return role === 'main' ? MAIN_TOOLS : WORK_TOOLS
+}
+/**
+ * The optional tools a role's stored configuration turns off. Reading stays lenient at run time: a name outside the role's
+ * current optional catalog, such as a retired tool or one of its required tools, is ignored instead of narrowing the list.
+ */
+export function turnedOff(role: AgentRole, agents: AgentsConfig): ReadonlySet<string> {
+  const optional = new Set(AGENT_TOOLS[role].optional)
+  return new Set(agents[role].disabledTools.filter(name => optional.has(name)))
+}
+/** The tools a role may call, in catalog order, with the optional tools a person turned off removed. */
+export function roleTools(role: AgentRole, agents: AgentsConfig): string[] {
+  const off = turnedOff(role, agents)
+  return orderedTools(role).filter(name => !off.has(name))
+}
 /**
  * Refuse a save that turns off a required tool or names a tool the role does not have.
  * @throws UserError (`agentsUnknownTool`) for a role's names outside its catalog, then (`agentsRequiredTool`) for its required ones.

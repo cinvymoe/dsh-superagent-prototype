@@ -28,6 +28,14 @@ Executor Sessions run commands without approval as the operator's OS user. Their
 
 The main Session uses `dsh-superagent-router`, with the same 5-second shell and job-wait limits and a smaller tool set for routing. Sessions retain the preset selected at creation. Worker subagents use DeepSeek Harness's `standard` preset.
 
+### The Agent configuration
+
+The `agents` settings block configures the three Agent roles: `main` for the main Session, `aligner` for a Ticket accepted for alignment, and `executor` for every other Ticket's Executor Session, whose subagents inherit its tools. Each role has an optional `model` override and the optional `disabledTools` it turns off; 006 Deployment holds the block's fields. The required tools cannot be turned off, and the panel checks a save against the role's catalog. A stored name the catalog no longer has is ignored at run time, as a pinned slice's execution tools and the host's compression tools never enter the catalog.
+
+The tools apply to every Session of the role. A new Session is decorated with the configured set, and saving the block reinstalls the restriction of each running Session, a worker's subagents included, so it loses or regains the tool at its next step; a step in flight keeps the tools it started with. The main Session always keeps the host's compression tools when it provides them. A slice Ticket whose plan pins an execution strategy still gets that strategy's `feature_exec_*` tools and its pre-run guard, whatever the executor's optional tools are.
+
+A model override reaches only a Session created after it is saved; a running Session keeps the model it started with. An unset override inherits the role's default: the main Session `eval.model`, the executor `executor.model`, and an aligner the executor's effective model, its own `agents.executor.model` when set and `executor.model` otherwise. Without an `agents` block, every Session gets exactly the tools and model it had before the block existed.
+
 ### Background work and worker slots
 
 When a turn ends with shell jobs or subagents still running, the Ticket keeps its worker slot and stays working. It is not reported as waiting, and the main Session receives no waiting report. A completed job or subagent wakes the Executor with its result in the same slot. Once a turn ends with no background work, the Executor reports waiting normally.

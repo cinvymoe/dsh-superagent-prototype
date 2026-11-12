@@ -3,10 +3,11 @@
  * the per-role history diff, and the read tolerance for a tool name the catalog no longer has.
  */
 import { afterEach, expect, it, vi } from 'vitest'
-import { AGENT_ROLES } from '../src/policy.ts'
-import { AGENT_TOOLS } from '../src/app/agent-tools.ts'
+import { AGENT_ROLES, SettingsSchema, type AgentsConfig } from '../src/policy.ts'
+import { AGENT_TOOLS, MAIN_TOOLS, roleTools, WORK_TOOLS } from '../src/app/agent-tools.ts'
+import { roleModel } from '../src/app/role-models.ts'
 import { UserError } from '../src/core/index.ts'
-import { startRuntime, type Host } from './fixtures/host.ts'
+import { startRuntime, feishu, type Host } from './fixtures/host.ts'
 
 let h: Host | undefined
 afterEach(async () => { await h?.stop(); h = undefined })
@@ -34,6 +35,63 @@ it('catalogs each Agent role with the tools it keeps, the optional ones it may t
   // The host's compression tools and a slice Ticket's execution tools stay automatic, so no save can turn them off.
   const catalogued = Object.values(AGENT_TOOLS).flatMap(entry => [...entry.required, ...entry.optional])
   expect(catalogued.filter(name => name.startsWith('feature_exec_') || name === 'compress')).toEqual([])
+})
+
+it('applies each role\'s catalog in order, dropping only optional tools it turns off', () => {
+  const agents = (role: keyof AgentsConfig, tools: string[]): AgentsConfig =>
+    ({ ...emptyAgents, [role]: { model: null, disabledTools: tools } })
+  // No overrides keeps today's exact allow lists, so the regression case is the catalog order itself.
+  expect(roleTools('main', emptyAgents)).toEqual(MAIN_TOOLS)
+  expect(roleTools('executor', emptyAgents)).toEqual(WORK_TOOLS)
+  expect(roleTools('aligner', emptyAgents)).toEqual(WORK_TOOLS)
+  expect(roleTools('main', agents('main', ['read_image']))).toEqual(MAIN_TOOLS.filter(name => name !== 'read_image'))
+  expect(roleTools('executor', agents('executor', ['web_search', 'read_image']))).toEqual(WORK_TOOLS.filter(name => name !== 'web_search' && name !== 'read_image'))
+  // Reading stays lenient at run time: a required tool and a retired name cannot narrow a Session's list.
+  expect(roleTools('executor', agents('executor', ['bash', 'retired_tool']))).toEqual(WORK_TOOLS)
+  expect(roleTools('aligner', agents('aligner', ['web_search']))).toEqual(WORK_TOOLS.filter(name => name !== 'web_search'))
+})
+
+it('resolves each role\'s model through its own override, then the role default, an aligner following the executor', () => {
+  const evalModel = { provider: 'eval-provider', model: 'eval-model' }
+  const executionModel = { provider: 'execution-provider', model: 'execution-model' }
+  const mainModel = { provider: 'main-provider', model: 'main-model' }
+  const alignerModel = { provider: 'aligner-provider', model: 'aligner-model' }
+  const settings = (agents: Partial<Record<keyof AgentsConfig, { model: unknown; disabledTools: string[] }>>) =>
+    SettingsSchema.parse({ eval: { model: evalModel }, executor: { model: executionModel }, agents })
+  const value = (agents: Parameters<typeof settings>[0]) => settings(agents)
+  expect(roleModel(value({}), 'main')).toEqual(evalModel)
+  expect(roleModel(value({ main: { model: mainModel, disabledTools: [] } }), 'main')).toEqual(mainModel)
+  expect(roleModel(value({}), 'executor')).toEqual(executionModel)
+  expect(roleModel(value({ executor: { model: mainModel, disabledTools: [] } }), 'executor')).toEqual(mainModel)
+  // An aligner with no override follows the executor's effective model, override or default.
+  expect(roleModel(value({}), 'aligner')).toEqual(executionModel)
+  expect(roleModel(value({ executor: { model: mainModel, disabledTools: [] } }), 'aligner')).toEqual(mainModel)
+  expect(roleModel(value({ aligner: { model: alignerModel, disabledTools: [] } }), 'aligner')).toEqual(alignerModel)
+})
+
+it('applies an aligner\'s own optional tools to its Session while the executor keeps its set', async () => {
+  h = await startRuntime()
+  const project = h.runtime.local.createProject({ name: 'Demo', repository: 'deepseek-ai/dsh-superagent-prototype' })
+  const issue = h.runtime.local.create({ title: 'Align the local board', body: 'Requirements arrive in the panel.', project: project.id })
+  await h.runtime.idle()
+  // Only the aligner turns `read_image` off and sets a model; a work Ticket's executor keeps both defaults.
+  const alignerModel = { provider: 'align-provider', model: 'align-model' }
+  const value = { ...emptyAgents, aligner: { model: alignerModel, disabledTools: ['read_image'] } }
+  expect(await h.api('PUT', 'settings/agents', { value, revision: 0 })).toMatchObject({ status: 200 })
+  const llm = (h.ctx as unknown as { llm: { resolveCallConfig: ReturnType<typeof vi.fn> } }).llm
+  llm.resolveCallConfig.mockClear()
+  const triggerId = h.runtime.store.read.threadTriggers(`local:${issue.id}`, 1)[0]!.id
+  const align = await h.route({ kind: 'accept', trigger_id: triggerId, title: 'Align the local board', worktree_name: 'align-local-board',
+    acknowledgement: '收到，先做需求对齐。', mode: 'align' }) as { ticket: { ticket_id: string } }
+  await h.runtime.idle()
+  // The aligner's new Session starts on the aligner's own override.
+  expect(llm.resolveCallConfig).toHaveBeenCalledWith(alignerModel)
+  const alignAllow = h.restrictions.get(`worker-${align.ticket.ticket_id}`)!.at(-1)!
+  expect(alignAllow).not.toContain('read_image')
+  expect(alignAllow).toContain('bash')
+  const work = await h.acceptedTicket(feishu('2', '@bot 修一下回归'))
+  const executorAllow = h.restrictions.get(work.sessionId)!.at(-1)!
+  expect(executorAllow).toContain('read_image')
 })
 
 it('returns the agents block with its revision and the three-role catalog in GET settings', async () => {
