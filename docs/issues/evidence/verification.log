@@ -43,5 +43,48 @@ See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more det
 
 ✔ Build complete in 3489ms
 EXIT:0
+== pnpm typecheck
+(node:645347) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$ tsc --noEmit
+EXIT:0
+
+== targeted vitest
+(node:646401) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (6 tests) 190ms
+ ✓ tests/panel-discuss.spec.tsx (8 tests) 539ms
+ ✓ tests/panel-execution.spec.tsx (13 tests) 1208ms
+   ✓ lists Tickets under Execution by who they wait on, with the Executor state and its pause as an action  414ms
+ ✓ tests/local-align.spec.ts (14 tests) 1950ms
+
+ Test Files  6 passed (6)
+      Tests  58 passed (58)
+   Start at  11:50:43
+   Duration  3.98s (transform 4.43s, setup 0ms, import 6.65s, tests 3.93s, environment 1.83s)
+
+
+== full pnpm check (clean env)
+ℹ [ESM] lib/local-Dftxw0N0.js          3.57 kB │ gzip:   1.54 kB
+ℹ [ESM] lib/index.d.ts                26.16 kB │ gzip:   8.10 kB
+ℹ [ESM] lib/feishu-watch.d.ts          5.98 kB │ gzip:   2.00 kB
+ℹ [ESM] lib/local-watch.d.ts           2.84 kB │ gzip:   1.16 kB
+ℹ [ESM] lib/worker-shell.d.ts          2.28 kB │ gzip:   0.65 kB
+ℹ [ESM] lib/github-watch.d.ts          0.43 kB │ gzip:   0.24 kB
+ℹ [ESM] lib/kind-DzUsy7Pb.d.ts        36.74 kB │ gzip:   9.31 kB
+ℹ [ESM] lib/intake-yDcO7BBe.d.ts      32.30 kB │ gzip:  10.03 kB
+ℹ [ESM] 16 files, total: 755.03 kB
+[33m[PLUGIN_TIMINGS] [0mPlugin hooks ran for 3.3s of this 3.5s build (96%).
+The slowest hooks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+  - rolldown-plugin-dts:generate load (79%, 2.7s, 45 calls)
+Additional hook time came from the hooks below and from hooks under 1s.
+3 hooks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
+  - rolldown-plugin-dts:resolver resolveId (316 calls)
+  - tsdown:deps resolveId (70 calls)
+  - rolldown-plugin-dts:fake-js transform (45 calls)
+See https://rolldown.rs/reference/InputOptions.checks#plugintimings for more details.
+
+✔ Build complete in 3615ms
+EXIT:0
+
 == git diff --check
 EXIT:0
