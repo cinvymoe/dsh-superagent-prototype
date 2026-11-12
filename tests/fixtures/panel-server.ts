@@ -14,8 +14,9 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
   TicketRow, TicketStage,
   TriggerRow } from '../../src/client/api.ts'
 import { SETUP_FIELDS } from '../../src/deployment.ts'
-import { EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
-import { agentCatalog } from '../../src/app/agent-tools.ts'
+import { AgentsConfigSchema, EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
+import { agentCatalog, validateAgentTools } from '../../src/app/agent-tools.ts'
+import { UserError } from '../../src/core/index.ts'
 import { SetupError, type SetupCode } from '../../src/setup.ts'
 import { feishuChannel } from '../../src/sources/feishu-trigger.ts'
 import { githubChannel } from '../../src/sources/github-trigger.ts'
@@ -554,14 +555,23 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   } },
   'PUT settings/:block': { body: true, answer: ({ params: { block }, body }) => {
     const source = block.startsWith('source:') ? KINDS.find(kind => `source:${kind.kind}` === block) : undefined
-    if (!['policy', 'eval', 'executor'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
+    if (!['policy', 'eval', 'executor', 'agents'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
       : refuse(400, 'Invalid settings: block')
     if (body.revision !== (server.revisions[block] ?? 0)) return refuse(409, 'Settings changed. Reload before saving.')
     let restarting = false
     if (block === 'policy') server.settings = { ...server.settings, policy: PolicyConfigSchema.parse(body.value) }
     else if (block === 'executor') server.settings = { ...server.settings, executor: ExecutorConfigSchema.parse(body.value) }
     else if (block === 'eval') server.settings = { ...server.settings, eval: EvalConfigSchema.parse(body.value) }
-    else if (source) {
+    else if (block === 'agents') {
+      // Mirror the host: validate the catalog rules and refuse with the same structured user error the panel localizes.
+      const agents = AgentsConfigSchema.parse(body.value)
+      try { validateAgentTools(agents) }
+      catch (error) {
+        if (error instanceof UserError) return refuse(400, error.message, { code: error.code, values: error.values })
+        throw error
+      }
+      server.settings = { ...server.settings, agents }
+    } else if (source) {
       const { enabled, config: value } = SourceSave.parse(body.value)
       let config: Record<string, unknown>
       try { config = source.schema.parse(value) }

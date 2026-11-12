@@ -1,0 +1,14 @@
+# C3 Agents settings — Before capture (baseline: deployment main without slice C3)
+# Baseline: cinvymoe/dsh-superagent-prototype main 1724811f (the merge of C1 PR #34 and C2 PR #40)
+#   git archive 1724811f | tar -x -C /tmp/c3agents-before-src; pnpm install --frozen-lockfile && pnpm build (exit 0)
+#   /tmp/c3agents-before-install.log, /tmp/c3agents-before-build.log
+# Profile: DSH profile agents-capture (copy of the c3local-after capture profile), webserver 10.126.126.6:3151,
+#   stateDir /root/.dsh/state/agents-before, dsh-superagent linked to /tmp/c3agents-before-src.
+# State: the proven C3 capture state with a GitHub chain cinvymoe/dsh-superagent-prototype and the setup stub CLI
+#   /tmp/c3-fake-gh; settings seeded to revision 2 (eval/executor models, one agents save). No credentials in the capture.
+# Command: python3 /tmp/c3agents-capture.py <token url> docs/evidence/c3-agents before
+# Viewport 1440x1100, light, zh-CN, /usr/bin/chromium via Playwright; sessionStorage['dsh-superagent/route'] = settings/source.
+NAV: ['来源', '评估', '执行', '提示词', '部署']
+SHOT docs/evidence/c3-agents/before-settings.png
+# The Settings navigation has five groups: there is no 智能体 group and no page behind it before this slice.
+# The temporary server on 10.126.126.6:3151 was stopped after the capture; the token is not recorded.
