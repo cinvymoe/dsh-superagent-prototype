@@ -242,6 +242,8 @@ Validation inherits an omitted base from the saved override, drops removed parts
 
 Each model request binds the Session to the current prompt revision. The revisions it used are stored durably: `promptVersion` identifies the active one and `mayRead` restricts which versions a worker can inspect. Registrations are tracked in one map per agent.
 
+A Ticket's question is answered by a Session forked from its worker Session at the latest completed turn. `Sessions.answer` gives that fork the answer prompt in place of the worker preset's and only `read`, `read_image`, `glob` and `grep`, and `Questions` archives it after the answer. Asking writes nothing at all: the Ticket, its Inputs, its Assignments and the Engine stay as they were.
+
 `status` and `promptVersion` serve prompt pages. Saves go through `Prompts.save` and notify the main Session. `modelRetry` exposes model-budget retry state.
 
 ### Glue
@@ -335,6 +337,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/app/skill-files.ts` | Packaged text: `promptFile`, which joins a file's one-sentence lines into paragraphs, and the bundled skills |
 | `src/app/sessions.ts` | Sessions |
 | `src/app/execution-strategy.ts` | The execution strategies a slice Ticket runs, by the contract version its plan pinned: the execution tools and pre-run guard each mode gives a worker, the feature-exec fallback of a Ticket dispatched before strategies were pinned, the fallback to the current version, and the native degradation of a host that registered no feature-exec service |
+| `src/app/questions.ts` | `Questions`: one question about a Ticket, answered in a Session forked off its worker at the latest completed turn, given the answer prompt and only the reading tools, read for its answer and archived, with no Trigger, Eval, Ticket or Assignment written |
 | `src/app/delivery.ts` | `AgentDelivery`: delivers a message to a DeepSeek Harness agent once per request id, also across a restored Session |
 | `src/app/retry-health.ts` | `RetryHealth`: which Sessions wait on a model budget retry, for the `models` health entry |
 | `src/app/role-models.ts` | Resolves the Eval and Executor models, and seeds a new Session with its role's model |
@@ -442,6 +445,7 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `tests/retry-health.spec.ts`, `tests/role-models.spec.ts` | Model budget retries, and the models of the two roles |
 | `tests/runtime.spec.ts` | The whole application on a simulated DeepSeek Harness host, through tools and HTTP |
 | `tests/tools.spec.ts` | The Sessions' tools: what `orchestrator_read` reads for each role, and the shapes and checks of the other main Session tools |
+| `tests/questions.spec.ts` | A Ticket's question: the answer from a Session forked off its worker at the latest completed turn, the answer prompt and exactly the four reading tools, the archive after the answer, the no-session, no-completed-turn, failed-fork, timeout and empty-answer failures, and the Ticket left unchanged |
 | `tests/runtime-concurrency.spec.ts` | Work that overlaps: Triggers during a pass, Tickets that change during deliveries and launches |
 | `tests/http.spec.ts` | The same-origin and loopback checks, the status of each kind of failure, the body limit, path parameters and queries |
 | `tests/settings.spec.ts` | Settings saves that race a model or account check, a Policy sync that a save outran, and the refusals of the pause, a sync and a block |
