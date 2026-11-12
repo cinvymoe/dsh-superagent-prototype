@@ -1,0 +1,38 @@
+(node:871649) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:871679) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/github-source-e98e00c734ae
+
+(node:871732) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:871739) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:871733) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:871752) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:871740) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:871748) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:871732) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/deployment.spec.ts (8 tests) 208ms
+(node:871733) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:871740) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/policy.spec.ts (328 tests) 171ms
+ ✓ tests/model-surface.spec.ts (7 tests) 894ms
+ ✓ tests/panel-source.spec.tsx (18 tests) 1827ms
+ ✓ tests/sources.spec.ts (77 tests) 7775ms
+     ✓ recovers the topics of a chat while they had a message in the last two weeks, and forgets quieter ones  620ms
+     ✓ drops the events it reads once the Source is off  1399ms
+     ✓ starts the consumer again after it exits, and is ready once the next run listens  1095ms
+ ✓ tests/runtime.spec.ts (92 tests) 13730ms
+   ✓ stops a ticket on a person's instruction for good, and resumes an ended one on any person's message on its thread  341ms
+
+ Test Files  6 passed (6)
+      Tests  530 passed (530)
+   Start at  16:05:09
+   Duration  15.72s (transform 5.38s, setup 0ms, import 8.46s, tests 24.61s, environment 858ms)
+
