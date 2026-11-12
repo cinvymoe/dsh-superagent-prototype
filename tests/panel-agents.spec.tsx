@@ -1,0 +1,163 @@
+// @vitest-environment jsdom
+// The Agents settings group: role cards, inherited models, tool catalogs, the Executor link, drafts and history.
+import { expect, it } from 'vitest'
+import type { AgentsConfig } from '../src/policy.ts'
+import { en, zh } from '../src/client/locales.ts'
+import { usePanel, mount, remount, all, find, tab, click, type, text, field, at } from './fixtures/panel.tsx'
+import { server } from './fixtures/panel-server.ts'
+
+usePanel()
+const current = () => document.querySelector('.dt-settings-link[aria-current="page"]')?.textContent
+const open = async () => {
+  await mount()
+  await click(tab(zh['tab.settings']))
+  await click(zh['settingsGroup.agents'])
+}
+const card = (role: string) => {
+  const element = document.querySelector<HTMLElement>(`[data-agent-role="${role}"]`)
+  if (!element) throw new Error(`No ${role} card`)
+  return element
+}
+const inheritedLine = (role: string) => card(role).querySelector('.dt-lv')?.textContent ?? ''
+const inputs = (role: string) => [...card(role).querySelectorAll<HTMLInputElement>('.dt-model input')]
+const switchOf = (role: string, tool: string) => {
+  const element = card(role).querySelector<HTMLElement>(`[role="switch"][aria-label="${tool}"]`)
+  if (!element) throw new Error(`No ${role} switch ${tool}`)
+  return element
+}
+
+it('adds Agents between Execution and Prompts and keeps the group when the panel remounts', async () => {
+  await mount()
+  await click(tab(zh['tab.settings']))
+  expect(all('.dt-settings-link').map(link => link.textContent)).toEqual(['来源', '评估', '执行', '智能体', '提示词', '部署'])
+  expect(all('.dt-settings-link')[3]!.textContent).toBe(zh['settingsGroup.agents'])
+  await click(zh['settingsGroup.agents'])
+  expect(current()).toBe(zh['settingsGroup.agents'])
+  // Leaving the Settings tab keeps the group it last opened.
+  await click(tab(zh['tab.eval']))
+  await remount()
+  await click(tab(zh['tab.settings']))
+  expect(current()).toBe(zh['settingsGroup.agents'])
+  // A saved settings route reopens the same group.
+  at({ page: 'settings', query: { group: 'agents' } })
+  await remount()
+  expect(current()).toBe(zh['settingsGroup.agents'])
+})
+
+it('lists the three roles with their own tool catalogs and says subagents inherit the executor\'s optional tools', async () => {
+  await open()
+  expect(all('[data-agent-role]').map(item => item.querySelector('.dt-block-title')?.textContent))
+    .toEqual([zh['agentRole.main'], zh['agentRole.aligner'], zh['agentRole.executor']])
+  expect(text()).toContain(zh.agentsIntroShort)
+  expect(zh.agentsIntroShort).toContain('工具目录')
+  expect(zh.agentsIntroShort).toContain('子代理')
+  for (const role of ['main', 'aligner', 'executor']) expect(all(`[data-agent-role="${role}"] [role="switch"]`).length).toBeGreaterThan(0)
+})
+
+it('shows the Executor\'s running load and links to Execution settings instead of editing concurrency here', async () => {
+  await open()
+  const load = [...card('executor').querySelectorAll('.dt-lv')].find(item => item.textContent?.startsWith(zh.executingLabel))
+  expect(load?.textContent).toBe(`${zh.executingLabel} 2 / 3`)
+  // Concurrency has one place: the Execution group.
+  expect(all('input[type="number"]')).toEqual([])
+  await click(find(zh.agentChangeConcurrency, '[data-agent-role="executor"] button'))
+  expect(current()).toBe(zh['settingsGroup.execution'])
+  expect(field<HTMLInputElement>(zh.maxWorkers).value).toBe('3')
+})
+
+it('shows the model a blank override inherits, follows an executor override, and restores inheritance in one click', async () => {
+  server.settings = { ...server.settings, eval: { ...server.settings.eval, model: { provider: 'eval-provider', model: 'eval-model' } },
+    executor: { ...server.settings.executor, model: { provider: 'exec-provider', model: 'exec-model', reasoningEffort: 'high' } } }
+  await open()
+  expect(inheritedLine('main')).toContain('eval-provider / eval-model')
+  expect(inheritedLine('aligner')).toContain('exec-provider / exec-model · high')
+  expect(inheritedLine('executor')).toContain('exec-provider / exec-model · high')
+  // An executor override moves the aligner with it, while the executor's own blank field keeps inheriting Execution settings.
+  const [executorProvider, executorModel] = inputs('executor')
+  await type(executorProvider!, 'override-provider'); await type(executorModel!, 'override-model')
+  expect(inheritedLine('aligner')).toContain('override-provider / override-model')
+  expect(inheritedLine('executor')).toContain('exec-provider / exec-model · high')
+  // One click on Restore inheritance clears a role's override again.
+  const [mainProvider, mainModel] = inputs('main')
+  await type(mainProvider!, 'main-provider'); await type(mainModel!, 'main-model')
+  await click(find(zh.agentRestoreInherit, '[data-agent-role="main"] button'))
+  expect(inputs('main').map(input => input.value)).toEqual(['', '', ''])
+  await click(zh.save)
+  expect(server.settings.agents.main.model).toBeNull()
+  expect(server.settings.agents.executor.model).toEqual({ provider: 'override-provider', model: 'override-model' })
+})
+
+it('keeps required tools fixed, toggles optional ones, and saves disabledTools in catalog order', async () => {
+  await open()
+  const bash = switchOf('main', 'bash')
+  expect(bash.getAttribute('aria-checked')).toBe('true')
+  expect((bash as HTMLButtonElement).disabled).toBe(true)
+  expect(bash.closest('.dt-switch-row')?.textContent).toContain(zh.agentToolRequired)
+  // A required tool is not a draft edit: clicking it changes nothing.
+  await click(bash)
+  expect(all('.dt-savebar')).toHaveLength(0)
+  expect(switchOf('main', 'bash').getAttribute('aria-checked')).toBe('true')
+  await click(switchOf('main', 'read_image'))
+  expect(switchOf('main', 'read_image').getAttribute('aria-checked')).toBe('false')
+  // Turning it back on removes it from the draft; off again is the state the save carries.
+  await click(switchOf('main', 'read_image'))
+  expect(switchOf('main', 'read_image').getAttribute('aria-checked')).toBe('true')
+  await click(switchOf('main', 'read_image'))
+  // Toggled in reverse catalog order, the save still lists the turned-off tools in the catalog's optional order.
+  await click(switchOf('executor', 'skill'))
+  await click(switchOf('executor', 'web_search'))
+  await click(zh.save)
+  const sent = server.requests.find(request => request.path === 'settings/agents' && request.method === 'PUT')!
+  const { value, revision } = sent.body as { value: AgentsConfig; revision: number }
+  expect(revision).toBe(0)
+  expect(value.main.disabledTools).toEqual(['read_image'])
+  expect(value.aligner.disabledTools).toEqual([])
+  expect(value.executor.disabledTools).toEqual(['web_search', 'skill'])
+  expect(server.settings.agents).toMatchObject({ main: { disabledTools: ['read_image'] },
+    executor: { disabledTools: ['web_search', 'skill'] } })
+})
+
+it('keeps the draft and shows the conflict when another save changed the same Agent setting', async () => {
+  await open()
+  const [provider, model] = inputs('main')
+  await type(provider!, 'my-provider'); await type(model!, 'my-model')
+  server.settings = { ...server.settings, agents: { ...server.settings.agents,
+    main: { ...server.settings.agents.main, model: { provider: 'remote-provider', model: 'remote-model' } } } }
+  server.revisions.agents = 1
+  await click(zh.save)
+  expect(document.querySelector('.dt-savebar [role="alert"]')?.textContent).toBe(zh.saveConflict)
+  expect(inputs('main').map(input => input.value)).toEqual(['my-provider', 'my-model', ''])
+  await click(zh.save)
+  expect(server.settings.agents.main.model).toEqual({ provider: 'my-provider', model: 'my-model' })
+})
+
+it('shows the save bar only while the Agents block has edits', async () => {
+  await open()
+  expect(all('.dt-savebar')).toHaveLength(0)
+  await click(switchOf('aligner', 'web_search'))
+  expect(all('.dt-savebar')).toHaveLength(1)
+  await click(zh.discard)
+  expect(all('.dt-savebar')).toHaveLength(0)
+})
+
+it('lists an Agents save with its role, model and tool change lines', async () => {
+  server.history = { current: 4, policyVersion: 'abcdef1234567890', items: [{ revision: 4, savedAt: '2026-09-22T00:00:00Z',
+    source: 'panel', policyVersion: 'abcdef1234567890', policyChanged: false, notified: [], block: 'agents',
+    changes: [{ code: 'agentExecutorModel' }, { code: 'agentMainTools', from: '', to: 'read_image' },
+      { code: 'agentAlignerTools', from: 'web_search', to: '' }] }] }
+  await open()
+  await click(zh.configHistory)
+  expect(text()).toContain(zh['change.agentExecutorModel'])
+  expect(text()).toContain(zh['change.agentMainTools'].replace('{from}', zh.unsetValue).replace('{to}', 'read_image'))
+  expect(text()).toContain(zh['change.agentAlignerTools'].replace('{from}', 'web_search').replace('{to}', zh.unsetValue))
+})
+
+it('shows the Agents group and its role copy in English', async () => {
+  at({ page: 'settings', query: { group: 'agents' } })
+  await mount(en)
+  expect(current()).toBe(en['settingsGroup.agents'])
+  expect(text()).toContain(en.agentsIntroShort)
+  expect(all('[data-agent-role]').map(item => item.querySelector('.dt-block-title')?.textContent))
+    .toEqual([en['agentRole.main'], en['agentRole.aligner'], en['agentRole.executor']])
+  expect(text()).toContain(en.agentToolRequired)
+})

@@ -14,7 +14,9 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
   TicketRow, TicketStage,
   TriggerRow } from '../../src/client/api.ts'
 import { SETUP_FIELDS } from '../../src/deployment.ts'
-import { EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
+import { AgentsConfigSchema, EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
+import { agentCatalog, validateAgentTools } from '../../src/app/agent-tools.ts'
+import { UserError } from '../../src/core/index.ts'
 import { SetupError, type SetupCode } from '../../src/setup.ts'
 import { feishuChannel } from '../../src/sources/feishu-trigger.ts'
 import { githubChannel } from '../../src/sources/github-trigger.ts'
@@ -48,6 +50,8 @@ export const ticketSummary = (fields: Partial<TicketFields> = {}, stage: TicketS
   ({ ...TICKET, ...fields, ...stage })
 export const localIssue = (title: string, body = '', project = 'p-fixture'): LocalIssue => ({ id: 'q-fixture', title, body, author: 'local',
   project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+/** The HTTP requirement view: the stored record plus the derived completion flag the host adds on every response. */
+const issueView = (issue: LocalIssue) => ({ ...issue, slicesFinished: server.issueSlicesFinished.has(issue.id) })
 const localTrigger = (issue: LocalIssue): TriggerRow => ({ id: `local-${issue.id}`, source: 'local',
   actor: { source: 'local', id: issue.author || 'local' }, human: true, at: issue.createdAt, text: issue.body || issue.title,
   preview: issue.body || issue.title, url: undefined, threads: [`local:${issue.id}`], actions: { requeue: false },
@@ -120,7 +124,10 @@ export interface PanelServer {
   settings: Settings; revisions: Record<string, number>
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
+  /** Stored requirement records; every route returns them through `issueView`, so the API types stay the view type. */
   localIssues: LocalIssue[]
+  /** Requirements whose slice tickets all ended, which is what `slicesFinished` reports in the returned view. */
+  issueSlicesFinished: Set<string>
   /** Human messages posted into a requirement's thread, oldest first, keyed by issue id (the comment form appends here). */
   localComments: Record<string, TriggerRow[]>
   /** Sent agent replies shown on a requirement's thread, keyed by issue id. */
@@ -140,6 +147,10 @@ export interface PanelServer {
   queued: Set<string>
   searching?: (query: string) => Promise<void>
   setup: SetupView
+  /** The running checkout the Deployment page shows, and what a pull and build does to it. */
+  prepare: ApiResponse<'GET deployment/prepare'>
+  /** When set, a pull and build refuses with `prepareFailed` carrying this script message and log path. */
+  prepareFailure?: { message: string; log: string }
   health: Record<string, Health>
   /** When true, all API requests return an empty 404 to simulate the host plugin being stopped. */
   down: boolean
@@ -210,7 +221,10 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
   policyVersion: 'abcdef1234567890',
   blocks: { policy: { value: server.settings.policy, revision: server.revisions.policy ?? 0 },
     eval: { value: server.settings.eval, revision: server.revisions.eval ?? 0 },
-    executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 } },
+    executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 },
+    agents: { value: server.settings.agents, revision: server.revisions.agents ?? 0 } },
+  // The catalog the Agents page offers, as the host's own catalog defines it.
+  agents: { roles: agentCatalog() },
   sources: sourceSettings(),
   environment: { root: '/srv/dsh-superagent/work', variables: [
     { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
@@ -294,13 +308,17 @@ function initial(): PanelServer {
     setup: { machine: MACHINE, problem: null, feishuProblem: null,
       accounts: { repository: 'acme/widgets', intakeRepository: 'acme/widgets', agent: 'agent-bot', feishu: { appId: 'cli_bot', brand: 'feishu', botId: 'ou_bot',
         name: 'Widgets Bot' } } },
+    prepare: { checkout: { path: MACHINE.stateDir, repository: 'acme/widgets', branch: 'main',
+      head: '0123456789abcdef0123456789abcdef01234567', committedAt: '2026-09-23T00:00:00Z', dirty: false,
+      remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true, reasons: [], restartRequired: false },
+      chain: 'default', repository: 'acme/widgets', available: true, reasons: [], running: false },
     settings, revisions: { policy: 3, eval: 1, executor: 0 },
     prompts: { masterId: 'master', sections: TEAM_SECTIONS, skillName: SKILL_NAME.source, builtin: ['feishu', 'github'],
       skillPrefix: SKILL_PREFIX, revision: 0, current: { ...defaults, config: defaultPrompts() },
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
     tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
-    localComments: {}, localReplies: {}, dispatchedIssues: new Set(),
+    issueSlicesFinished: new Set(), localComments: {}, localReplies: {}, dispatchedIssues: new Set(),
     localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
@@ -337,6 +355,27 @@ const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
 const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET state': { answer: stateView },
+  // The running checkout is read only; the fake answers an available checkout and its pull-and-build action.
+  'GET deployment/checkout': { answer: () => ({ path: '/srv/dsh-superagent', repository: 'acme/widgets', branch: 'main',
+    head: '0123456789abcdef0123456789abcdef01234567', committedAt: '2026-09-23T00:00:00Z', dirty: false,
+    remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true, reasons: [], restartRequired: false }) },
+  'GET deployment/prepare': { answer: () => server.prepare },
+  'POST deployment/prepare': { answer: () => {
+    if (server.prepareFailure) {
+      return refuse(400, `The pull and build failed: ${server.prepareFailure.message}`, { code: 'prepareFailed',
+        values: server.prepareFailure })
+    }
+    if (server.prepare.running) return refuse(400, 'A pull and build is already running', { code: 'prepareBusy', values: {} })
+    if (!server.prepare.available) {
+      return refuse(400, `The checkout cannot take a local merge: ${server.prepare.reasons.join(',')}`,
+        { code: 'prepareUnavailable', values: { reasons: server.prepare.reasons.join(',') } })
+    }
+    // As the host does: the merge moves HEAD and the new build takes effect after a restart.
+    const head = 'fedcba9876543210fedcba9876543210fedcba98'
+    server.prepare = { ...server.prepare, checkout: { ...server.prepare.checkout, head, committedAt: '2026-09-24T00:00:00Z',
+      restartRequired: true } }
+    return { merged: true, head, log: `${MACHINE.stateDir}/prepare/prepare-20260924-000000-1.log` }
+  } },
   'GET overview': { answer: overviewView },
   'GET search': { query: ['q'], answer: async ({ query }) => {
     const q = query.q ?? ''
@@ -398,8 +437,9 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.localProjects = server.localProjects.map(item => item.id === params.id ? next : item)
     return { project: next }
   } },
+  // Every route that returns a requirement answers with the view, never the stored record.
   'GET local/issues': { query: ['project'], answer: ({ query }) =>
-    ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project) }) },
+    ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project).map(issueView) }) },
   'POST local/issues': { body: true, answer: ({ body }) => {
     // The fixture switch mirrors a host refusal of the whole create request.
     if (server.refuseIssueCreate) {
@@ -417,11 +457,11 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     }))
     const issue = { ...localIssue(title, description, body.project), ...(images.length ? { images } : {}) }
     server.localIssues = [issue, ...server.localIssues]
-    return { issue }
+    return { issue: issueView(issue) }
   } },
   'GET local/issues/:id': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
-    return issue ? { issue, project: server.localProjects.find(project => project.id === issue.project) ?? null,
+    return issue ? { issue: issueView(issue), project: server.localProjects.find(project => project.id === issue.project) ?? null,
       thread: server.threadPages(`local:${params.id}`, {}) ?? localThread(issue, server.localComments[params.id] ?? [], server.dispatchedIssues.has(issue.id)),
       replies: server.localReplies[params.id] ?? [] }
       : refuse(404, 'Local issue not found')
@@ -435,7 +475,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     const next = { ...issue, updatedAt: at }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     server.localComments = { ...server.localComments, [params.id]: [...posted, localComment(next, String(body.text).trim(), at)] }
-    return { issue: next }
+    return { issue: issueView(next) }
   } },
   'POST local/issues/:id/alignment': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
@@ -443,7 +483,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     const next = { ...issue, alignment: { status: 'proposed' as const, summary: body.summary ?? '', slices: body.slices ?? [],
       acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' } }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    return { issue: next }
+    return { issue: issueView(next) }
   } },
   'POST local/issues/:id/alignment/decision': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
@@ -453,7 +493,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     // A confirmed alignment dispatches the slices, so the requirement's execution mode is read-only from then on.
     if (body.decision === 'confirm') server.dispatchedIssues.add(params.id)
-    return { issue: next, tickets: body.decision === 'confirm'
+    return { issue: issueView(next), tickets: body.decision === 'confirm'
       ? next.alignment.slices.map(slice => ({ id: `ticket-${slice.id}`, title: `${slice.id} · ${slice.title}` })) : [] }
   } },
   'POST local/issues/:id/execution': { body: true, answer: ({ params, body }) => {
@@ -467,14 +507,35 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     }
     const next = { ...issue, execution: body.mode, updatedAt: '2026-09-23T00:00:00Z' }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    return { issue: next }
+    return { issue: issueView(next) }
+  } },
+  // Requirement questions: recorded as asked at once; the background answer the host queues is not part of the panel's model.
+  'POST local/issues/:id/questions': { body: true, answer: ({ params, body }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    if (!issue) return refuse(404, 'Local issue not found')
+    const question = { id: `qn-${String((issue.questions ?? []).length).padStart(8, '0')}`, ticket: body.ticket as string,
+      text: body.text as string, status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
+    const next = { ...issue, questions: [...issue.questions ?? [], question] }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: issueView(next), question }
+  } },
+  'POST local/issues/:id/questions/:questionId/retry': { answer: ({ params }) => {
+    const issue = server.localIssues.find(item => item.id === params.id)
+    const question = issue?.questions?.find(item => item.id === params.questionId)
+    if (!issue || !question) return refuse(404, 'Local question not found')
+    if (question.status !== 'failed') return refuse(400, 'Only a failed question can be retried', { code: 'questionNotFailed' })
+    const retried = { ...question, status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
+    delete retried.answer; delete retried.error; delete retried.answeredAt
+    const next = { ...issue, questions: (issue.questions ?? []).map(item => item.id === params.questionId ? retried : item) }
+    server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
+    return { issue: issueView(next), question: retried }
   } },
   'POST local/issues/:id/close': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
     const next = { ...issue, state: 'closed' as const }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    return { issue: next }
+    return { issue: issueView(next) }
   } },
   'POST tickets/:id/retry': { answer: ({ params }) => {
     const ticket = ticketOf(params.id)
@@ -494,14 +555,23 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   } },
   'PUT settings/:block': { body: true, answer: ({ params: { block }, body }) => {
     const source = block.startsWith('source:') ? KINDS.find(kind => `source:${kind.kind}` === block) : undefined
-    if (!['policy', 'eval', 'executor'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
+    if (!['policy', 'eval', 'executor', 'agents'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
       : refuse(400, 'Invalid settings: block')
     if (body.revision !== (server.revisions[block] ?? 0)) return refuse(409, 'Settings changed. Reload before saving.')
     let restarting = false
     if (block === 'policy') server.settings = { ...server.settings, policy: PolicyConfigSchema.parse(body.value) }
     else if (block === 'executor') server.settings = { ...server.settings, executor: ExecutorConfigSchema.parse(body.value) }
     else if (block === 'eval') server.settings = { ...server.settings, eval: EvalConfigSchema.parse(body.value) }
-    else if (source) {
+    else if (block === 'agents') {
+      // Mirror the host: validate the catalog rules and refuse with the same structured user error the panel localizes.
+      const agents = AgentsConfigSchema.parse(body.value)
+      try { validateAgentTools(agents) }
+      catch (error) {
+        if (error instanceof UserError) return refuse(400, error.message, { code: error.code, values: error.values })
+        throw error
+      }
+      server.settings = { ...server.settings, agents }
+    } else if (source) {
       const { enabled, config: value } = SourceSave.parse(body.value)
       let config: Record<string, unknown>
       try { config = source.schema.parse(value) }

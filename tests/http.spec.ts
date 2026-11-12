@@ -1,6 +1,8 @@
-import { expect, it } from 'vitest'
+import { expect, it, onTestFinished, vi } from 'vitest'
 import { z } from 'zod'
 import { registerHttp } from '../src/app/http.ts'
+import type { PrepareStatus } from '../src/app/prepare.ts'
+import { UserError } from '../src/core/index.ts'
 import { PromptConflict } from '../src/app/prompts.ts'
 import { SettingsConflict } from '../src/app/settings.ts'
 import type { HttpHost } from '../src/app/http.ts'
@@ -97,4 +99,61 @@ it('answers a prompt save that lost a race with 409, and a settings body over 12
   expect(await call('PUT', 'settings/executor', { value, revision: 0 })).toEqual({ status: 400,
     body: { error: `Request exceeds ${128 * 1024} bytes` } })
   expect(saves).toEqual([])
+})
+
+it('accepts the agents settings block and answers its refusals with their code', async () => {
+  const saves: unknown[] = []
+  const call = serve({ settings: { save: async (...args: unknown[]) => {
+    saves.push(args)
+    if (args[1] === 'refused') throw new UserError('agentsRequiredTool', { role: 'executor', tools: 'bash' })
+    return { saved: true, revision: 1, restarting: false }
+  } } })
+  expect(await call('PUT', 'settings/agents', { value: 'ok', revision: 0 })).toMatchObject({ status: 200 })
+  expect(saves).toEqual([['agents', 'ok', 0, 'panel']])
+  expect(await call('PUT', 'settings/agents', { value: 'refused', revision: 0 })).toEqual({ status: 400,
+    body: { error: 'The executor Agent cannot turn off its required tools: bash', code: 'agentsRequiredTool',
+      values: { role: 'executor', tools: 'bash' } } })
+})
+
+const PREPARE: PrepareStatus = {
+  checkout: { path: '/srv/dsh-superagent', repository: 'acme/widgets', branch: 'main', head: '0123456789abcdef0123456789abcdef01234567',
+    committedAt: '2026-11-12T00:00:00Z', dirty: false, remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true,
+    reasons: [], restartRequired: false },
+  chain: 'default', repository: 'acme/widgets', available: true, reasons: [], running: false,
+}
+const MERGED = { merged: true, head: 'fedcba9876543210fedcba9876543210fedcba98', log: '/srv/dsh-superagent/prepare/prepare-1.log' }
+/** A runtime whose prepare answers the given status and result, or throws the given failure from a merge. */
+const prepareRuntime = (merge: () => Promise<typeof MERGED>) => ({
+  store: { settings: () => SettingsSchema.parse({}), tickets: { open: () => [] } },
+  executor: { activeCount: () => 0 },
+  machine: { stateDir: '/srv/dsh-superagent', promptMaxChars: { get: () => 100_000 }, admissionContextMaxPages: { get: () => 10 },
+    admissionContextTimeoutMs: { get: () => 15_000 } },
+  health: {}, masterId: 'master', configured: () => false,
+  prepare: { status: async () => PREPARE, merge },
+})
+
+it('answers the running checkout\'s local merge, and each refusal with its own code', async () => {
+  const status = serve({ prepare: { status: async () => PREPARE, merge: async () => MERGED } })
+  expect(await status('GET', 'deployment/prepare')).toEqual({ status: 200, body: PREPARE })
+  expect(await status('POST', 'deployment/prepare')).toEqual({ status: 200, body: MERGED })
+  const refusing = (error: Error) => serve({ prepare: { status: async () => PREPARE, merge: async () => { throw error } } })
+  expect(await refusing(new UserError('prepareUnavailable', { reasons: 'dirty,noChain' }))('POST', 'deployment/prepare'))
+    .toEqual({ status: 400, body: { error: 'The checkout cannot take a local merge: dirty,noChain', code: 'prepareUnavailable',
+      values: { reasons: 'dirty,noChain' } } })
+  expect(await refusing(new UserError('prepareBusy'))('POST', 'deployment/prepare'))
+    .toEqual({ status: 400, body: { error: 'A pull and build is already running', code: 'prepareBusy', values: {} } })
+  expect(await refusing(new UserError('prepareFailed', { message: 'prepare: uncommitted changes', log: '/tmp/prepare.log' }))
+    ('POST', 'deployment/prepare')).toEqual({ status: 400, body: { error: 'The pull and build failed: prepare: uncommitted changes',
+      code: 'prepareFailed', values: { message: 'prepare: uncommitted changes', log: '/tmp/prepare.log' } } })
+})
+
+it('sends no restart or exit signal from a pull and build, and keeps answering after it', async () => {
+  const kill = vi.spyOn(process, 'kill')
+  const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
+  onTestFinished(() => { kill.mockRestore(); exit.mockRestore() })
+  const call = serve(prepareRuntime(async () => MERGED))
+  expect(await call('POST', 'deployment/prepare')).toEqual({ status: 200, body: MERGED })
+  expect(await call('GET', 'state')).toMatchObject({ status: 200, body: { masterId: 'master', setup: { accounts: null } } })
+  expect(kill).not.toHaveBeenCalled()
+  expect(exit).not.toHaveBeenCalled()
 })

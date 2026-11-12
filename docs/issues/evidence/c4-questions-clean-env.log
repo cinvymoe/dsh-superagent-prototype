@@ -1,0 +1,23 @@
+(node:1598987) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1598999) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/api-engine-62fa6ab64496
+
+(node:1599052) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1599053) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1599052) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/environment.spec.ts (13 tests) 167ms
+ ✓ tests/runtime.spec.ts (95 tests) 13244ms
+   ✓ stops a ticket on a person's instruction for good, and resumes an ended one on any person's message on its thread  416ms
+   ✓ acknowledges a follow-up from the worker once and rejects events outside the task  321ms
+   ✓ treats GitHub comments through the same gate: mentions by members are explicit, others need an existing task  304ms
+
+ Test Files  2 passed (2)
+      Tests  108 passed (108)
+   Start at  01:46:56
+   Duration  14.80s (transform 1.22s, setup 0ms, import 1.71s, tests 13.41s, environment 0ms)
+

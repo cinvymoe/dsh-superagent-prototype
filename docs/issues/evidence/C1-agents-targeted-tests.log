@@ -1,0 +1,33 @@
+(node:1592004) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1592032) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/agent-api-9326a1747b59
+
+(node:1592119) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1592120) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1592133) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1592123) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1592127) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1592135) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (16 tests) 31ms
+ ✓ tests/locales.spec.ts (7 tests) 10ms
+(node:1592120) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1592119) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/http.spec.ts (5 tests) 37ms
+ ✓ tests/policy.spec.ts (330 tests) 158ms
+ ✓ tests/agent-config.spec.ts (5 tests) 452ms
+ ✓ tests/settings.spec.ts (5 tests) 566ms
+
+ Test Files  6 passed (6)
+      Tests  368 passed (368)
+   Start at  01:43:05
+   Duration  1.75s (transform 2.47s, setup 0ms, import 4.19s, tests 1.25s, environment 1ms)
+

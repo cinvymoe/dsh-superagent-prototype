@@ -1,0 +1,21 @@
+# C5 After capture — branch head at 869ec781 (code tree; only evidence files are committed after it)
+# tree: /data/project/workspace/dsh-worktrees/slice-96d585fa7995 after `pnpm build`
+# profile c5-after -> the worktree, host 10.126.126.6:3192, stateDir /root/.dsh/state/c5-after
+# seeded by c5-questions-seed.mjs with the same data as the Before state
+# viewport 1440x900, locale zh-CN, color_scheme light, scroll = section top; date 2026-11-13T02:56+08:00
+# command: python3 /tmp/c5-capture.py '<token URL>' docs/issues/evidence/c5 after (the token is not written to this log)
+
+MODE after
+PAGE HEAD: 返回需求列表 | 需求详情支持对关联工单提问 | 需求详情与对齐审阅 | 开放 | 已确认
+ROWS: [('C1 · 提问记录与后台回答', ['C1 · 提问记录与后台回答', '打开 Session', '提问']), ('C2 · 时间线展示问题与回答', ['C2 · 时间线展示问题与回答', '打开 Session', '提问']), ('C3 · Aligner 工单复核对齐结论', ['C3 · Aligner 工单复核对齐结论', '打开 Session', '提问'])]
+TICKET ROW: ('C1 · 提问记录与后台回答', ['C1 · 提问记录与后台回答', '打开 Session', '提问'])
+TICKET ROW: ('C2 · 时间线展示问题与回答', ['C2 · 时间线展示问题与回答', '打开 Session', '提问'])
+TICKET ROW: ('C3 · Aligner 工单复核对齐结论', ['C3 · Aligner 工单复核对齐结论', '打开 Session', '提问'])
+TIMELINE COUNT: 5
+TIMELINE EVENTS: ['local | 7小时前 |  | 回答里的 Markdown 要能正常显示。', "工单：C1 · 提问记录与后台回答 | 8小时前 | 回答失败 |  | 这个工单的首轮实现用了哪个模型？ |  | Ticket c10c1060da7db8e4d557b3ffeec97229's worker Session has no completed turn to fork at |  | 重试提问", '工单：C2 · 时间线展示问题与回答 | 8小时前 | 已回答 |  | 为什么回答要标在关联工单上？ |  | 回答 |  | 因为回答来自该工单的会话，只对提问的工单成立： |  | 每个问题独立 | 回答不会被当成新的工作请求 |  | 需要改东西时，还是写一条新的需求或评论。', '智能体 | 8小时前 | 智能体 |  | 收到，提问与回答都会回到这里。', 'local | 9小时前 |  | 提问入口请放在关联工单行，别再加一页。']
+QUESTION EVENTS: ["工单：C1 · 提问记录与后台回答 | 8小时前 | 回答失败 |  | 这个工单的首轮实现用了哪个模型？ |  | Ticket c10c1060da7db8e4d557b3ffeec97229's worker Session has no completed turn to fork at |  | 重试提问", '工单：C2 · 时间线展示问题与回答 | 8小时前 | 已回答 |  | 为什么回答要标在关联工单上？ |  | 回答 |  | 因为回答来自该工单的会话，只对提问的工单成立： |  | 每个问题独立 | 回答不会被当成新的工作请求 |  | 需要改东西时，还是写一条新的需求或评论。']
+SCHEME: {'prefersDark': False, 'bodyBg': 'rgb(255, 255, 255)'}
+SHOT docs/issues/evidence/c5/after-timeline.png
+SHOT docs/issues/evidence/c5/after-tickets.png
+COMPOSER: 就这个工单提问，回答会回到这条需求的消息记录
+SHOT docs/issues/evidence/c5/after-composer.png

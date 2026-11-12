@@ -73,6 +73,25 @@ export interface LocalImageInput {
   data: string
 }
 
+/**
+ * One question a person asked about a Ticket the requirement dispatched, with the answer recorded on the requirement
+ * record rather than on the Ticket: nothing of the Engine sees it.
+ */
+export interface LocalQuestion {
+  id: string
+  /** The dispatched Ticket the question is about. */
+  ticket: string
+  text: string
+  status: 'asked' | 'answered' | 'failed'
+  askedAt: string
+  /** When the question reached this status; absent while it is still `asked`. */
+  answeredAt?: string
+  /** The answer, once one was read from a Session forked off the Ticket's worker. */
+  answer?: string
+  /** Why the question failed, so a person may retry it; absent unless it is `failed`. */
+  error?: string
+}
+
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */
 export interface LocalIssue {
   id: string
@@ -84,6 +103,11 @@ export interface LocalIssue {
   /** Images attached when the requirement was submitted; absent when there are none. */
   images?: LocalImage[]
   /**
+   * The questions people asked about its dispatched Tickets, newest last. Absent when there are none, so records written
+   * before questions existed read fine and need no migration.
+   */
+  questions?: LocalQuestion[]
+  /**
    * The execution mode the person chose for the requirement's slice tickets: absent means native, which is also how
    * requirements created before the field existed dispatch.
    */
@@ -92,6 +116,15 @@ export interface LocalIssue {
   updatedAt: string
   state: 'open' | 'closed'
   alignment?: LocalAlignment
+}
+
+/**
+ * A requirement as an HTTP response carries it: the stored record plus whether every slice Ticket of its confirmed
+ * alignment ended. The flag is derived when the view is built and never stored, so resuming a Ticket turns it off again
+ * and no migration is needed; `LocalIssue` records returned by `runtime.local.get()`/`list()` keep it absent.
+ */
+export interface LocalIssueView extends LocalIssue {
+  slicesFinished: boolean
 }
 
 /** The execution mode a requirement runs under: the person's choice, or native when they made none. */
