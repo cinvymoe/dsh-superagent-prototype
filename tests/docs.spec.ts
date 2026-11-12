@@ -72,7 +72,7 @@ describe('documentation', () => {
 describe('worktree root documentation', () => {
   it('states the directory root priority and that the prepare command runs in the chosen root', () => {
     const execution = prose('docs/003-execution.md')
-    expect(execution).toContain('chosen in this order: the local project\'s `worktreeRoot`, then `executor.directory`, then `<stateDir>/work`')
+    expect(execution).toContain('chosen by priority: the local project\'s `worktreeRoot` > `executor.directory` > `<stateDir>/work`')
     expect(execution).toContain('the prepare command runs once with `sh` and the chosen root as its working directory')
   })
   it('states that an explicit root failure does not fall back and can be retried after it is fixed', () => {
@@ -83,22 +83,26 @@ describe('worktree root documentation', () => {
   })
   it('covers the same semantics in the deployment Execution step and executor block', () => {
     const deployment = prose('docs/006-deployment.md')
-    expect(deployment).toContain('a local project\'s optional absolute `worktreeRoot`, then the Ticket directory root (`executor.directory`), then `<stateDir>/work`')
+    expect(deployment).toContain('chosen by priority: a local project\'s optional absolute `worktreeRoot` > the Ticket directory root (`executor.directory`) > `<stateDir>/work`')
     expect(deployment).toContain('The prepare command runs with that root as its working directory; it creates the repository checkout at `$DSH_SUPERAGENT_DIR` but does not choose the root.')
     expect(deployment).toContain('a local project\'s `worktreeRoot` takes precedence over it')
     expect(deployment).toContain('either explicitly configured root must already exist, be a directory and be writable when a Ticket launches')
     expect(deployment).toContain('without creating anything or falling back to `<stateDir>/work`')
   })
-  it('names the Discuss project worktree root field and its precedence in the panel document', () => {
+  it('names the Discuss project fields and the Execution root in the panel document', () => {
     const panel = prose('docs/005-panel.md')
-    expect(panel).toContain('an optional absolute `worktreeRoot` (empty means unconfigured)')
+    expect(panel).toContain('an optional absolute `worktreeRoot` (empty keeps the Execution ticket directory root)')
+    expect(panel).toContain('**Project name** labels the project')
+    expect(panel).toContain('**Execution repository** is the `owner/name` repository')
+    expect(panel).toContain('the Ticket directory root (`executor.directory`; empty uses `<stateDir>/work`)')
     expect(panel).toContain('A local project\'s `worktreeRoot` takes precedence over the Ticket directory root')
     expect(panel).toContain('The prepare command runs in the selected root.')
   })
-  it('describes the worktree root in the module table entries this feature touches', () => {
+  it('describes the worktree root in the module and test table entries this feature touches', () => {
     const architecture = prose('docs/007-architecture.md')
-    expect(architecture).toContain('its `prepareDirectory` validation of an explicit worktree root')
+    expect(architecture).toContain('its `prepareDirectory` validation of an explicit worktree root and the prepare command\'s working directory')
     expect(architecture).toContain('create a project with its name, repository and optional worktree root')
     expect(architecture).toContain('`Execution` with its optional explicit `worktreeRoot`')
+    expect(architecture).toContain('the worktree-root sections state the root priority, the prepare working directory and the no-fallback failure')
   })
 })
