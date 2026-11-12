@@ -1,8 +1,9 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LocalIssues, requirementTitle } from '../src/app/local.ts'
+import { LocalQuestions, QUESTION_LIMIT, type TicketAnswers } from '../src/app/local-questions.ts'
 import { Store } from '../src/app/store.ts'
 import { KV } from '../src/kv.ts'
 import type { Ticket, Trigger } from '../src/core/index.ts'
@@ -263,5 +264,108 @@ describe('the local issue board', () => {
     store.tickets.save({ id: 't-lock', plan: { issueId: issue.id, sliceId: 'C1' } } as unknown as Ticket)
     expect(() => issues.setExecution(issue.id, 'native')).toThrow('A requirement that has dispatched tickets keeps its execution mode')
     expect(issues.get(issue.id)?.execution).toBe('feature-exec')
+  })
+})
+
+/** Questions about a requirement's dispatched Tickets: recorded on the requirement, answered through a port, retried. */
+describe('requirement questions', () => {
+  const at = '2026-09-01T00:00:00.000Z'
+  const lifetime = new AbortController().signal
+  const setup = (ask: TicketAnswers['ask']) => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-superagent-local-'))
+    directories.push(directory)
+    const store = new Store(join(directory, 'orchestrator.sqlite'))
+    const issues = new LocalIssues({ store, stateDir: directory, receive: () => ({ kind: 'stored' }) as never })
+    const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
+    const issue = issues.create({ title: 'Ask about a dispatched ticket', project: project.id })
+    const questions = new LocalQuestions({ store, local: issues, answers: { ask }, lifetime, now: () => at })
+    return { issues, questions, store, issue }
+  }
+  /** A dispatched Ticket of `issueId`, whose worker Session started unless `started` is false. */
+  const ticket = (issueId: string, started = true): Ticket => ({ id: 't-x', plan: { issueId },
+    assignments: [{ id: 'a-1', state: 'running', createdAt: at, ...(started ? { startedAt: at } : {}) }] } as unknown as Ticket)
+
+  it('records a question as asked at once and answers it on the requirement in the background', async () => {
+    const ask = vi.fn(async () => ({ ok: true as const, answer: 'The worker retried a flaky check.' }))
+    const { issues, questions, store, issue } = setup(ask)
+    const dispatched = ticket(issue.id)
+    store.tickets.save(dispatched)
+    const asked = questions.ask(issue.id, dispatched.id, '  Why did this fail?  ')!
+    expect(asked.question).toMatchObject({ ticket: dispatched.id, text: 'Why did this fail?', status: 'asked', askedAt: at })
+    expect(asked.question.id).toMatch(/^qn-[0-9a-f]{8}$/)
+    expect(issues.get(issue.id)!.questions).toEqual([asked.question])
+    // The request path never reaches the port: recording `asked` returns first.
+    expect(ask).not.toHaveBeenCalled()
+    await questions.idle()
+    expect(ask).toHaveBeenCalledWith(dispatched, 'Why did this fail?', { signal: lifetime })
+    const stored = issues.get(issue.id)!.questions![0]!
+    expect(stored).toMatchObject({ status: 'answered', answer: 'The worker retried a flaky check.', answeredAt: at })
+    expect(stored.error).toBeUndefined()
+  })
+
+  it('refuses a question about a Ticket that this requirement did not dispatch', () => {
+    const ask = vi.fn()
+    const { issues, questions, store, issue } = setup(ask as unknown as TicketAnswers['ask'])
+    store.tickets.save(ticket('q-other'))
+    store.tickets.save({ id: 't-planless', plan: undefined, assignments: [{ id: 'a-1', state: 'running', createdAt: at, startedAt: at }] } as unknown as Ticket)
+    expect(() => questions.ask(issue.id, 't-x', 'Why?')).toThrow('dispatched Tickets')
+    expect(() => questions.ask(issue.id, 't-planless', 'Why?')).toThrow('dispatched Tickets')
+    expect(ask).not.toHaveBeenCalled()
+    expect(issues.get(issue.id)).toEqual(issue)
+  })
+
+  it('refuses a question about a Ticket whose worker Session never started', () => {
+    const ask = vi.fn()
+    const { issues, questions, store, issue } = setup(ask as unknown as TicketAnswers['ask'])
+    store.tickets.save(ticket(issue.id, false))
+    expect(() => questions.ask(issue.id, 't-x', 'Why?')).toThrow('has not started its worker Session')
+    expect(ask).not.toHaveBeenCalled()
+    expect(issues.get(issue.id)).toEqual(issue)
+  })
+
+  it('records a failed question with its reason, retries it under the same record and refuses retrying an answer', async () => {
+    const ask = vi.fn<TicketAnswers['ask']>(async () => ({ ok: false, reason: 'timeout', message: 'The answer did not end within 120000ms' }))
+    const { issues, questions, store, issue } = setup(ask)
+    store.tickets.save(ticket(issue.id))
+    const asked = questions.ask(issue.id, 't-x', 'Why did this fail?')!
+    await questions.idle()
+    const failed = issues.get(issue.id)!.questions![0]!
+    expect(failed).toMatchObject({ id: asked.question.id, status: 'failed', answeredAt: at })
+    expect(failed.error).toContain('did not end within 120000ms')
+    // A retry re-queues the same record rather than appending a new one, and clears the previous failure.
+    ask.mockResolvedValueOnce({ ok: true as const, answer: 'It was a flaky check.' })
+    const retried = questions.retry(issue.id, asked.question.id)!
+    expect(retried.question).toMatchObject({ id: asked.question.id, status: 'asked', askedAt: at })
+    expect(retried.question.error).toBeUndefined()
+    expect(retried.question.answer).toBeUndefined()
+    expect(issues.get(issue.id)!.questions).toHaveLength(1)
+    await questions.idle()
+    expect(issues.get(issue.id)!.questions![0]).toMatchObject({ status: 'answered', answer: 'It was a flaky check.' })
+    expect(() => questions.retry(issue.id, asked.question.id)).toThrow('Only a failed question can be retried')
+    // Unknown requirements and questions read as absent rather than refused.
+    expect(questions.retry('q-unknown', asked.question.id)).toBeUndefined()
+    expect(questions.retry(issue.id, 'qn-unknown')).toBeUndefined()
+  })
+
+  it('records a port that throws as a failure instead of leaving the question waiting', async () => {
+    const ask = vi.fn(async () => { throw new Error('the forked Session could not be reached') })
+    const { issues, questions, store, issue } = setup(ask)
+    store.tickets.save(ticket(issue.id))
+    questions.ask(issue.id, 't-x', 'Why did this fail?')
+    await questions.idle()
+    expect(issues.get(issue.id)!.questions![0]).toMatchObject({ status: 'failed' })
+    expect(issues.get(issue.id)!.questions![0]!.error).toContain('the forked Session could not be reached')
+  })
+
+  it('refuses a question once the requirement keeps the limit of them', () => {
+    const ask = vi.fn()
+    const { issues, questions, store, issue } = setup(ask as unknown as TicketAnswers['ask'])
+    store.tickets.save(ticket(issue.id))
+    const kept = Array.from({ length: QUESTION_LIMIT }, (_, index) => ({ id: `qn-${String(index).padStart(8, '0')}`, ticket: 't-x',
+      text: `Question ${index}`, status: 'answered' as const, askedAt: at, answeredAt: at, answer: `Answer ${index}` }))
+    issues.putIssue({ ...issue, questions: kept })
+    expect(() => questions.ask(issue.id, 't-x', 'One too many')).toThrow(`at most ${QUESTION_LIMIT} questions`)
+    expect(ask).not.toHaveBeenCalled()
+    expect(issues.get(issue.id)!.questions).toHaveLength(QUESTION_LIMIT)
   })
 })

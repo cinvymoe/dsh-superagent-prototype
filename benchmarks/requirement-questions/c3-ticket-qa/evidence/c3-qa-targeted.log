@@ -1,0 +1,28 @@
+$ pnpm vitest run tests/questions.spec.ts tests/model-surface.spec.ts tests/docs.spec.ts
+(node:1505492) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1505601) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/fork-12b1b458e8d8
+
+(node:1505708) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1505709) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1505716) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/docs.spec.ts (14 tests) 42ms
+(node:1505709) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1505708) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/model-surface.spec.ts (7 tests) 1107ms
+ ✓ tests/questions.spec.ts (6 tests) 1525ms
+   ✓ answers one question from a Session forked off the worker's latest completed turn, then archives it  421ms
+   ✓ reports an empty answer and archives the forked Session  311ms
+
+ Test Files  3 passed (3)
+      Tests  27 passed (27)
+   Start at  00:45:44
+   Duration  3.62s (transform 2.41s, setup 0ms, import 3.55s, tests 2.67s, environment 1ms)
+
+EXIT=0

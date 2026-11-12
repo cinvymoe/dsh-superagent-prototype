@@ -1,12 +1,11 @@
 /** Read/write operations for requirements submitted through the built-in local issue board. */
 import { readFileSync, rmSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { key, UserError, EXECUTION_STRATEGY_REVISION, type ActorRef, type ExecutionMode, type ExecutionStrategy, type ReceiveResult,
-  type Thread, type Trigger } from '../core/index.ts'
+import { key, planTicketId, UserError, EXECUTION_STRATEGY_REVISION, type ActorRef, type ExecutionMode, type ExecutionStrategy,
+  type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment,
-  type LocalImage, type LocalImageInput, type LocalIssue, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
+import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
 
@@ -151,6 +150,22 @@ export class LocalIssues {
     const rounds = alignmentRounds(issue)
     if (!rounds.length) return issue
     return { ...issue, alignments: rounds, alignment: rounds[rounds.length - 1]! }
+  }
+
+  /** Store a requirement record, replacing any earlier one with the same id; the caller owns every field it changes. */
+  putIssue(issue: LocalIssue): void { this.host.store.set(KV.local.issue(issue.id), issue) }
+
+  /**
+   * The HTTP view of a requirement: its stored record plus whether every slice Ticket of its confirmed alignment ended.
+   * Derived here, on read, so no migration or extra store field exists. A requirement without a confirmed alignment, one
+   * whose alignment has no slices, or one whose slice has no Ticket reports false rather than guessing that it finished.
+   * Both an Executor's end and a person's stop count, because the Ticket record only has to carry `ended`.
+   */
+  view(issue: LocalIssue): LocalIssueView {
+    const slices = issue.alignment?.status === 'confirmed' ? issue.alignment.slices : []
+    const slicesFinished = slices.length > 0
+      && slices.every(slice => !!this.host.store.tickets.get(planTicketId(issue.id, slice.id))?.ended)
+    return { ...issue, slicesFinished }
   }
 
   thread(id: string): string { return localThreadKey(id) }

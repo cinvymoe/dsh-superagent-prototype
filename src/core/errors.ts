@@ -36,7 +36,13 @@ export const USER_ERRORS = {
   noChannel: ['refused', 'No reply channel for this ticket or trigger'],
   panelOnlyEnvironment: ['refused', 'The execution environment (ticket directory, prepare command, blocked commands) can only be changed in the management panel'],
   panelOnlyAccounts: ['refused', 'Source fields that setup reads, such as account CLIs, can only be changed in the management panel'],
+  panelOnlyAgents: ['refused', 'Agent models and tools can only be changed in the management panel'],
+  agentsRequiredTool: ['refused', 'The {role} Agent cannot turn off its required tools: {tools}'],
+  agentsUnknownTool: ['refused', 'The {role} Agent has no tool named {tools}'],
   setupComplete: ['refused', 'Setup is complete'],
+  prepareUnavailable: ['refused', 'The checkout cannot take a local merge: {reasons}'],
+  prepareBusy: ['refused', 'A pull and build is already running'],
+  prepareFailed: ['refused', 'The pull and build failed: {message}'],
   modelUnavailable: ['refused', 'The {block} model is not available: {error}'],
   promptTooLong: ['refused', 'Prompt configuration exceeds {limit} characters'],
   promptPlaceholders: ['refused', 'The “{part}” template must keep {placeholders}, which the system fills in'],
@@ -60,6 +66,11 @@ export const USER_ERRORS = {
   issueImageType: ['refused', 'Image {name} must be a PNG, JPEG, WebP or GIF image'],
   issueImageSize: ['refused', 'Image {name} is larger than {max} bytes'],
   issueImageData: ['refused', 'Image {name} is not valid base64 image data'],
+  questionText: ['refused', 'A question needs text'],
+  questionTicket: ['refused', 'A question is only about one of the requirement\'s dispatched Tickets'],
+  questionNoSession: ['refused', 'The Ticket has not started its worker Session yet; ask once it has run'],
+  questionNotFailed: ['refused', 'Only a failed question can be retried'],
+  questionLimit: ['refused', 'A requirement keeps at most {max} questions'],
 } as const satisfies Record<string, readonly ['missing' | 'refused', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
 

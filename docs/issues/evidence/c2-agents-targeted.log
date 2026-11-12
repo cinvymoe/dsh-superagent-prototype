@@ -1,0 +1,27 @@
+(node:1687554) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1687570) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/agent-9464d98fa7af
+
+(node:1687627) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1687624) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1687623) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1687623) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/role-models.spec.ts (5 tests) 48ms
+(node:1687624) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/agent-config.spec.ts (8 tests) 746ms
+   ✓ applies an aligner's own optional tools to its Session while the executor keeps its set  340ms
+ ✓ tests/runtime.spec.ts (98 tests) 14298ms
+   ✓ resumes several ended tickets on one thread from one message without the launch waiting on itself  393ms
+
+ Test Files  3 passed (3)
+      Tests  111 passed (111)
+   Start at  02:48:44
+   Duration  15.75s (transform 1.71s, setup 0ms, import 2.71s, tests 15.09s, environment 0ms)
+
+exit code: 0

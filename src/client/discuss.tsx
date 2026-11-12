@@ -1,7 +1,7 @@
 /** Requirement pages: submit a requirement, list the project's requirements, and review the Aligner's proposal. */
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { REQUIREMENT_IMAGES } from '../limits.ts'
-import { projectRepositories, requirementExecutionMode, type LocalImage, type LocalIssue } from '../sources/local-format.ts'
+import { projectRepositories, requirementExecutionMode, type LocalImage, type LocalIssue, type LocalIssueView } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
 import { Button, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
@@ -47,8 +47,10 @@ function RequirementImages({ issue }: { issue: LocalIssue }) {
   </figure>)}</div>
 }
 
-const stateTag = (t: T, issue: LocalIssue) => issue.state === 'closed'
-  ? <Tag tone="quiet">{t('discuss.closed')}</Tag> : <Tag tone="success">{t('discuss.open')}</Tag>
+// 待关闭 is the requirement's own state, derived from its slice Tickets; the alignment tag beside it is unchanged.
+const stateTag = (t: T, issue: LocalIssueView) => issue.state === 'closed'
+  ? <Tag tone="quiet">{t('discuss.closed')}</Tag>
+  : issue.slicesFinished ? <Tag tone="info">{t('discuss.pendingClose')}</Tag> : <Tag tone="success">{t('discuss.open')}</Tag>
 
 function statusTag(t: T, issue: LocalIssue) {
   const alignment = issue.alignment
@@ -213,6 +215,9 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   const [comment, setComment] = useState('')
   const [reason, setReason] = useState('')
   const [rejecting, setRejecting] = useState(false)
+  // The linked Ticket whose Ask composer is open, and its draft: one composer at a time, closed by cancel or submit.
+  const [asking, setAsking] = useState<string>()
+  const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const issue = data?.issue
   const act = async (work: () => Promise<unknown>) => {
@@ -226,6 +231,20 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
     if (!text) return
     await act(async () => { await call('POST local/issues/:id/comments', { id, body: { text } }); setComment('') })
   }
+  // A question is about one linked Ticket: the host records it as asked and answers it in the background, and only the
+  // requirement record changes, so the page re-reads that record to let the answer appear in the timeline on its poll.
+  const ask = async (event: FormEvent, ticketId: string) => {
+    event.preventDefault()
+    const text = draft.trim()
+    if (!text || busy) return
+    await act(async () => {
+      await call('POST local/issues/:id/questions', { id, body: { ticket: ticketId, text } })
+      setAsking(undefined)
+      setDraft('')
+    })
+  }
+  const retryQuestion = (questionId: string) => act(() => call('POST local/issues/:id/questions/:questionId/retry',
+    { id, questionId }))
   const decide = (decision: 'confirm' | 'reject') => act(async () => {
     // The decision names the round this page showed, so a page left open cannot confirm a newer proposal.
     const answer = await call('POST local/issues/:id/alignment/decision', { id, body: { decision,
@@ -249,12 +268,18 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   const original = issue.body || issue.title
   const isOriginal = (text: string) => text === original || (!!(issue.images?.length) && text.startsWith(`${original}\n\nImages:`))
   const skipped = timeline.findIndex(trigger => isOriginal(trigger.text))
+  // The questions live on the requirement record, not in the thread's Trigger timeline; they join the message timeline
+  // here, dated by when they were asked, so each one takes its place in the same newest-first order.
+  const questions = (issue.questions ?? []).map(question => ({ at: question.askedAt, kind: 'question' as const, question }))
   // Newest first: the person keeps the conversation at the top, directly under the follow-up box, so the newest
   // message is the first row and the earliest one falls to the bottom of the list.
   const events = [
     ...timeline.flatMap((trigger, index) => index === skipped ? [] : [{ at: trigger.at, kind: 'trigger' as const, trigger }]),
     ...replies.map(reply => ({ at: reply.sentAt ?? '', kind: 'reply' as const, reply })),
+    ...questions,
   ].sort((a, b) => b.at.localeCompare(a.at))
+  // A question names its Ticket; a Ticket that left the thread reads as its id instead.
+  const ticketLabel = (ticketId: string) => data!.thread.tickets.find(ticket => ticket.id === ticketId)?.title ?? ticketId
   return <>
     <PageHead title={issue.title} back={{ label: t('discuss.back'), onClick: () => navigate(filter === 'pending'
       ? { page: 'requirements' } : { page: 'requirements', query: { filter } }, true) }}>
@@ -324,12 +349,29 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
           <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
             disabled={busy || !comment.trim()}>{t('discuss.comment')}</Button></div>
         </form>
-        <ul className="dt-list dt-timeline">{events.map((event, index) => <li key={index} className="dt-row dt-event">
-          <div className="dt-row-main">
+        <ul className="dt-list dt-timeline">{events.map((event, index) => <li key={index}
+          className={event.kind === 'question' ? 'dt-row dt-event dt-question' : 'dt-row dt-event'}>
+          {event.kind === 'question' ? <div className="dt-row-main">
+            <div className="dt-row-meta"><span className="dt-question-ticket">{t('discuss.questionOf',
+              { title: ticketLabel(event.question.ticket) })}</span><When at={event.at} />
+              {event.question.status === 'asked' && <Tag tone="info">{t('discuss.questionAsked')}</Tag>}
+              {event.question.status === 'answered' && <Tag tone="success">{t('discuss.questionAnswered')}</Tag>}
+              {event.question.status === 'failed' && <Tag tone="danger">{t('discuss.questionFailed')}</Tag>}</div>
+            <MarkdownLite text={event.question.text} />
+            {event.question.status === 'answered' && !!event.question.answer && <div className="dt-question-answer">
+              <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.questionAnswer')}</h3></div>
+              <MarkdownLite text={event.question.answer} />
+            </div>}
+            {event.question.status === 'failed' && <div className="dt-question-failure">
+              {!!event.question.error && <p className="dt-error" role="alert">{event.question.error}</p>}
+              <div className="dt-actions"><Button variant="outline" size="sm" disabled={busy}
+                onClick={() => { void retryQuestion(event.question.id) }}>{t('discuss.questionRetry')}</Button></div>
+            </div>}
+          </div> : <div className="dt-row-main">
             <div className="dt-row-meta">{event.kind === 'trigger' ? actorName(t, event.trigger.actor) : t('discuss.agent')}
               <When at={event.at} />{event.kind === 'reply' && <Tag tone="info">{t('discuss.agent')}</Tag>}</div>
             <MarkdownLite text={event.kind === 'trigger' ? event.trigger.text : event.reply.text} />
-          </div>
+          </div>}
         </li>)}</ul>
       </Section>
 
@@ -339,8 +381,24 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
           <Icon name="decision" size={14} /><div className="dt-row-main">
             <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
               onClick={() => navigate({ page: 'execution', id: ticket.id })}>{ticket.title}</button></div>
+            {/* Only a Ticket that started its Executor Session can be asked about; the same condition offers Open Session. */}
+            {ticket.sessionId && asking === ticket.id && <form className="dt-form dt-question-form"
+              onSubmit={event => { void ask(event, ticket.id) }}>
+              <textarea className="dt-textarea" value={draft} maxLength={4000} rows={3}
+                placeholder={t('discuss.askPlaceholder')} aria-label={t('discuss.askPlaceholder')}
+                onChange={event => setDraft(event.target.value)} />
+              <div className="dt-actions">
+                <Button type="submit" variant="primary" size="sm" icon={<Icon name="message" size={14} />}
+                  disabled={busy || !draft.trim()}>{t('discuss.askSubmit')}</Button>
+                <Button variant="ghost" size="sm" disabled={busy}
+                  onClick={() => { setAsking(undefined); setDraft('') }}>{t('cancel')}</Button>
+              </div>
+            </form>}
           </div>
-          {ticket.sessionId && <div className="dt-row-actions"><SessionButton variant="outline" sessionId={ticket.sessionId} /></div>}
+          {ticket.sessionId && <div className="dt-row-actions"><SessionButton variant="outline" sessionId={ticket.sessionId} />
+            {/* The open composer replaces its own Ask entry, so the row never offers two forms for the same Ticket. */}
+            {asking !== ticket.id && <Button variant="outline" size="sm" icon={<Icon name="message" size={14} />}
+              onClick={() => { setAsking(ticket.id); setDraft('') }}>{t('discuss.ask')}</Button>}</div>}
         </li>)}</ul>
       </Section>
 

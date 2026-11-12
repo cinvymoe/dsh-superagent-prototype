@@ -2,7 +2,15 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { RoleModel } from '../policy.ts'
+import type { Ticket } from '../core/index.ts'
+import type { AgentRole, RoleModel } from '../policy.ts'
+
+export { roleModel } from '../agent-model.ts'
+
+/** The role an Executor Session runs: an aligner for a Ticket accepted for alignment, the executor otherwise. */
+export function workerRole(ticket: Ticket | undefined): Exclude<AgentRole, 'main'> {
+  return ticket?.mode === 'align' ? 'aligner' : 'executor'
+}
 
 /** Resolve a configured route through the live provider; catalog membership is not a restriction. */
 export async function resolveRoleModel(ctx: Context, model: RoleModel): Promise<ModelSelection> {
