@@ -46,6 +46,8 @@ export const USER_ERRORS = {
   nothingToSync: ['refused', 'The {source} Source\'s part of the Policy has nothing to sync from, or the Source is off or waiting for setup'],
   planNeedsTriggers: ['refused', 'A confirmed plan needs at least one human message on its thread'],
   planEmpty: ['refused', 'The alignment has no slices to dispatch'],
+  executionMode: ['refused', 'Execution mode must be native or feature-exec'],
+  executionLocked: ['refused', 'A requirement that has dispatched tickets keeps its execution mode'],
   unknownProject: ['missing', 'Unknown local project'],
   projectTaken: ['refused', 'A project named {name} already exists'],
   projectRepository: ['refused', 'A project repository must be an owner/name pair'],

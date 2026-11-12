@@ -1,0 +1,23 @@
+(node:1332745) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1332780) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-5e9fa76642ab
+
+(node:1332837) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1332838) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1332838) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1332837) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ✓ tests/local.spec.ts (13 tests) 587ms
+ ✓ tests/local-align.spec.ts (24 tests) 3846ms
+   ✓ accepts a local requirement for alignment and gives its worker the align tool instead of execution  418ms
+     ✓ keeps the executor directory or the default work root when a project sets no worktree root  353ms
+
+ Test Files  2 passed (2)
+      Tests  37 passed (37)
+   Start at  22:53:22
+   Duration  5.33s (transform 1.48s, setup 0ms, import 2.24s, tests 4.43s, environment 0ms)
+

@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LocalIssues, requirementTitle } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
-import type { Trigger } from '../src/core/index.ts'
-import type { LocalImageInput } from '../src/sources/local-format.ts'
+import type { Ticket, Trigger } from '../src/core/index.ts'
+import { requirementExecutionMode, type LocalImageInput } from '../src/sources/local-format.ts'
 
 
 /** A 1x1 transparent PNG, a 1x1 GIF, a WebP signature and a minimal JPEG header; enough to prove each media type. */
@@ -26,7 +26,7 @@ describe('the local issue board', () => {
     const triggers: Trigger[] = []
     const issues = new LocalIssues({ store, stateDir: directory, receive: trigger => { triggers.push(trigger); return { kind: 'stored' } as never } })
     const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
-    return { issues, triggers, project, directory }
+    return { issues, triggers, project, directory, store }
   }
 
   it('creates an issue and submits its text as a human Trigger on a local Thread', () => {
@@ -175,5 +175,33 @@ describe('the local issue board', () => {
     const issue = issues.create({ title: 'Local requirement', project: project.id })
     expect(issues.close(issue.id)?.state).toBe('closed')
     expect(issues.get(issue.id)?.state).toBe('closed')
+  })
+
+  it('defaults a requirement to native and stores an explicit execution mode before dispatch', () => {
+    const { issues, project } = setup()
+    const issue = issues.create({ title: 'Native by default', project: project.id })
+    expect(issue.execution).toBeUndefined()
+    expect(requirementExecutionMode(issue)).toBe('native')
+    const chosen = issues.setExecution(issue.id, 'feature-exec')!
+    expect(chosen.execution).toBe('feature-exec')
+    expect(requirementExecutionMode(issues.get(issue.id)!)).toBe('feature-exec')
+    expect(issues.setExecution(issue.id, 'native')!.execution).toBe('native')
+    expect(issues.setExecution('q-unknown', 'native')).toBeUndefined()
+  })
+
+  it('refuses an unknown execution mode and leaves the requirement unchanged', () => {
+    const { issues, project } = setup()
+    const issue = issues.create({ title: 'Valid mode', project: project.id })
+    expect(() => issues.setExecution(issue.id, 'sometimes')).toThrow('Execution mode must be native or feature-exec')
+    expect(issues.get(issue.id)).toEqual(issue)
+  })
+
+  it('refuses to change the mode once the requirement dispatched slice tickets', () => {
+    const { issues, store, project } = setup()
+    const issue = issues.create({ title: 'Dispatched', project: project.id })
+    issues.setExecution(issue.id, 'feature-exec')
+    store.tickets.save({ id: 't-lock', plan: { issueId: issue.id, sliceId: 'C1' } } as unknown as Ticket)
+    expect(() => issues.setExecution(issue.id, 'native')).toThrow('A requirement that has dispatched tickets keeps its execution mode')
+    expect(issues.get(issue.id)?.execution).toBe('feature-exec')
   })
 })

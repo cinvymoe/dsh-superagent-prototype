@@ -1,0 +1,113 @@
+(node:1331110) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1331127) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-5e9fa76642ab
+
+(node:1331188) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1331189) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1331189) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(node:1331188) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+ ❯ tests/local.spec.ts (13 tests | 3 failed) 562ms
+     ✓ creates an issue and submits its text as a human Trigger on a local Thread 35ms
+     ✓ derives a title from the first non-empty line of a description and stores the whole description 23ms
+     ✓ refuses a requirement with neither a title nor a description 21ms
+     ✓ adds comments as further Triggers without changing the requirement 29ms
+     ✓ records a proposal and the person's review, and refuses a review without one 36ms
+     ✓ binds requirements to projects and rejects unknown or malformed projects 27ms
+     ✓ stores an optional absolute worktree root, treats blank values as unconfigured, and refuses relative ones 39ms
+     ✓ stores every type of attached image under the requirement directory and names their absolute paths in the trigger 26ms
+     ✓ refuses a requirement whose images break a rule, creating no issue, no trigger and no files 46ms
+     ✓ closes an issue without deleting its record 36ms
+     × defaults a requirement to native and stores an explicit execution mode before dispatch 28ms
+     × refuses an unknown execution mode and leaves the requirement unchanged 30ms
+     × refuses to change the mode once the requirement dispatched slice tickets 183ms
+ ❯ tests/local-align.spec.ts (24 tests | 1 failed) 3816ms
+   ✓ accepts a local requirement for alignment and gives its worker the align tool instead of execution  407ms
+   ✓ dispatches the confirmed slices as tickets, one per slice, and only after the person confirms 216ms
+   × records a requirement's execution mode, defaults to native and refuses changes after dispatch 87ms
+   ✓ dispatches a requirement without an execution field as native 113ms
+   ✓ creates projects over HTTP and keeps requirements scoped to them 101ms
+   ✓ accepts an optional absolute worktree root over HTTP and refuses a relative one 165ms
+     ✓ prepares a local ticket under its project worktree root, with the ticket directory and project repository 258ms
+     ✓ keeps the executor directory or the default work root when a project sets no worktree root 194ms
+     ✓ keeps a Feishu ticket on the default root when a project configures a worktree root 128ms
+     ✓ fails a launch whose explicit worktree root is missing, without creating it or falling back 116ms
+     ✓ fails a launch whose explicit worktree root is a regular file, and prepares nothing 101ms
+     ✓ fails a launch whose explicit worktree root cannot take a write, as a read-only mount does 104ms
+     ✓ fails a launch whose non-empty executor directory is missing, without creating it 111ms
+     ✓ retries a failed explicit-root launch once the root exists and prepares there 121ms
+     ✓ relaunches a failed explicit-root launch from a human message on the ticket thread  316ms
+     ✓ keeps an accepted ticket's directory when the project root or executor directory changes; a new ticket uses the new root 189ms
+   ✓ stores requirement images, returns their metadata and serves the bytes back with no caching 89ms
+   ✓ refuses an invalid image upload without creating the requirement or writing files 144ms
+   ✓ lets only the create-requirement route carry a body above the management limit  330ms
+     ✓ adds only the new project's chain and returns both repositories 73ms
+     ✓ refuses bad, duplicate, unreadable and unpushable repositories without leaving a project or a chain 69ms
+     ✓ updates only the edited project's chain and leaves every other project's chain equal 103ms
+     ✓ executes a project ticket through the project's own chain 113ms
+     ✓ binds a legacy project to the chain its code repository names at startup, idempotently and without a chain for unmatched ones 165ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/local-align.spec.ts > records a requirement's execution mode, defaults to native and refuses changes after dispatch
+TypeError: requirementExecutionMode is not a function
+ ❯ tests/local-align.spec.ts:94:10
+     92|   // A requirement that names no mode is native and keeps no field, so…
+     93|   expect(issue.execution).toBeUndefined()
+     94|   expect(requirementExecutionMode(issue)).toBe('native')
+       |          ^
+     95|   const chosen = await h.api('POST', `local/issues/${issue.id}/executi…
+     96|   expect(chosen.status).toBe(200)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/local.spec.ts > the local issue board > defaults a requirement to native and stores an explicit execution mode before dispatch
+TypeError: requirementExecutionMode is not a function
+ ❯ tests/local.spec.ts:184:12
+    182|     const issue = issues.create({ title: 'Native by default', project:…
+    183|     expect(issue.execution).toBeUndefined()
+    184|     expect(requirementExecutionMode(issue)).toBe('native')
+       |            ^
+    185|     const chosen = issues.setExecution(issue.id, 'feature-exec')!
+    186|     expect(chosen.execution).toBe('feature-exec')
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/local.spec.ts > the local issue board > refuses an unknown execution mode and leaves the requirement unchanged
+AssertionError: expected [Function] to throw error including 'Execution mode must be native or feat…' but got 'issues.setExecution is not a function'
+
+Expected: "Execution mode must be native or feature-exec"
+Received: "issues.setExecution is not a function"
+
+ ❯ tests/local.spec.ts:195:62
+    193|     const { issues, project } = setup()
+    194|     const issue = issues.create({ title: 'Valid mode', project: projec…
+    195|     expect(() => issues.setExecution(issue.id, 'sometimes')).toThrow('…
+       |                                                              ^
+    196|     expect(issues.get(issue.id)).toEqual(issue)
+    197|   })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/local.spec.ts > the local issue board > refuses to change the mode once the requirement dispatched slice tickets
+TypeError: issues.setExecution is not a function
+ ❯ tests/local.spec.ts:202:12
+    200|     const { issues, store, project } = setup()
+    201|     const issue = issues.create({ title: 'Dispatched', project: projec…
+    202|     issues.setExecution(issue.id, 'feature-exec')
+       |            ^
+    203|     store.tickets.save({ id: 't-lock', plan: { issueId: issue.id, slic…
+    204|     expect(() => issues.setExecution(issue.id, 'native')).toThrow('A r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 33 passed (37)
+   Start at  22:52:29
+   Duration  5.27s (transform 1.54s, setup 0ms, import 2.26s, tests 4.38s, environment 0ms)
+
