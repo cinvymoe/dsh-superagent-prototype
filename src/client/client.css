@@ -401,3 +401,15 @@ a.dt-btn, a.dt-btn:hover { text-decoration: none; }
 .dt-text-input { box-sizing: border-box; width: 100%; min-width: 0; height: 32px; padding: 0 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: 8px; background: var(--dsw-alias-bg-layer-1, transparent); font: inherit; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); }
 .dt-text-input::placeholder { color: var(--dsw-alias-label-dimmed); }
 .dt-text-input:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+/* Requirement images: the picker, its chosen-image cards and the detail gallery. */
+.dt-image-field { display: flex; flex-direction: column; gap: 8px; }
+.dt-image-input { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.dt-image-choices { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.dt-image-choice { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 6px 8px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; line-height: 18px; }
+.dt-image-thumb { flex: none; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: var(--dsw-alias-interactive-bg-hover); }
+.dt-image-name { min-width: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.dt-image-gallery { display: flex; flex-wrap: wrap; gap: 12px; }
+.dt-image-card { display: flex; flex-direction: column; gap: 4px; margin: 0; max-width: 100%; }
+.dt-image-caption { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); overflow-wrap: anywhere; }
+.dt-requirement-image { display: block; max-width: min(320px, 100%); max-height: 240px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; object-fit: contain; background: var(--dsw-alias-interactive-bg-hover); }
+.dt-image-placeholder { display: block; width: 160px; height: 96px; border: 0.5px dashed var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-interactive-bg-hover); }

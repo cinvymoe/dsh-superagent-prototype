@@ -1,11 +1,22 @@
 // @vitest-environment jsdom
 // The New requirement and Requirements pages scoped to the current local project, and the standalone project creation page.
-import { expect, it } from 'vitest'
+import { act } from 'react'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
-import { usePanel, mount, remount, all, click, type, text, at, tab } from './fixtures/panel.tsx'
+import { usePanel, mount, remount, all, click, settle, type, text, at, tab } from './fixtures/panel.tsx'
 import { localIssue, server } from './fixtures/panel-server.ts'
 
 usePanel()
+
+// jsdom implements neither object-URL call; the detail gallery creates one blob URL per image and revokes it on unmount.
+const createObjectURL = vi.fn((_blob: Blob | MediaSource) => 'blob:requirement-image')
+const revokeObjectURL = vi.fn((_url: string) => {})
+beforeEach(() => {
+  createObjectURL.mockClear()
+  revokeObjectURL.mockClear()
+  URL.createObjectURL = createObjectURL as unknown as typeof URL.createObjectURL
+  URL.revokeObjectURL = revokeObjectURL as unknown as typeof URL.revokeObjectURL
+})
 
 /** The first input whose placeholder (or aria-label) is the given text. */
 const input = (label: string): HTMLInputElement => {
@@ -77,8 +88,9 @@ it('shows only the current project and one description field on New requirement'
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
   expect(text()).toContain(zh['discuss.newSubtitle'])
   expect(text()).toContain('acme/widgets')
-  // The page has no title input, no requirement list and no back button, in particular none labelled Overview.
-  expect(document.querySelectorAll('#dt-page input')).toHaveLength(0)
+  // The page has no title text input (only the hidden image file picker), no requirement list and no back button, in
+  // particular none labelled Overview.
+  expect(all('#dt-page input').filter(element => (element as HTMLInputElement).type !== 'file')).toHaveLength(0)
   expect(all('.dt-cards')).toHaveLength(0)
   expect(document.querySelector('.dt-page-head button')).toBeNull()
   expect(all('#dt-page button').some(button => button.textContent?.trim() === zh['tab.overview'])).toBe(false)
@@ -229,4 +241,121 @@ it('shows the localized refusal when the worktree root is relative and stays on 
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.projectWorktreeRoot'])
   expect(server.localProjects).toHaveLength(0)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.newProject'])
+})
+
+/** Build an image file of the given name and content. The client trusts the declared type, so the bytes do not matter. */
+const imageFile = (name: string, content = 'x', type = 'image/png') => new File([content], name, { type })
+/** Choose files through the New requirement page's hidden picker, waiting until the FileReader results have rendered. */
+async function selectImages(files: File[]) {
+  const picker = input(zh['discuss.imagesChoose']) as HTMLInputElement
+  Object.defineProperty(picker, 'files', { value: files, configurable: true })
+  await act(async () => {
+    picker.dispatchEvent(new Event('change', { bubbles: true }))
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
+  })
+  await settle()
+}
+
+it('selects several images with thumbnails and names, submits description and images together, and shows them in order', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'newRequirement' })
+  await mount()
+  const description = 'Ship the widget\n\nwith screenshots'
+  await type(area(zh['discuss.descriptionPlaceholder']), description)
+  expect(text()).toContain(zh['discuss.imagesHint'])
+  await selectImages([imageFile('one.png', 'a'), imageFile('two.png', 'bb')])
+  expect(all('.dt-image-choice')).toHaveLength(2)
+  expect(all('.dt-image-thumb').map(image => image.getAttribute('alt'))).toEqual(['one.png', 'two.png'])
+  expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['one.png', 'two.png'])
+  await click(submitButton())
+  const posted = server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')!
+  expect(posted).toMatchObject({ method: 'POST', body: { body: description, project: 'p-fixture' } })
+  const images = (posted.body as { images: { name: string; mediaType: string; data: string }[] }).images
+  expect(images.map(image => image.name)).toEqual(['one.png', 'two.png'])
+  expect(images.every(image => image.mediaType === 'image/png' && image.data.startsWith('data:image/png;base64,'))).toBe(true)
+  // The detail shows the images in the order they were chosen, each with its file name and byte size.
+  await vi.waitFor(() => expect(all('.dt-image-card img')).toHaveLength(2))
+  expect(all('.dt-image-caption').map(caption => caption.textContent)).toEqual(['one.png · 1 B', 'two.png · 2 B'])
+  // The original Trigger carries the appended image paths, yet the description still reads once and stays out of the timeline.
+  expect(text().split('with screenshots').length - 1).toBe(1)
+  expect(document.querySelector('.dt-timeline')?.textContent).not.toContain('with screenshots')
+})
+
+it('removes a chosen image before submitting, posting and rendering only the remaining one', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'newRequirement' })
+  await mount()
+  await type(area(zh['discuss.descriptionPlaceholder']), 'Only the second image')
+  await selectImages([imageFile('one.png'), imageFile('two.png')])
+  expect(all('.dt-image-choice')).toHaveLength(2)
+  const remove = all('button').find(button => button.getAttribute('aria-label') === `${zh['discuss.imagesRemove']} one.png`)!
+  await click(remove)
+  expect(all('.dt-image-choice')).toHaveLength(1)
+  expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['two.png'])
+  await click(submitButton())
+  const posted = server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')!
+  expect((posted.body as { images: { name: string }[] }).images.map(image => image.name)).toEqual(['two.png'])
+  await vi.waitFor(() => expect(all('.dt-image-card img')).toHaveLength(1))
+  expect(all('.dt-image-caption').map(caption => caption.textContent)).toEqual(['two.png · 1 B'])
+})
+
+it('refuses an unsupported type and an oversized file locally without submitting or showing a thumbnail', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'newRequirement' })
+  await mount()
+  await type(area(zh['discuss.descriptionPlaceholder']), 'Needs screenshots')
+  await selectImages([new File(['x'], 'note.txt', { type: 'text/plain' })])
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['discuss.imagesRefuseType'].replace('{name}', 'note.txt'))
+  expect(all('.dt-image-choice')).toHaveLength(0)
+  const big = imageFile('big.png')
+  Object.defineProperty(big, 'size', { value: 5 * 1024 * 1024 + 1 })
+  await selectImages([big])
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['discuss.imagesRefuseSize'].replace('{name}', 'big.png'))
+  expect(all('.dt-image-choice')).toHaveLength(0)
+  expect(server.requests.some(request => request.path === 'local/issues' && request.method === 'POST')).toBe(false)
+})
+
+it('keeps the description and chosen images and shows the localized error when the host refuses the create', async () => {
+  server.localProjects = [PROJECT]
+  server.refuseIssueCreate = { status: 400, error: 'refused', code: 'issueImageType', values: { name: 'bad.png' } }
+  at({ page: 'newRequirement' })
+  await mount()
+  const description = 'Ship it with a bad image'
+  await type(area(zh['discuss.descriptionPlaceholder']), description)
+  await selectImages([imageFile('one.png'), imageFile('two.png')])
+  await click(submitButton())
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.issueImageType'].replace('{name}', 'bad.png'))
+  expect(area(zh['discuss.descriptionPlaceholder']).value).toBe(description)
+  expect(all('.dt-image-choice')).toHaveLength(2)
+  // The refusal keeps the form on the New requirement page instead of opening a detail.
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
+})
+
+it('shows the image count on a requirement list row only when the issue has images', async () => {
+  server.localProjects = [PROJECT]
+  const withImages = { ...localIssue('With images'), images: [
+    { id: 'img-1', name: 'a.png', mediaType: 'image/png', bytes: 10 },
+    { id: 'img-2', name: 'b.png', mediaType: 'image/png', bytes: 20 }] }
+  const withoutImages = { ...localIssue('Without images'), id: 'q-plain' }
+  server.localIssues = [withImages, withoutImages]
+  at({ page: 'requirements' })
+  await mount()
+  const metas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
+  expect(metas[0]).toContain(zh['discuss.imageCount'].replace('{count}', '2'))
+  expect(metas[1]).not.toContain(zh['discuss.imageCount'].replace('{count}', '2'))
+})
+
+it('reads each requirement image through the management API with the same-origin header and renders a blob URL', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('With one image'), images: [
+    { id: 'img-1', name: 'a.png', mediaType: 'image/png', bytes: 10 }] }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  await vi.waitFor(() => expect(all('.dt-image-card img')).toHaveLength(1))
+  const calls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/images/img-1'))
+  expect(calls).toHaveLength(1)
+  expect(calls[0]![1]).toMatchObject({ headers: { 'x-orchestrator-request': '1' } })
+  expect(createObjectURL).toHaveBeenCalled()
+  expect(all('.dt-image-card img')[0]!.getAttribute('src')).toBe('blob:requirement-image')
 })

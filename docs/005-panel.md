@@ -19,8 +19,8 @@ Above the page tabs, the project bar shows one tab per local project and marks t
 | Tab | Shows |
 | --- | --- |
 | Overview | Tickets needing action, system problems, activity counts for the last 24 hours, and Executor load. Each block links to its detailed page |
-| New requirement | Submission page of the current local project. The page head shows its name, execution repository (`owner/name`) and an optional absolute `worktreeRoot` (empty keeps the Execution ticket directory root); it has no back button and no requirement list. One description field takes the text: its first non-empty line becomes the title, with whitespace collapsed and shortened to 200 characters, while the whole description is stored as the body. Submit stays disabled while the description is blank. With no projects it shows a hint to create one first; project creation and switching live in the project bar |
-| Requirements | Requirements of the current local project, newest first, each with its state, alignment tag, creation time and slice count. A row opens the requirement detail, which shows the whole description once, the message timeline, the linked Tickets and the read-only alignment proposal; its back button returns to this list rather than Overview. With no projects it shows a hint to create one first |
+| New requirement | Submission page of the current local project. The page head shows its name, execution repository (`owner/name`) and an optional absolute `worktreeRoot` (empty keeps the Execution ticket directory root); it has no back button and no requirement list. One description field takes the text: its first non-empty line becomes the title, with whitespace collapsed and shortened to 200 characters, while the whole description is stored as the body. **Choose images** attaches up to four PNG, JPEG, WebP or GIF files of at most 5 MiB each; each shows a thumbnail and its file name and can be removed before submitting. Submit stays disabled while the description is blank. With no projects it shows a hint to create one first; project creation and switching live in the project bar |
+| Requirements | Requirements of the current local project, newest first, each with its state, alignment tag, creation time, slice count and image count. A row opens the requirement detail, which shows the whole description once, its images in submission order, the message timeline, the linked Tickets and the read-only alignment proposal; its back button returns to this list rather than Overview. With no projects it shows a hint to create one first |
 | Source | Source state, setup problems and non-zero counts. Filtered Triggers and dropped messages cover the same 24-hour window as Overview |
 | Trigger | Threads filtered by Subscribed, Evaluating, New Triggers in 24 h, or All Threads. Each Thread shows its Triggers newest first, Decisions and Subscriptions |
 | Eval | Decisions with their reason and matched rules |
@@ -34,6 +34,17 @@ Each local project has a project name, an execution repository and an optional w
 The project bar above the page tabs selects the current project; the requirements, their page head and a new requirement all follow it. **New project** on the bar opens its own page, where Cancel or Back creates nothing. Creating a project makes it current and returns to its requirements.
 
 A configured worktree root must already exist and accept writes; otherwise the Ticket fails to launch instead of falling back to the Execution ticket directory root.
+
+### Requirement images
+
+**Choose images** on New requirement attaches up to four files to one requirement. The limits are PNG, JPEG, WebP or GIF only, at most 5 MiB per image and at most 4 images; the form states them below the button.
+
+- The client refuses an unsupported type, an oversized file or a selection that would exceed four images, shows the reason and adds nothing, so no request is made. The already chosen images stay.
+- Submitting sends the description and the images in one create request, so the requirement exists with all of them or with none.
+- When the host refuses the create, the description and the chosen images stay on the page and the localized error appears; nothing is cleared before the request succeeds.
+- The detail shows the images in submission order, each with its file name and byte size. The list row adds the image count.
+
+Images are read through the same-origin management API (`GET /orchestrator/api/local/issues/<id>/images/<imageId>` with the `x-orchestrator-request` header) and rendered from an object URL, so there is no unauthenticated image URL and no `<img src>` request without that header.
 
 ### Reading individual records
 

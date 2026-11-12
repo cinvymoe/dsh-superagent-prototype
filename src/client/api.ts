@@ -1,6 +1,7 @@
 /** Same-origin client and polling hook for the orchestrator management API. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Api, ApiRequest, ApiResponse } from '../app/api.ts'
+import { localImageUrl } from '../app/api.ts'
 import { USER_ERRORS, type UserErrorCode } from '../core/errors.ts'
 import type { TicketStage } from '../core/stage.ts'
 import type { SetupProblem } from '../setup.ts'
@@ -104,6 +105,17 @@ export const DECISION_KINDS: Readonly<Record<DecisionFilter, string>> = { work: 
 
 export type Call = <K extends keyof Api>(route: K, ...request: {} extends ApiRequest<K> ? [request?: ApiRequest<K>] : [request: ApiRequest<K>])
   => Promise<ApiResponse<K>>
+/**
+ * Read one requirement image's bytes. The image route answers bytes rather than JSON, so it goes through `fetch`
+ * directly with the same-origin header instead of the typed caller, and the panel shows it as a blob URL.
+ */
+export async function requirementImage(issueId: string, imageId: string): Promise<Blob> {
+  let response: Response
+  try { response = await fetch(localImageUrl(issueId, imageId), { headers: { 'x-orchestrator-request': '1' } }) }
+  catch { throw new ApiError('The image could not be loaded', 0, { unreachable: true }) }
+  if (!response.ok) throw new ApiError(`The image could not be loaded (${response.status})`, response.status)
+  return response.blob()
+}
 /** Build a typed route caller that resolves localized error messages on each request. */
 export function caller(messages: () => ApiMessages): Call {
   return (route, ...[request]) => {
