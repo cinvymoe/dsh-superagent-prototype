@@ -1,0 +1,25 @@
+(node:1513582) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:1513594) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/prepare-activate-7a346d2ced9e
+
+(node:1513648) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/service-script.spec.ts (27 tests) 11580ms
+   ✓ keeps a stop per profile  328ms
+   ✓ restarts the service, and a restart whose graceful stop timed out does not keep recovery off  1301ms
+   ✓ exits 1 when the started service does not answer in time, and leaves its process running  2131ms
+   ✓ does not signal a process that took the recorded service PID, and keeps a stop that timed out  1191ms
+   ✓ refuses prepare on a dirty checkout, a detached HEAD or another branch, leaving HEAD where it was  314ms
+   ✓ refuses prepare while another control operation holds the lock, leaving HEAD where it was  337ms
+   ✓ activates a new commit: backs up the database and restarts on it  368ms
+   ✓ skips activation on an up-to-date checkout when --only-when-behind asks for it  330ms
+   ✓ rolls the checkout, the database and the service back when the new build does not start  2263ms
+
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+   Start at  00:49:02
+   Duration  11.95s (transform 142ms, setup 0ms, import 164ms, tests 11.58s, environment 0ms)
+

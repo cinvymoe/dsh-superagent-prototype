@@ -11,6 +11,8 @@ export const workerPrompt = promptFile('worker')
 export const alignPrompt = promptFile('align')
 /** Appended to a slice worker's prompt when it runs the feature-exec execution strategy. */
 export const executePrompt = promptFile('execute')
+/** A one-question Session's prompt: it reads the worker's inherited context and answers without changing anything. */
+export const answerPrompt = promptFile('answer')
 /** Appended to a slice worker's prompt when it runs the native execution strategy and implements the slice directly. */
 export const nativeExecutePrompt = promptFile('native-execute')
 /** Built-in policy sections referenced by role prompts; a team may override them. */

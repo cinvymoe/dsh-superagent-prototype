@@ -1,0 +1,12 @@
+# Attempt log
+
+| # | When | What | Result |
+| --- | --- | --- | --- |
+| 1 | 2026-11-12 16:29Z | Dispatched lane `lane-T1-1` (subagent, explicit `model: deepseek-v4.1`, effort high) against the task contract | Failed before finishing with no changes and no closing message. The provider lists no such subagent model (only `magpie/kimi-code-cn/k3-256k`), so the child never started. Worktree verified untouched. |
+| 2 | 2026-11-12 16:30Z | Re-dispatched the same task as `lane-T1-2` with the parent's route inherited | Implemented all contract files: `src/app/questions.ts`, `Sessions.answer`, `composeAnswer`, `prompts/answer.md`, `tests/questions.spec.ts` (6 tests), fixture `fork`/`archiveSession`/captures, `docs/007` rows and prose, evidence logs. Targeted 27/27, typecheck clean, full clean suite 1301/1301, build complete. |
+| 3 | 2026-11-12 16:54Z | Host restarted mid-ticket (assignment 1 ended as `hostRestarted`) | The worktree still held the uncommitted implementation; `git status` and `git log` confirmed baseline `40191e32` and no pushes. Run state survived; resumed at e2/e3 without repeating implementation. |
+| 4 | 2026-11-13 00:56Z | Worker review: re-ran targeted + typecheck + full clean suite + build, wrote `docs/issues/review-C3-qa.md`, signed e3 gates | All gates pass; `Architecture impact: local`. |
+| 5 | 2026-11-13 00:58Z | Committed the slice (`0ddaadf6`), fetched current `main` (`934a1f07`), merged it | Four additive conflicts resolved (`docs/007`, `context.ts`, `prompts.ts`, `sessions.ts` — main moved the execute-tool list into `execution-strategy.ts`; kept both sides and dropped the superseded `EXECUTE_TOOLS`). Post-merge: targeted 29/29, full clean suite 65 files / 1327 tests, typecheck clean, build complete. |
+| 6 | 2026-11-13 01:00Z | Pushed `agent/fork-12b1b458e8d8` and opened PR [#32](https://github.com/cinvymoe/dsh-superagent-prototype/pull/32) | `MERGEABLE` / `CLEAN`, no auto-merge. |
+| 7 | 2026-11-13 01:02Z | `orchestrator_report` with `pr_number: 32` | Refused: the deployment's `claimPull` compares the PR author login (`app/rust-crane-agent`) and the ticket branch strictly and refuses every app-authored PR, exactly as it did for the sibling slices (their tickets also have `follows: null`). Reported the PR URL in the report summary instead, per the tool's "omit pr_number" path. |
+| 8 | 2026-11-13 01:10Z | Sedimented the regression case and PR record, then re-pushed the branch | See the commit after `6519b22b`; the PR head updates, ready for review. |

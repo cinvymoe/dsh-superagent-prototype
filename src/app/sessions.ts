@@ -27,7 +27,7 @@ export interface SessionsHost {
   /** DSH Cordis context: sessions, agents, persistence, and their events. */
   readonly context: Context
   readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
-  readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'composeAlign' | 'composeExecute' | 'skills'>
+  readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'composeAlign' | 'composeExecute' | 'composeAnswer' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
   /** The `models` health entry, which reports managed sessions waiting on a model-budget retry. */
   readonly health: HealthEntry
@@ -54,6 +54,11 @@ declare module '@deepseek-ai/cordis' {
 }
 /** Tools a slice worker may not call before its feature-exec run starts, so it cannot spend its turn exploring first. */
 const PRE_RUN_TOOLS = new Set(['bash', 'read', 'read_image', 'write', 'edit', 'glob', 'grep', 'web_search', 'web_fetch'])
+/**
+ * The only tools a Ticket's Q&A Session gets, in this order: reading its inherited conversation and the Ticket directory,
+ * nothing that writes, runs or messages. The whitelist, not the permission, is what keeps the answer read-only.
+ */
+const ANSWER_TOOLS = ['read', 'read_image', 'glob', 'grep']
 /** What the main Session is told when it would wait: what it waits for comes to it, and a waiting step holds back the next. */
 const NO_WAIT = 'Reports, follow_up notices, new candidates and a background job\'s end with its output arrive by themselves as messages; '
   + 'end the turn instead of waiting for them.'
@@ -146,6 +151,33 @@ export class Sessions {
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })
     return result.agent
+  }
+  /**
+   * Decorates a Session forked from a Ticket's worker Session so it answers one question about that Ticket: the answer
+   * prompt in place of the worker preset's, exactly `read`, `read_image`, `glob` and `grep`, the executor role's model, and
+   * `danger-full-access` so those reading tools reach the Ticket directory. The whitelist is the read-only boundary; the
+   * question port archives the Session after the answer, and `agent/disposed` releases these registrations.
+   */
+  async answer(sessionId: SessionId, ticket: Ticket): Promise<Agent> {
+    const ctx = this.ctx
+    const resolved = await ctx.sessionController.resolveAgent(sessionId)
+    if ('error' in resolved) throw resolved.error
+    const agent = resolved.agent
+    // Read inherited tools through the parent scope, as `workOnly` does; a missing one fails here rather than shrinking the whitelist.
+    const parent = scopeParentOf(agent)
+    const missing = ANSWER_TOOLS.filter(name => !agent.ctx.tools.get(name, parent))
+    if (missing.length > 0) throw new Error(`dsh-superagent needs the Q&A Session's tools ${missing.join(', ')}, which this host does not provide`)
+    await initializeRoleModel(ctx, agent, this.host.store.settings().executor.model)
+    const binding: SessionBinding = { disposers: [] }
+    this.bindings.set(agent, binding)
+    binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-answer', order: 9999, complete: true, text: () => {
+      const version = this.host.prompts.current()
+      return `[dsh-superagent prompt revision ${version.revision}]\n${this.host.prompts.composeAnswer()}`
+    } }))
+    binding.disposers.push(agent.ctx.tools.restrict({ allow: [...ANSWER_TOOLS] }))
+    ctx.permissionPresets.set(agent.session, 'danger-full-access')
+    await ctx.sessionController.rename({ sessionId, title: `Ticket question · ${ticket.title}` })
+    return agent
   }
   /** Returns whether `sessionId` already holds the message delivered under `requestId`, or `false` if the session does not exist. */
   async holds(sessionId: string, requestId: string): Promise<boolean> {

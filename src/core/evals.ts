@@ -1,5 +1,5 @@
 /** Evals: the Thread-level assessments of queued Triggers, and the Decisions they end with. */
-import { key } from './ids.ts'
+import { key, planTicketId } from './ids.ts'
 import { UserError } from './errors.ts'
 import { DEFAULT_EXECUTION_STRATEGY, liveTicket, threadKey } from './model.ts'
 import type { ActorRef, Decision, DecisionKind, Evaluation, ExecutionStrategy, Mandate, MandateBasis, PlanSlice, Strength, Thread, Ticket,
@@ -343,13 +343,13 @@ export class Evals extends EnginePart {
     for (const slice of input.slices) {
       const found = existing.get(slice.id)
       if (found) { tickets.push(found); continue }
-      const ticketId = key('ticket', 'plan', input.issueId, slice.id)
+      const ticketId = planTicketId(input.issueId, slice.id)
       const evaluation: Evaluation = { id: key('evaluation', 'plan', input.issueId, slice.id), threadKey: thread.key,
         triggerIds: input.triggerIds, primary: input.triggerIds[0], strength: 'explicit', actor: input.actor,
         basis: { via: 'addressed', addressed: 'direct', source: input.actor.source }, policyVersion, startedAt: at, deadline: at }
       const mandate: Mandate = { strength: 'explicit', policyVersion, basis: evaluation.basis, actor: input.actor,
         scope: slice.outcome || slice.title }
-      const dependsOn = slice.dependsOn.map(dependency => key('ticket', 'plan', input.issueId, dependency))
+      const dependsOn = slice.dependsOn.map(dependency => planTicketId(input.issueId, dependency))
       const decision = this.record(thread, evaluation, { kind: 'accept', reason: [{ code: 'explicitRouted' }], mandate, ticketId })
       this.tickets.create(ticketId, decision.id, mandate, evaluation, { kind: 'accept', title: `${slice.id} · ${slice.title}`,
         scope: mandate.scope, reason: { code: 'explicitRouted' }, mode: 'work', name: sliceName(slice),

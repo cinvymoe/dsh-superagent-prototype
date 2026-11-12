@@ -2,8 +2,8 @@
 import { z } from 'zod'
 import { UserError, key, type ExecutionMode } from '../core/index.ts'
 import { policyVersion, type Settings, type SettingsOrigin } from '../policy.ts'
-import { alignPrompt, executePrompt, nativeExecutePrompt, masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy, teamDefaults,
-  sourceSkills, cliNotes } from './context.ts'
+import { alignPrompt, answerPrompt, executePrompt, nativeExecutePrompt, masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy,
+  teamDefaults, sourceSkills, cliNotes } from './context.ts'
 import { environmentLines, type Variable } from './execution-environment.ts'
 import { promptsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -159,6 +159,13 @@ export class Prompts {
    */
   composeExecute(config: PromptConfig, mode: ExecutionMode = 'feature-exec', variables = this.environment()): string {
     return `${this.compose(config, 'worker', variables)}\n\n${mode === 'native' ? nativeExecutePrompt : executePrompt}`
+  }
+  /**
+   * A one-question Session's prompt: the shared rules, which say how a worker works, followed by the answer instructions,
+   * which replace the worker preset's own prompt. It is the same for every Ticket, as the forked conversation differs.
+   */
+  composeAnswer(): string {
+    return `${sharedPrompt}\n\n${answerPrompt}`
   }
   /** Returns skills to register in every Session: built-in Source skills (`feishu` only when a Feishu bot is configured) followed by team skills. */
   skills(config: PromptConfig): [string, string][] {
