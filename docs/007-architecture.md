@@ -382,12 +382,12 @@ Some generic modules still refer directly to GitHub or Feishu:
 | `src/sources/admission-context.ts` | The bounded window an assessment starts from: the first pages of a Trigger's Thread, read through its kind, and the messages around the Trigger |
 | `src/sources/feishu-image.ts` | Reads a Feishu message's image as an attachment for the assessing Session |
 | `src/client/index.tsx` | The client plugin entry: the sidebar entry, the main panel and the page in DeepSeek Harness's Plugin Manager |
-| `src/client/app.tsx` | The panel: header, search, glossary, the project bar, the page tabs and the page of the current route; it remembers the current project in the route memory |
+| `src/client/app.tsx` | The panel: header, search, glossary, the project bar, the page tabs and the page of the current route, among them the New requirement page and the Requirements list, detail and create page; it remembers the current project in the route memory |
 | `src/client/provider.tsx` | What every page reads from its host: copy, calls, navigation, notices, the state and project polls, the current project, and `restart`, which reads the state quickly while dsh-superagent restarts |
 | `src/client/api.ts` | Calls and polls of the management API, typed by `src/app/api.ts`, and the Decision filters of the Eval status |
-| `src/client/discuss.tsx` | The local issue board of the current project: its requirements, submitting one, reading its discussion, and confirming or sending back the Aligner's proposal |
-| `src/client/projects.tsx` | The project bar above the page tabs: one chip tab per local project, the More menu that keeps every project reachable when the strip overflows, and the standalone page to create a project with its name, repository and optional worktree root |
-| `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads (including the Discuss create page), and the route memory with the current project and the settings group opened last |
+| `src/client/discuss.tsx` | The two requirement pages of the current project: submitting a description on New requirement, the newest-first requirement list, and the detail that shows the description once beside its message timeline and the read-only Aligner proposal, whose back button returns to the list |
+| `src/client/projects.tsx` | The project bar above the page tabs: one chip tab per local project, which keeps the current requirement tab or lands on the requirement list, the More menu that keeps every project reachable when the strip overflows, and the standalone page to create a project with its name, repository and optional worktree root |
+| `src/client/route.ts` | The tabs, the settings groups, the typed routes that `parseRoute` reads (the New requirement page, the requirement list and detail, and the create page, with saved Discuss routes mapped onto them), and the route memory with the current project and the settings group opened last |
 | `src/client/overview.tsx` | The overview |
 | `src/client/source.tsx`, `trigger.tsx`, `eval.tsx`, `execution.tsx` | One file per stage: its status, and its settings where it has some |
 | `src/client/thread.tsx`, `ticket.tsx` | The record pages: a Thread with its timeline, and a Ticket with its authorization, Inputs and Assignments |
@@ -414,10 +414,10 @@ Some generic modules still refer directly to GitHub or Feishu:
 | --- | --- |
 | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
-| `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, a requirement with stored images and its comments as human Triggers, image refusals, the Aligner's proposal and a person's review, and closing |
+| `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, a requirement submitted with a title or a description only and with stored images, its comments as human Triggers, image refusals, the Aligner's proposal and a person's review, and closing |
 | `tests/local-align.spec.ts` | The aligner path: accepting a local requirement for alignment, its align tool, dispatching a confirmed plan's slices as tickets, project worktree roots, and requirement image upload, refusal and reading over HTTP |
-| `tests/panel-discuss.spec.tsx` | The Discuss board scoped to the current project: the create-first hint, requirement submission and details with their project, and the standalone project creation page |
-| `tests/panel-projects.spec.tsx` | The project bar: project tab switching and Discuss scoping, the overflow More menu, and standalone project creation |
+| `tests/panel-discuss.spec.tsx` | The New requirement and Requirements pages scoped to the current project: the create-first hint, description-only submission with its derived title, the newest-first list, the detail's single description and its back button, saved Discuss routes, and the standalone project creation page |
+| `tests/panel-projects.spec.tsx` | The project bar: project switching that keeps the requirement tab or lands on the requirement list, the overflow More menu, and project creation that opens the new project's requirement list |
 | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
 | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |
 | `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, the pull request rules, health |

@@ -55,6 +55,7 @@ export const USER_ERRORS = {
   issueImageType: ['refused', 'Image {name} must be a PNG, JPEG, WebP or GIF image'],
   issueImageSize: ['refused', 'Image {name} is larger than {max} bytes'],
   issueImageData: ['refused', 'Image {name} is not valid base64 image data'],
+  issueEmpty: ['refused', 'A requirement needs a description'],
 } as const satisfies Record<string, readonly ['missing' | 'refused', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
 
