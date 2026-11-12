@@ -124,7 +124,7 @@ it('keeps submission disabled while the description is blank and submits the des
 it('lists the current project requirements newest first with their tags, time and slice count', async () => {
   const slice = { id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
   const newer = { ...localIssue('Newer requirement'), id: 'q-newer', createdAt: '2026-09-23T00:00:00Z',
-    alignment: { status: 'proposed' as const, summary: '', slices: [slice, { ...slice, id: 'C2' }], acceptance: [],
+    alignment: { roundId: 'al-1', status: 'proposed' as const, summary: '', slices: [slice, { ...slice, id: 'C2' }], acceptance: [],
       proposedAt: '2026-09-23T00:00:00Z' } }
   const older = { ...localIssue('Older requirement'), id: 'q-older', createdAt: '2026-09-20T00:00:00Z', state: 'closed' as const }
   server.localProjects = [PROJECT, { ...PROJECT, id: 'p-other', name: 'Other', repository: 'acme/other' }]

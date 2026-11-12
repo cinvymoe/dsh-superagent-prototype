@@ -421,8 +421,10 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'POST local/issues/:id/alignment': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
-    const next = { ...issue, alignment: { status: 'proposed' as const, summary: body.summary ?? '', slices: body.slices ?? [],
-      acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' } }
+    // Each proposal appends a round; the fixture mirrors the host's ids without keeping the full history.
+    const round = (issue.alignments?.length ?? (issue.alignment ? 1 : 0)) + 1
+    const next = { ...issue, alignment: { roundId: `al-${round}`, status: 'proposed' as const, summary: body.summary ?? '',
+      slices: body.slices ?? [], acceptance: body.acceptance ?? [], proposedAt: '2026-09-23T00:00:00Z' } }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     return { issue: next }
   } },

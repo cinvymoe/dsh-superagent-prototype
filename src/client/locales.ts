@@ -190,6 +190,9 @@ const TEXT = {
   'userError.issueImageData': ['图片 {name} 不是有效的 base64 图片数据。', 'Image {name} is not valid base64 image data.'],
   'userError.executionMode': ['执行模式必须是 native 或 feature-exec。', 'Execution mode must be native or feature-exec.'],
   'userError.executionLocked': ['需求已有派发工单，执行模式不可再修改。', 'A requirement that has dispatched tickets keeps its execution mode.'],
+  'userError.alignmentConfirmed': ['对齐结果已确认，不能再次对齐。', USER_ERRORS.alignmentConfirmed[1]],
+  'userError.alignmentRoundStale': ['对齐第 {round} 轮不是当前轮次，请对最新一轮做决定。', USER_ERRORS.alignmentRoundStale[1]],
+  'discuss.superseded': ['已取代', 'Superseded'],
   // Overview
   sourceError: ['{source} 来源异常', '{source} Source failing'],
   needsYouNone: ['没有待处理的工单。', 'No pending Tickets.'],

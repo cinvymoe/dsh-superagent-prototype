@@ -43,7 +43,7 @@ export interface Api {
   'GET local/issues/:id': { response: { issue: LocalIssue; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }
   'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssue } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssue } }
-  'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string }; response: { issue: LocalIssue; tickets: { id: string; title: string }[] } }
+  'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string; roundId?: string }; response: { issue: LocalIssue; tickets: { id: string; title: string }[] } }
   'POST local/issues/:id/execution': { body: { mode: ExecutionMode }; response: { issue: LocalIssue } }
   'POST local/issues/:id/close': { response: { issue: LocalIssue } }
   'POST tickets/:id/retry': { response: { retried: true } }

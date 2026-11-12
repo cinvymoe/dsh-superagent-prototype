@@ -4,8 +4,9 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LocalIssues, requirementTitle } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
+import { KV } from '../src/kv.ts'
 import type { Ticket, Trigger } from '../src/core/index.ts'
-import { requirementExecutionMode, type LocalImageInput } from '../src/sources/local-format.ts'
+import { alignmentRounds, currentAlignment, requirementExecutionMode, type LocalImageInput } from '../src/sources/local-format.ts'
 
 
 /** A 1x1 transparent PNG, a 1x1 GIF, a WebP signature and a minimal JPEG header; enough to prove each media type. */
@@ -79,12 +80,71 @@ describe('the local issue board', () => {
     expect(issues.decide(issue.id, 'confirm')).toBeUndefined()
     const proposed = issues.propose(issue.id, { summary: 'Two slices', acceptance: ['typecheck'],
       slices: [{ id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' }] })
-    expect(proposed?.alignment).toMatchObject({ status: 'proposed', summary: 'Two slices', acceptance: ['typecheck'] })
+    expect(proposed?.alignment).toMatchObject({ roundId: 'al-1', status: 'proposed', summary: 'Two slices', acceptance: ['typecheck'] })
     const confirmed = issues.decide(issue.id, 'confirm')
     expect(confirmed?.alignment).toMatchObject({ status: 'confirmed' })
     expect(confirmed?.alignment?.decidedAt).toBeTruthy()
     const rejected = issues.decide(issue.id, 'reject', 'Needs a narrower scope')
     expect(rejected?.alignment).toMatchObject({ status: 'rejected', reason: 'Needs a narrower scope' })
+  })
+
+  it('keeps every alignment round, supersedes an undecided one, and posts a rejection back to the thread once', () => {
+    const { issues, triggers, project, store } = setup()
+    const issue = issues.create({ title: 'Rounds', project: project.id })
+    const slice = { id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
+    const first = issues.propose(issue.id, { summary: 'First', slices: [slice] })!
+    expect(alignmentRounds(first).map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:proposed'])
+    // A second proposal supersedes the undecided round and mirrors the newest one in `alignment`.
+    const second = issues.propose(issue.id, { summary: 'Second', slices: [slice] })!
+    expect(second.alignments?.map(round => round.status)).toEqual(['superseded', 'proposed'])
+    expect(second.alignment).toEqual(second.alignments?.at(-1))
+    expect(second.alignment).toMatchObject({ roundId: 'al-2', summary: 'Second' })
+    expect(currentAlignment(second)).toBe(second.alignment)
+    // Rejecting writes the reason and tells the requirement's Thread as a human local message...
+    const rejected = issues.decide(issue.id, 'reject', '缩小范围')!
+    expect(rejected.alignments?.map(round => round.status)).toEqual(['superseded', 'rejected'])
+    expect(rejected.alignment).toMatchObject({ roundId: 'al-2', status: 'rejected', reason: '缩小范围' })
+    expect(triggers.at(-1)).toMatchObject({ source: 'local', human: true })
+    expect(triggers.at(-1)!.text).toContain('缩小范围')
+    const told = triggers.length
+    // ...once per round: a repeated rejection of the same round records the decision but posts no second message.
+    issues.decide(issue.id, 'reject', '缩小范围')
+    expect(triggers).toHaveLength(told)
+    // A third proposal appends to the history instead of replacing it; the rejected round keeps its reason.
+    const third = issues.propose(issue.id, { summary: 'Third', slices: [slice] })!
+    expect(third.alignments?.map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:superseded', 'al-2:rejected', 'al-3:proposed'])
+    expect(third.alignment).toEqual(third.alignments?.at(-1))
+    // `alignment` is the mirror, never the source of truth: the stored record keeps the whole history in step.
+    expect(store.get(KV.local.issue(issue.id))?.alignments).toHaveLength(3)
+  })
+
+  it('reads a record written before rounds existed as one round and proposes the second', () => {
+    const { issues, store, project } = setup()
+    const issue = issues.create({ title: 'Legacy alignment', project: project.id })
+    // A record from before round ids existed holds only the single `alignment` slot.
+    store.set(KV.local.issue(issue.id), { ...issue, alignment: { status: 'proposed', summary: 'Legacy', slices: [],
+      acceptance: [], proposedAt: '2026-09-01T00:00:00Z' } as never })
+    const read = issues.get(issue.id)!
+    expect(alignmentRounds(read)).toHaveLength(1)
+    expect(read.alignments).toHaveLength(1)
+    expect(read.alignment).toMatchObject({ roundId: 'al-1', status: 'proposed' })
+    const next = issues.propose(issue.id, { summary: 'Second', slices: [] })!
+    expect(next.alignments?.map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:superseded', 'al-2:proposed'])
+    expect(next.alignment).toEqual(next.alignments?.at(-1))
+  })
+
+  it('refuses a proposal once the current round is confirmed and leaves the history unchanged', () => {
+    const { issues, project } = setup()
+    const issue = issues.create({ title: 'Frozen alignment', project: project.id })
+    const slice = { id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }
+    issues.propose(issue.id, { summary: 'Only', slices: [slice] })
+    const confirmed = issues.decide(issue.id, 'confirm')!
+    // Confirming again is idempotent: the recorded decision time stays.
+    expect(issues.decide(issue.id, 'confirm')?.alignment?.decidedAt).toBe(confirmed.alignment?.decidedAt)
+    let code: unknown
+    try { issues.propose(issue.id, { summary: 'Again', slices: [slice] }) } catch (error) { code = (error as { code?: unknown }).code }
+    expect(code).toBe('alignmentConfirmed')
+    expect(issues.get(issue.id)?.alignments).toHaveLength(1)
   })
 
   it('binds requirements to projects and rejects unknown or malformed projects', () => {

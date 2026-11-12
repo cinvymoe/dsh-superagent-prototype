@@ -45,7 +45,13 @@ export interface LocalSlice {
 
 /** Alignment proposal attached to a local issue; humans confirm or reject it without editing it. */
 export interface LocalAlignment {
-  status: 'proposed' | 'confirmed' | 'rejected'
+  /** Stable id of this alignment round, such as `al-1`; a decision names the round it applies to. */
+  roundId: string
+  /**
+   * `proposed` awaits a person, `confirmed` dispatched its slices, `rejected` was sent back with a reason, and `superseded`
+   * was replaced by a later proposal before a person decided it.
+   */
+  status: 'proposed' | 'confirmed' | 'rejected' | 'superseded'
   summary: string
   slices: LocalSlice[]
   acceptance: string[]
@@ -91,7 +97,28 @@ export interface LocalIssue {
   createdAt: string
   updatedAt: string
   state: 'open' | 'closed'
+  /** Every alignment round in order, oldest first; the last one is current. Written records keep it and the mirror in step. */
+  alignments?: LocalAlignment[]
+  /** The current alignment, mirrored for readers of records written before rounds existed; `alignments` is the truth. */
   alignment?: LocalAlignment
+}
+
+/** The round id a record written before rounds existed is read as. */
+const LEGACY_ROUND_ID = 'al-1'
+
+/**
+ * Every alignment round of a requirement, oldest first. Records written before rounds existed carry a single `alignment`
+ * slot, which reads as one round; a slot without a round id is normalized to the first round instead of migrating storage.
+ */
+export function alignmentRounds(issue: Pick<LocalIssue, 'alignment' | 'alignments'>): LocalAlignment[] {
+  if (issue.alignments?.length) return issue.alignments
+  if (!issue.alignment) return []
+  return [issue.alignment.roundId ? issue.alignment : { ...issue.alignment, roundId: LEGACY_ROUND_ID }]
+}
+
+/** The round a decision applies to: the last one, or undefined when the requirement has no alignment yet. */
+export function currentAlignment(issue: Pick<LocalIssue, 'alignment' | 'alignments'>): LocalAlignment | undefined {
+  return alignmentRounds(issue).at(-1)
 }
 
 /** The execution mode a requirement runs under: the person's choice, or native when they made none. */

@@ -32,7 +32,7 @@ import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
 import { LocalIssues } from './local.ts'
 import { Projects } from './projects.ts'
-import type { LocalProject } from '../sources/local-format.ts'
+import { currentAlignment, type LocalProject } from '../sources/local-format.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
@@ -235,10 +235,11 @@ export class Runtime extends Service implements SourceHost {
   dispatchPlan(issueId: string): Ticket[] {
     const input = this.local.planInput(issueId)
     const issue = this.local.get(issueId)
-    if (!input || !issue?.alignment) throw new Error('No confirmed alignment to dispatch')
+    const alignment = issue ? currentAlignment(issue) : undefined
+    if (!input || !alignment) throw new Error('No confirmed alignment to dispatch')
     return this.engine.acceptPlan({ source: 'local', id: issueId }, { issueId, triggerIds: input.triggerIds, actor: input.actor,
       execution: input.execution,
-      slices: issue.alignment.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome,
+      slices: alignment.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome,
         acceptance: slice.acceptance, dependsOn: slice.dependsOn, lane: slice.lane })) })
   }
   idle(): Promise<void> { return this.passes.idle() }

@@ -85,6 +85,74 @@ it('dispatches the confirmed slices as tickets, one per slice, and only after th
   expect(h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)).toHaveLength(2)
 })
 
+/** Accept a requirement for alignment and return its Aligner Ticket and worker Session id. */
+async function acceptForAlignment(issueId: string) {
+  await h.runtime.idle()
+  const accepted = await h.route({ kind: 'accept', trigger_id: firstTrigger(h, issueId), title: 'Align the local board',
+    worktree_name: 'align-local-board', acknowledgement: '收到，先做需求对齐。', mode: 'align' }) as { ticket: { ticket_id: string } }
+  await h.runtime.idle()
+  return { ticket: accepted.ticket, sessionId: `worker-${accepted.ticket.ticket_id}` }
+}
+
+it('delivers a rejection to the Aligner Session and accepts a new round', async () => {
+  const issue = h.runtime.local.create({ title: 'Align again', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  expect(await h.runTool(sessionId, 'orchestrator_align', { summary: 'First round.', slices, acceptance: [] }))
+    .toEqual({ issue_id: issue.id, status: 'proposed', slices: 2 })
+  const rejected = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'reject', reason: '缩小范围' })
+  expect(rejected.status).toBe(200)
+  await h.runtime.idle()
+  // The rejection lands on the requirement Thread as a human message, so the Aligner's Session receives its reason.
+  expect(h.relays(sessionId).some(item => JSON.stringify(item).includes('缩小范围'))).toBe(true)
+  const narrowed = [{ id: 'C1', title: 'Read the narrowed module', outcome: 'The narrowed module is read', acceptance: ['typecheck passes'],
+    depends_on: [], lane: 'light' }]
+  expect(await h.runTool(sessionId, 'orchestrator_align', { summary: 'Second round.', slices: narrowed, acceptance: [] }))
+    .toEqual({ issue_id: issue.id, status: 'proposed', slices: 1 })
+  const rounds = h.runtime.local.get(issue.id)!.alignments!
+  expect(rounds.map(round => `${round.roundId}:${round.status}`)).toEqual(['al-1:rejected', 'al-2:proposed'])
+  expect(rounds[0]!.reason).toBe('缩小范围')
+})
+
+it('dispatches only the slices of the current round', async () => {
+  const issue = h.runtime.local.create({ title: 'Latest round only', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'First round.', slices, acceptance: [] })
+  const latest = [{ id: 'D1', title: 'Only the latest', outcome: 'The latest round dispatches', acceptance: ['typecheck'],
+    depends_on: [], lane: 'light' }]
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'Second round.', slices: latest, acceptance: [] })
+  const confirmed = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
+  expect(confirmed.status).toBe(200)
+  await h.runtime.idle()
+  const tickets = h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)
+  expect(tickets.map(ticket => ticket.plan!.sliceId)).toEqual(['D1'])
+  expect(h.runtime.local.get(issue.id)!.alignments!.map(round => round.status)).toEqual(['superseded', 'confirmed'])
+})
+
+it('refuses a decision that names an older round and dispatches nothing', async () => {
+  const issue = h.runtime.local.create({ title: 'Stale decision', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'First round.', slices, acceptance: [] })
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'Second round.', slices, acceptance: [] })
+  const firstRound = h.runtime.local.get(issue.id)!.alignments![0]!.roundId
+  const stale = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm', roundId: firstRound })
+  expect(stale.status).toBe(400)
+  expect(stale.body).toMatchObject({ code: 'alignmentRoundStale', values: { round: firstRound } })
+  // The refusal happens before the record is written and before any slice dispatches.
+  expect(h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)).toEqual([])
+  expect(h.runtime.local.get(issue.id)!.alignments!.map(round => round.status)).toEqual(['superseded', 'proposed'])
+})
+
+it('refuses a new alignment proposal once the latest round is confirmed', async () => {
+  const issue = h.runtime.local.create({ title: 'Confirmed alignment', project: project.id })
+  const { sessionId } = await acceptForAlignment(issue.id)
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'Only round.', slices, acceptance: [] })
+  expect((await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })).status).toBe(200)
+  const rounds = h.runtime.local.get(issue.id)!.alignments!
+  await expect(h.runTool(sessionId, 'orchestrator_align', { summary: 'Too late.', slices, acceptance: [] }))
+    .rejects.toThrow(/already confirmed/)
+  expect(h.runtime.local.get(issue.id)!.alignments).toHaveLength(rounds.length)
+})
+
 it('records a requirement\'s execution mode, defaults to native and refuses changes after dispatch', async () => {
   const created = await h.api('POST', 'local/issues', { title: 'Choose the execution mode', project: project.id })
   expect(created.status).toBe(200)
