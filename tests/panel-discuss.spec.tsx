@@ -4,7 +4,7 @@ import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, remount, all, click, settle, type, text, at, tab } from './fixtures/panel.tsx'
-import { localIssue, server } from './fixtures/panel-server.ts'
+import { localComment, localIssue, localReply, server } from './fixtures/panel-server.ts'
 
 usePanel()
 
@@ -43,6 +43,22 @@ const openCreate = async () => {
 }
 const PROJECT = { id: 'p-fixture', name: 'Widgets', chain: 'p-fixture', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets',
   createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
+/** The message timeline section of a requirement detail. */
+const timelineSection = (): HTMLElement => {
+  const match = all('.dt-section').find(section => section.querySelector('.dt-section-name')?.textContent === zh['discuss.timeline'])
+  if (!match) throw new Error('No message timeline section')
+  return match
+}
+/** The follow-up submit button inside the message timeline box. */
+const commentButton = (): HTMLButtonElement => {
+  const match = all('.dt-timeline-form button').find(button => button.textContent?.trim() === zh['discuss.comment'])
+  if (!match) throw new Error('No comment button')
+  return match as HTMLButtonElement
+}
+/** The rendered messages of the message timeline, in the order they appear. */
+const messages = (): (string | null)[] => all('.dt-timeline .dt-md').map(node => node.textContent)
+/** Whether `first` renders before `second` in the document. */
+const precedes = (first: Element, second: Element) => !!(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
 
 it('creates a project on its own page with an optional absolute worktree root and makes it current', async () => {
   at({ page: 'requirements' })
@@ -176,6 +192,71 @@ it('shows a requirement text once and leaves its original message out of the tim
   expect(document.querySelector('.dt-timeline')?.textContent).not.toContain('The full description')
 })
 
+it('lists the message timeline newest first and keeps the follow-up box above the list', async () => {
+  server.localProjects = [PROJECT]
+  const issue = localIssue('Talked through requirement', 'The original description')
+  server.localIssues = [issue]
+  // Preset conversation: two human follow-ups around one agent reply, all later than the requirement itself.
+  server.localComments = { 'q-fixture': [localComment(issue, 'First follow-up', '2026-09-23T01:00:00Z'),
+    localComment(issue, 'Second follow-up', '2026-09-23T03:00:00Z')] }
+  server.localReplies = { 'q-fixture': [localReply(issue, 'The agent answered', '2026-09-23T02:00:00Z')] }
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  // Newest first, whichever side sent the message: the earliest one falls to the bottom of the list.
+  expect(messages()).toEqual(['Second follow-up', 'The agent answered', 'First follow-up'])
+  expect(all('.dt-timeline .dt-event')).toHaveLength(3)
+  expect(timelineSection().querySelector('.dt-count')?.textContent).toBe('3')
+  // The requirement text still renders once, outside the timeline.
+  expect(text().split('The original description').length - 1).toBe(1)
+  expect(timelineSection().textContent).not.toContain('The original description')
+  // An agent reply keeps its own label.
+  expect(all('.dt-timeline .dt-event')[1]!.textContent).toContain(zh['discuss.agent'])
+  expect(text()).not.toContain('discuss.')
+  // The box sits above the list, so the newest message renders directly under it.
+  const form = timelineSection().querySelector('.dt-timeline-form')!
+  expect(precedes(form, timelineSection().querySelector('ul.dt-timeline')!)).toBe(true)
+})
+
+it('posts a follow-up from the box above the list and shows it first with the count grown and the box cleared', async () => {
+  server.localProjects = [PROJECT]
+  const issue = localIssue('Live requirement', 'The live description')
+  server.localIssues = [issue]
+  server.localComments = { 'q-fixture': [localComment(issue, 'Earlier follow-up', '2026-09-23T01:00:00Z')] }
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  expect(commentButton().disabled).toBe(true)
+  await type(area(zh['discuss.commentPlaceholder']), '   ')
+  expect(commentButton().disabled).toBe(true)
+  await type(area(zh['discuss.commentPlaceholder']), 'Newest follow-up')
+  expect(commentButton().disabled).toBe(false)
+  await click(commentButton())
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/comments')!
+  expect(posted).toMatchObject({ method: 'POST', body: { text: 'Newest follow-up' } })
+  // The submitted message is the first row under the box, the count grew and the box is ready for the next one.
+  expect(messages()).toEqual(['Newest follow-up', 'Earlier follow-up'])
+  expect(timelineSection().querySelector('.dt-count')?.textContent).toBe('2')
+  expect(area(zh['discuss.commentPlaceholder']).value).toBe('')
+  expect(precedes(timelineSection().querySelector('.dt-timeline-form')!, timelineSection().querySelector('ul.dt-timeline')!)).toBe(true)
+})
+
+it('renders the newest-first message timeline and its top follow-up box in English', async () => {
+  server.localProjects = [PROJECT]
+  const issue = localIssue('English requirement', 'The English description')
+  server.localIssues = [issue]
+  server.localComments = { 'q-fixture': [localComment(issue, 'English follow-up', '2026-09-23T01:00:00Z')] }
+  server.localReplies = { 'q-fixture': [localReply(issue, 'The English answer', '2026-09-23T02:00:00Z')] }
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  await remount(en)
+  expect(text()).toContain(en['discuss.timeline'])
+  expect(area(en['discuss.commentPlaceholder']).getAttribute('aria-label')).toBe(en['discuss.commentPlaceholder'])
+  expect(all('.dt-timeline-form button').map(button => button.textContent?.trim())).toContain(en['discuss.comment'])
+  expect(messages()).toEqual(['The English answer', 'English follow-up'])
+  expect(all('.dt-timeline .dt-event')[0]!.textContent).toContain(en['discuss.agent'])
+  // A missing locale key would render as its own key, so none may survive.
+  expect(text()).not.toContain('discuss.')
+})
+
 it('opens a saved Discuss route on its matching requirement page after reload', async () => {
   server.localProjects = [PROJECT]
   server.localIssues = [localIssue('Legacy requirement')]
@@ -232,6 +313,55 @@ it('renders a legacy requirement whose project has no worktree root', async () =
   await mount()
   expect(text()).toContain('项目：Widgets · acme/intake → acme/widgets')
   expect(text()).not.toContain('/srv/worktrees')
+})
+
+/** A one-slice alignment proposal, enough for the requirement detail to offer its execution switch. */
+const proposal = (status: 'proposed' | 'confirmed') => ({ status, summary: '', acceptance: [],
+  slices: [{ id: 'C1', title: 'One', outcome: '', inScope: [], outOfScope: [], acceptance: [], dependsOn: [], lane: 'full' as const }],
+  proposedAt: '2026-09-23T00:00:00Z', ...(status === 'confirmed' ? { decidedAt: '2026-09-23T00:00:00Z' } : {}) })
+
+it('starts the execution switch off and saves feature-exec before the alignment is confirmed', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Switched requirement'), alignment: proposal('proposed') }]
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const toggle = document.querySelector<HTMLElement>('[role="switch"]')!
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  expect(toggle.getAttribute('aria-label')).toBe(zh['discuss.executionSwitch'])
+  expect(text()).toContain(zh['discuss.executionSwitch'])
+  await click(toggle)
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/execution')!
+  expect(posted).toMatchObject({ method: 'POST', body: { mode: 'feature-exec' } })
+  expect(server.localIssues[0]?.execution).toBe('feature-exec')
+  expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true')
+  // A refresh reads the stored mode back, so the switch stays on instead of falling back to native.
+  await remount()
+  expect(document.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true')
+})
+
+it('fixes the execution mode once the requirement dispatched tickets', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Dispatched requirement'), execution: 'feature-exec' as const,
+    alignment: proposal('confirmed') }]
+  server.dispatchedIssues.add('q-fixture')
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  expect(document.querySelector('[role="switch"]')).toBe(null)
+  expect(all('.dt-tag').map(tag => tag.textContent)).toContain(zh['discuss.executionFeatureExec'])
+  expect(text()).toContain(zh['discuss.executionLocked'])
+  expect(text()).toContain('C1 · dispatched slice')
+})
+
+it('shows the execution mode on every requirement list row, native when unchosen', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Feature requirement'), id: 'q-feature', execution: 'feature-exec' as const },
+    { ...localIssue('Native requirement'), id: 'q-native' }]
+  at({ page: 'requirements' })
+  await mount()
+  const metas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
+  expect(metas[0]).toContain(zh['discuss.executionFeatureExec'])
+  expect(metas[1]).toContain(zh['discuss.executionNative'])
+  expect(metas[1]).not.toContain(zh['discuss.executionFeatureExec'])
 })
 
 it('shows the localized refusal when the worktree root is relative and stays on the creation page', async () => {
