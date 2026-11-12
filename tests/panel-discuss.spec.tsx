@@ -152,20 +152,103 @@ it('lists the current project requirements newest first with their tags, time an
   expect(text()).toContain(zh['discuss.listSubtitle'])
   expect(text()).toContain('acme/widgets')
   expect(all('.dt-section-title .dt-section-name').map(name => name.textContent)).toEqual([zh['discuss.requirements']])
-  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Newer requirement', 'Older requirement'])
+  // The filter row is in a fixed order and defaults to 待处理.
+  expect(all('.dt-filters .dt-pill').map(pill => pill.textContent)).toEqual([zh['requirementFilter.pending'],
+    zh['requirementFilter.confirmed'], zh['requirementFilter.closed'], zh['requirementFilter.all']])
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false'])
+  // The default bucket hides the closed requirement, and the section counts only the displayed rows.
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Newer requirement'])
+  expect(document.querySelector('.dt-section .dt-count')?.textContent).toBe('1')
   expect(text()).not.toContain('Other requirement')
   const metas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
   expect(metas[0]).toContain(zh['discuss.open'])
   expect(metas[0]).toContain(zh['discuss.proposed'])
   expect(metas[0]).toContain('2 个切片')
-  expect(metas[1]).toContain(zh['discuss.closed'])
-  expect(metas[1]).toContain(zh['discuss.pending'])
-  expect(metas[1]).toContain('0 个切片')
   expect(server.requests.some(request => request.path === 'local/issues?project=p-fixture')).toBe(true)
-  // A row opens its requirement detail.
+  // 全部 shows every requirement in the host's newest-first order, and the click replaces the current entry.
+  await click(zh['requirementFilter.all'])
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Newer requirement', 'Older requirement'])
+  expect(document.querySelector('.dt-section .dt-count')?.textContent).toBe('2')
+  const allState = JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown; stack?: unknown[] }
+  expect(allState.route).toEqual({ page: 'requirements', query: { filter: 'all' } })
+  expect(allState.stack).toEqual([])
+  // 已关闭 shows only the closed one, still in newest-first order.
+  await click(zh['requirementFilter.closed'])
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Older requirement'])
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true', 'false'])
+  const closedMetas = all('.dt-cards .dt-row-meta').map(meta => meta.textContent ?? '')
+  expect(closedMetas[0]).toContain(zh['discuss.closed'])
+  expect(closedMetas[0]).toContain(zh['discuss.pending'])
+  expect(closedMetas[0]).toContain('0 个切片')
+  const closedState = JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown; stack?: unknown[] }
+  expect(closedState.route).toEqual({ page: 'requirements', query: { filter: 'closed' } })
+  expect(closedState.stack).toEqual([])
+  // 待处理 is canonical: its click writes no filter query and still replaces the current entry.
+  await click(zh['requirementFilter.pending'])
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Newer requirement'])
+  const pendingState = JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown; stack?: unknown[] }
+  expect(pendingState.route).toEqual({ page: 'requirements' })
+  expect(pendingState.stack).toEqual([])
+  // A row opens its requirement detail, which carries no filter query under the default bucket either.
   await click(all('.dt-cards .dt-row-title button')[0]!)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Newer requirement')
   expect(server.requests.some(request => request.path === 'local/issues/q-newer')).toBe(true)
+  expect((JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown }).route)
+    .toEqual({ page: 'requirements', id: 'q-newer' })
+})
+
+it('keeps a non-default filter when a requirement detail returns to the list', async () => {
+  server.localProjects = [PROJECT]
+  const confirmed = { ...localIssue('Confirmed requirement'), id: 'q-confirmed', alignment: { status: 'confirmed' as const, summary: '',
+    slices: [], acceptance: [], proposedAt: '2026-09-23T00:00:00Z' } }
+  server.localIssues = [confirmed, { ...localIssue('Pending requirement'), id: 'q-pending' }]
+  at({ page: 'requirements', query: { filter: 'confirmed' } })
+  await mount()
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false', 'false'])
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Confirmed requirement'])
+  await click(all('.dt-cards .dt-row-title button')[0]!)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Confirmed requirement')
+  expect((JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown }).route)
+    .toEqual({ page: 'requirements', id: 'q-confirmed', query: { filter: 'confirmed' } })
+  // Back returns to the same filtered list instead of dropping the filter.
+  await click(document.querySelector<HTMLElement>('.dt-page-head button')!)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false', 'false'])
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Confirmed requirement'])
+  expect((JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown }).route)
+    .toEqual({ page: 'requirements', query: { filter: 'confirmed' } })
+})
+
+it('shows the filtered empty copy for an empty bucket and the original copy for a project without requirements', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Closed only'), state: 'closed' as const }]
+  at({ page: 'requirements' })
+  await mount()
+  // The project has requirements, so the default empty bucket names the filter instead of the project being empty.
+  expect(text()).toContain(zh['discuss.emptyFilter'])
+  expect(text()).not.toContain(zh['discuss.empty'])
+  expect(all('.dt-cards .dt-row')).toHaveLength(0)
+  expect(document.querySelector('.dt-section .dt-count')?.textContent).toBe('0')
+  // A project with no requirements at all keeps the original empty copy.
+  server.localIssues = []
+  at({ page: 'requirements' })
+  await remount()
+  expect(text()).toContain(zh['discuss.empty'])
+  expect(text()).not.toContain(zh['discuss.emptyFilter'])
+})
+
+it('names the requirement filters and the filtered empty copy in English as well', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Closed only'), state: 'closed' as const }]
+  at({ page: 'requirements' })
+  await mount()
+  await remount(en)
+  expect(all('.dt-filters .dt-pill').map(pill => pill.textContent)).toEqual([en['requirementFilter.pending'],
+    en['requirementFilter.confirmed'], en['requirementFilter.closed'], en['requirementFilter.all']])
+  expect(all('.dt-filters .dt-pill').map(pill => pill.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false'])
+  // The default bucket is empty here, so the English filtered copy names the filter rather than an empty project.
+  expect(text()).toContain(en['discuss.emptyFilter'])
+  expect(text()).not.toContain(en['discuss.empty'])
 })
 
 it('returns from a requirement detail to the requirement list rather than the overview', async () => {

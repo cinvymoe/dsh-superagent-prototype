@@ -3,8 +3,9 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'r
 import { REQUIREMENT_IMAGES } from '../limits.ts'
 import { projectRepositories, requirementExecutionMode, type LocalImage, type LocalIssue } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
-import { Button, Icon, InfoTip, Switch, Tag } from './controls.tsx'
+import { Button, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
+import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
 import { MarkdownLite, PageHead, Section, When } from './widgets.tsx'
 
@@ -151,8 +152,13 @@ export function NewRequirementPage() {
   </>
 }
 
-/** Requirement list of the current project, newest first; a row opens the requirement detail. */
-export function RequirementList() {
+/** The processing bucket of one requirement: closed wins, then a confirmed open alignment, then everything else open. */
+const requirementBucket = (issue: LocalIssue): Exclude<RequirementFilter, 'all'> =>
+  issue.state === 'closed' ? 'closed'
+    : issue.alignment?.status === 'confirmed' ? 'confirmed' : 'pending'
+
+/** Requirement list of the current project, newest first and filtered by its processing status; a row opens the detail. */
+export function RequirementList({ filter }: { filter: RequirementFilter }) {
   const { t, call, navigate, project } = usePanel()
   const { projects } = usePanelData()
   const active = projects.find(item => item.id === project) ?? projects[0]
@@ -160,6 +166,12 @@ export function RequirementList() {
     ? call('GET local/issues', { query: { project: active.id } })
     : { issues: [] }, [call, active?.id])
   const issues = data?.issues ?? []
+  // Every bucket keeps the host's newest-first order: filtering only hides rows, it never reorders them.
+  const shown = issues.filter(issue => filter === 'all' || requirementBucket(issue) === filter)
+  const show = (value: RequirementFilter) => navigate(value === 'pending'
+    ? { page: 'requirements' } : { page: 'requirements', query: { filter: value } }, true)
+  const open = (id: string) => filter === 'pending' ? navigate({ page: 'requirements', id })
+    : navigate({ page: 'requirements', id, query: { filter } })
   return <>
     <PageHead back={false} title={active ? active.name : t('discuss.requirements')}>
       <span className="dt-hint">{t('discuss.listSubtitle')}</span>
@@ -169,25 +181,32 @@ export function RequirementList() {
     <div className="dt-column">
       {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
       {error && <p className="dt-error" role="alert">{error.message}</p>}
-      {active && <Section title={t('discuss.requirements')} count={issues.length}>
-        {data && issues.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
-        <ul className="dt-list dt-cards">{issues.map(issue => <li key={issue.id} className="dt-row">
-          <Icon name="message" size={14} />
-          <div className="dt-row-main">
-            <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
-              onClick={() => navigate({ page: 'requirements', id: issue.id })}>{issue.title}</button></div>
-            <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}{executionTag(t, issue)}
-              <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span>
-              {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}</div>
-          </div>
-        </li>)}</ul>
-      </Section>}
+      {active && <>
+        <div className="dt-filters">
+          {REQUIREMENT_FILTERS.map(value => <Pill key={value} active={filter === value}
+            onClick={() => show(value)}>{t(`requirementFilter.${value}`)}</Pill>)}
+        </div>
+        <Section title={t('discuss.requirements')} count={shown.length}>
+          {data && issues.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
+          {data && issues.length > 0 && shown.length === 0 && <p className="dt-hint">{t('discuss.emptyFilter')}</p>}
+          <ul className="dt-list dt-cards">{shown.map(issue => <li key={issue.id} className="dt-row">
+            <Icon name="message" size={14} />
+            <div className="dt-row-main">
+              <div className="dt-row-title dt-line"><button type="button" className="dt-textlink"
+                onClick={() => navigate({ page: 'requirements', id: issue.id })}>{issue.title}</button></div>
+              <div className="dt-row-meta">{stateTag(t, issue)}{statusTag(t, issue)}{executionTag(t, issue)}
+                <When at={issue.createdAt} /><span>{t('discuss.slicesCount', { count: issue.alignment?.slices.length ?? 0 })}</span>
+                {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}</div>
+            </div>
+          </li>)}</ul>
+        </Section>
+      </>}
     </div>
   </>
 }
 
 /** Requirement detail: the requirement text, its message timeline, linked Tickets, and the read-only Aligner proposal. */
-export function RequirementDetail({ id }: { id: string }) {
+export function RequirementDetail({ id, filter }: { id: string; filter: RequirementFilter }) {
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/issues/:id', { id }), [id])
   const [comment, setComment] = useState('')
@@ -234,7 +253,8 @@ export function RequirementDetail({ id }: { id: string }) {
     ...replies.map(reply => ({ at: reply.sentAt ?? '', kind: 'reply' as const, reply })),
   ].sort((a, b) => b.at.localeCompare(a.at))
   return <>
-    <PageHead title={issue.title} back={{ label: t('discuss.back'), onClick: () => navigate({ page: 'requirements' }, true) }}>
+    <PageHead title={issue.title} back={{ label: t('discuss.back'), onClick: () => navigate(filter === 'pending'
+      ? { page: 'requirements' } : { page: 'requirements', query: { filter } }, true) }}>
       <span className="dt-hint">{t('discuss.detail')}</span>{stateTag(t, issue)}{statusTag(t, issue)}</PageHead>
     <div className="dt-column dt-form">
       <section className="dt-card">
