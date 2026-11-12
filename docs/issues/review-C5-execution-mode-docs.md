@@ -4,7 +4,7 @@
 - Worktree: `slice-8542a15caed3`；reviewed baseline `40191e32` (deployment `main`, C1 + C2 merged)
 - Review scope: `docs/002-authorization.md`, `docs/003-execution.md`, `docs/005-panel.md`, `docs/007-architecture.md`, the slice record and its evidence logs
 - Review mode: captain self-review after lane `lane-T1-1`; the lane reported the docs and the captain verified and corrected the findings below
-- Dependency note: the documented behavior comes from the frozen plan and the C3/C4 implementations (PR #19, PR #25), which are still open. This slice changes no code, and its PR must merge after #19 and #25.
+- Dependency note: the documented behavior comes from the frozen plan. C3 (PR #19) and C4 (PR #25) merged into `main` at `934a1f07`; this branch merged that `main`, so the docs now describe code present in the tree. This slice changes no code.
 
 ## Standards
 
@@ -16,7 +16,7 @@
 | 007 Modules/Tests tables complete and only existing files | PASS | No row added or removed; existing rows for `src/app/local.ts`, `src/sources/local-format.ts`, `src/client/discuss.tsx`, `tests/local.spec.ts`, `tests/local-align.spec.ts` only had their descriptions extended; `tests/docs.spec.ts` table tests pass |
 | No invented UI or API | PASS | Labels and hints copied from `src/client/locales.ts` (`discuss.executionSwitch`, `discuss.executionHint`, `discuss.executionLocked`, `discuss.executionNative`); the switch condition matches C4 (`alignment.status === 'proposed'` and no dispatched Ticket) |
 | One place per concept | PASS | The policy-version exclusion lives in `002` and the execution semantics in `003`; `005` covers only the panel surface; `007` indexes the implementation |
-| C3/C4 dependency disclosed | PASS | The slice record, this review and the PR describe the merge order; no table row pretends the C3 files exist in this worktree |
+| C3/C4 dependency resolved | PASS | `main` at `934a1f07` contains C3/C4; this branch merged it and resolved the two table conflicts by keeping both sides. C3's own module and test rows are present, so the docs now match the tree |
 
 ### Findings and fixes
 
@@ -24,7 +24,7 @@
 - **F-2 (fixed): `003` said dispatch "reads" the pinned strategy.** Dispatch writes `plan.execution`; launch resolves it. Rewritten to "At launch the worker follows the pinned strategy rather than choosing the mode again."
 - **F-3 (fixed): `005` called the alignment proposal read-only while its card now carries a switch.** Clarified that the proposal's summary, slices and acceptance are read-only, and that its card carries the switch before dispatch and the fixed mode afterwards.
 - **F-4 (fixed): the rewritten `007` Executor-tools paragraph made the `feature-exec` execute flow sound universal.** It now separates the `pr-opened` gate (`feature-exec`) from the report path (`native`) before the shared open-PR delivery sentence.
-- **F-5 (limitation, not a defect): `007` cannot yet list `src/app/execution-strategy.ts` or `tests/execution-strategy.spec.ts`.** Those files live on the C3 branch, not in this worktree. Adding their rows here would fail the `docs.spec.ts` "only files that exist" assertion. C3's own PR adds them; this PR must merge after #19. Recorded in the slice issue and the PR description.
+- **F-5 (resolved by the main merge): `007` initially could not list `src/app/execution-strategy.ts` or `tests/execution-strategy.spec.ts`.** Those files lived on the C3 branch while the docs were first written. After `main` advanced to `934a1f07`, this branch merged it: the C3 rows are present, and no row is added twice.
 
 ## Spec
 
@@ -32,7 +32,7 @@ The frozen acceptance has two parts: `tests/docs.spec.ts` passes, and the docs e
 
 | # | Semantic | Verdict | Where |
 | --- | --- | --- | --- |
-| 0 | `pnpm vitest run tests/docs.spec.ts` passes | PASS | 14/14 tests passed (`docs/issues/evidence/c5-execution-mode-docs-targeted.log`) |
+| 0 | `pnpm vitest run tests/docs.spec.ts` passes | PASS | 16/16 tests passed after the main merge, including the newest-first timeline assertions (`docs/issues/evidence/c5-execution-mode-docs-targeted.log`) |
 | 1 | Default native | PASS | `003` l.96: "`native` is the default. A requirement that made no explicit choice runs `native`, and a stored requirement record without `execution` dispatches `native` too"; `005` l.40: "It is off by default, which is `native`"; list row "Native" |
 | 2 | Switch on runs feature-exec | PASS | `003` l.96: "off is `native`, on is `feature-exec`"; `005` l.40: "turning it on selects `feature-exec`"; UI label from `discuss.executionSwitch` |
 | 3 | Execution mode not part of the Policy version | PASS | `003` l.102: "The execution mode is not part of the Policy version... changing a requirement's mode creates no Policy version change, and a Policy change never moves a Ticket between modes"; mirrored at `002` l.111 |
@@ -45,11 +45,12 @@ The opposite directions stay distinct as required by the avoidance list: a legac
 
 ## Verification summary
 
-- `pnpm vitest run tests/docs.spec.ts` → 14/14 passed (`docs/issues/evidence/c5-execution-mode-docs-targeted.log`)
-- `pnpm vitest run tests/docs.spec.ts tests/local.spec.ts tests/local-align.spec.ts tests/locales.spec.ts` → 4 files / 57 tests passed (`docs/issues/evidence/c5-execution-mode-docs-regression.log`)
+- `pnpm vitest run tests/docs.spec.ts` → 16/16 passed (`docs/issues/evidence/c5-execution-mode-docs-targeted.log`)
+- `pnpm vitest run tests/docs.spec.ts tests/local.spec.ts tests/local-align.spec.ts tests/panel-discuss.spec.tsx tests/prompts.spec.ts tests/locales.spec.ts` → see `docs/issues/evidence/c5-execution-mode-docs-regression.log`
 - `git diff --check` → no output
-- Full `pnpm check` → see `docs/issues/evidence/c5-execution-mode-docs-check.log` (run before opening the PR)
+- Clean git environment `pnpm check` after the main merge → typecheck, 64 files / 1321 tests and build passed (`docs/issues/evidence/c5-execution-mode-docs-check.log`)
+- Merge check: `main` `934a1f07` merged; conflicts only in the `005` Requirements row and the `007` `discuss.tsx` and test rows, both sides kept; `gh pr view` reports `MERGEABLE` after the push
 
 ## Verdict
 
-Standards **APPROVE** and Spec **APPROVE**, with the C3/C4 merge-order limitation recorded. No blocking finding.
+Standards **APPROVE** and Spec **APPROVE**. No blocking finding.
