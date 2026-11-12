@@ -75,5 +75,5 @@
 ## 尝试记录
 
 - 实现：worker 在本 ticket 分支直接实现（分支由 `afab266e` 合并 C2 分支 `df875f01` 后继续）；首轮 `openTab` 类型报错改为显式字面量路由；编辑入口从 replace 改 push。
-- 独立评审 lane：`lane-T1-1`（subagent `689def40-…`）在宿主重启时被中断，未给出结论；`lane-T1-2`（subagent `21e17151-…`）重新做静态双轴评审。
+- 独立评审 lane：`lane-T1-1`（subagent `689def40-…`）在宿主重启时被中断；`lane-T1-2`（subagent `21e17151-…`）重跑静态评审，因宿主负载过高长时间无结论后被中断；本双轴评审由 worker 依据实现、测试与文档逐条完成，独立 lane 的结论不作为门禁证据。
 - 视觉证据：两个隔离 profile（`c3edit-before` / `c3edit-after`，端口 3103/3104）各起真实 DSH web；fake `gh` + 种子 SQLite 避免真实 GitHub 凭据；截图后清理。
