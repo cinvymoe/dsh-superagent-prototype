@@ -46,6 +46,7 @@ it('words the reasons agents read in the glossary\'s words: a sender on the list
 })
 
 it('words every change an agents save records, in both languages', () => {
-  const codes = ['agentMainModel', 'agentAlignerModel', 'agentExecutorModel', 'agentMainTools', 'agentAlignerTools', 'agentExecutorTools']
+  const codes = ['agentMainModel', 'agentAlignerModel', 'agentExecutorModel', 'agentMainTools', 'agentAlignerTools', 'agentExecutorTools',
+    'agentMainAdded', 'agentAlignerAdded', 'agentExecutorAdded']
   expect(codes.filter(code => !zh[`change.${code}` as DshSuperagentKey] || !en[`change.${code}` as DshSuperagentKey])).toEqual([])
 })
