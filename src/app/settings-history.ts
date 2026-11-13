@@ -11,18 +11,18 @@ export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'maxWorkers' | 'paused' | 'resumed' | 'executionDirectory' | 'prepareCommand'
   | 'blockedCommands' | 'agentMainModel' | 'agentAlignerModel' | 'agentExecutorModel' | 'agentMainTools' | 'agentAlignerTools'
-  | 'agentExecutorTools'
+  | 'agentExecutorTools' | 'agentMainAdded' | 'agentAlignerAdded' | 'agentExecutorAdded'
 /** A single settings diff entry rendered by the panel using `change.<code>` and field labels from the Source listing. */
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
   field?: string; part?: true
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-/** Each Agent role's model and turned-off-tool change codes. */
-const AGENT_CHANGES: Readonly<Record<AgentRole, { model: SettingsChangeCode; tools: SettingsChangeCode }>> = {
-  main: { model: 'agentMainModel', tools: 'agentMainTools' },
-  aligner: { model: 'agentAlignerModel', tools: 'agentAlignerTools' },
-  executor: { model: 'agentExecutorModel', tools: 'agentExecutorTools' },
+/** Each Agent role's model, turned-off-tool and added-tool change codes. */
+const AGENT_CHANGES: Readonly<Record<AgentRole, { model: SettingsChangeCode; tools: SettingsChangeCode; added: SettingsChangeCode }>> = {
+  main: { model: 'agentMainModel', tools: 'agentMainTools', added: 'agentMainAdded' },
+  aligner: { model: 'agentAlignerModel', tools: 'agentAlignerTools', added: 'agentAlignerAdded' },
+  executor: { model: 'agentExecutorModel', tools: 'agentExecutorTools', added: 'agentExecutorAdded' },
 }
 /** A snapshot's Agent overrides; revisions saved before the block existed carry none. */
 const agentsOf = (settings: SettingsVersion['settings']) => (settings.agents as AgentsConfig | undefined) ?? AgentsConfigSchema.parse({})
@@ -86,6 +86,7 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
     const was = wasAgents[role], is = isAgents[role], codes = AGENT_CHANGES[role]
     if (!same(was.model, is.model)) changes.push({ code: codes.model })
     if (!same(was.disabledTools, is.disabledTools)) changes.push({ code: codes.tools, from: was.disabledTools.join(' '), to: is.disabledTools.join(' ') })
+    if (!same(was.addedTools, is.addedTools)) changes.push({ code: codes.added, from: was.addedTools.join(' '), to: is.addedTools.join(' ') })
   }
   for (const id of new Set([...Object.keys(before.sources), ...Object.keys(after.sources)])) changes.push(...sourceChanges(id, before.sources[id], after.sources[id], sources))
   return changes

@@ -73,12 +73,13 @@ export type RoleModel = z.infer<typeof RoleModelSchema>
 /** The three Agent roles a person configures; an Executor Session's subagents inherit its tools. */
 export const AGENT_ROLES = ['main', 'aligner', 'executor'] as const
 export type AgentRole = typeof AGENT_ROLES[number]
-/** One role's overrides: its model when set (null inherits the role's default model), and the optional tools it turns off. */
+/** One role's overrides: its model when set (null inherits the role's default model), the optional tools it turns off, and the host-registered tools it adds. */
 export const AgentRoleConfigSchema = z.object({
   model: RoleModelSchema.nullable().default(null),
   disabledTools: z.array(z.string().trim().min(1).max(LIMITS.toolName)).default([]),
+  addedTools: z.array(z.string().trim().min(1).max(LIMITS.toolName)).default([]),
 }).strict()
-/** The three roles' overrides; reading stays lenient, so a tool name the catalog dropped is still accepted here. */
+/** The three roles' overrides; reading stays lenient, so a tool name the catalog dropped, or an added one the host no longer registers, is still accepted here and checked only on save. */
 export const AgentsConfigSchema = z.object({
   main: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),
   aligner: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),

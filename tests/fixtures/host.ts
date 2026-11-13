@@ -288,9 +288,20 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const jobs = jobRegistry(id => agents.get(id))
   const subagents = subagentRuntime(agents)
   const workspaceRegistry = { create: async (cwd: string) => ({ id: cwd }), archiveSession }
+  // The host's global tool registry, which `GET settings` reads through DSH's tools service. A spec registers a fake
+  // plugin tool here; the per-Session registries above are separate, as they are on a real host.
+  const globalTools = new Map<string, { name: string; description: string }>()
+  const toolRegistry = {
+    schemas: vi.fn(() => [...globalTools.values()].map(tool => ({ ...tool, parameters: { type: 'object' } }))),
+    register: vi.fn((tool: { name: string; description?: string }) => {
+      const registered = { name: tool.name, description: tool.description ?? '' }
+      globalTools.set(registered.name, registered)
+      return () => { globalTools.delete(registered.name) }
+    }),
+  }
   const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller,
     sessionPersistence: persistence, workspaceRegistry, permissionPresets: { set: () => {} }, subprocess, webServer,
-    jobs: jobs.service, subagents: subagents.service }
+    jobs: jobs.service, subagents: subagents.service, tools: toolRegistry }
   const ctx = new Context()
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
   for (const cli of [AGENT, BOT]) writeFileSync(cli, '#!/bin/sh\n', { mode: 0o755 })
@@ -352,7 +363,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const step = (sessionId: string) => { steps.get(sessionId)!() }
   /** A step of the worker claims what waits for it, and is cut off before the Session took it. */
   const claim = (sessionId: string) => { claims.get(sessionId)!() }
-  return { runtime, ctx, directory, agents, tools, deliveries, relays, candidates, runTool, route, acceptedTicket, api, raw, controller, subprocess, hooks, resolveDefault, stop,
+  return { runtime, ctx, directory, agents, tools, globalTools: toolRegistry, deliveries, relays, candidates, runTool, route, acceptedTicket, api, raw, controller, subprocess, hooks, resolveDefault, stop,
     jobs, subagents, step, claim, events, headers, sections, restrictions, archiveSession }
 }
 export type Host = Awaited<ReturnType<typeof startRuntime>>
