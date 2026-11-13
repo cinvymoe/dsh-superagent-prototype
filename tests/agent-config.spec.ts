@@ -216,3 +216,18 @@ it('still reads an agents block that names a tool the catalog or host no longer 
   // A block stored before `addedTools` existed reads as the empty list.
   expect(SettingsSchema.parse({ agents: { executor: { disabledTools: [] } } }).agents.executor.addedTools).toEqual([])
 })
+
+it('appends each role\'s added tools after its catalog, in saved order and without duplicates', () => {
+  const agents = (role: 'main' | 'aligner' | 'executor', addedTools: string[], disabledTools: string[] = []) =>
+    SettingsSchema.parse({ agents: { [role]: { model: null, disabledTools, addedTools } } }).agents
+  // No added tools keeps the catalog exactly as it is today.
+  expect(roleTools('main', agents('main', []))).toEqual(MAIN_TOOLS)
+  expect(roleTools('executor', agents('executor', []))).toEqual(WORK_TOOLS)
+  expect(roleTools('main', agents('main', ['plugin_tool']))).toEqual([...MAIN_TOOLS, 'plugin_tool'])
+  expect(roleTools('executor', agents('executor', ['plugin_tool', 'other_tool'], ['web_search'])))
+    .toEqual([...WORK_TOOLS.filter(name => name !== 'web_search'), 'plugin_tool', 'other_tool'])
+  // A name the catalog already has stays in its catalog position, and a repeated added name is named once.
+  expect(roleTools('executor', agents('executor', ['bash', 'plugin_tool', 'plugin_tool']))).toEqual([...WORK_TOOLS, 'plugin_tool'])
+  // A built-in a person turned off cannot come back through `addedTools`: the catalog decides it stays off.
+  expect(roleTools('executor', agents('executor', ['web_search'], ['web_search']))).toEqual(WORK_TOOLS.filter(name => name !== 'web_search'))
+})

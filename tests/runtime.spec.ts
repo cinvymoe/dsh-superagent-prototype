@@ -233,7 +233,10 @@ beforeEach(async () => {
     inspect: vi.fn(async () => ({ events: [] })),
   }
   jobs = jobRegistry()
-  services = { agents, llm: { resolveCallConfig: vi.fn(async value => value) }, sessionController: controller, sessionPersistence: { flush: vi.fn(async () => {}), open: vi.fn(async () => ({ read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} })) }, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer: { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }, jobs: jobs.service }
+  services = { agents, llm: { resolveCallConfig: vi.fn(async value => value) }, sessionController: controller, sessionPersistence: { flush: vi.fn(async () => {}), open: vi.fn(async () => ({ read: async () => ({ events: [] }), [Symbol.asyncDispose]: async () => {} })) }, workspaceRegistry: { create: async (cwd: string) => ({ id: cwd }) }, permissionPresets: { set: () => {} }, subprocess, webServer: { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }, jobs: jobs.service,
+    // The host's global tool registry, which a save of added tools is checked against and the main Session reads through
+    // its parent scope; `lateTools` makes a plugin's tool appear after the Sessions exist.
+    tools: { schemas: () => lateTools.map(name => ({ name, description: `The ${name} plugin tool.` })) } }
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
   for (const cli of [AGENT(), OTHER(), BOT()]) writeFileSync(cli, '#!/bin/sh\n', { mode: 0o755 })
   const store = new Store(join(directory, 'orchestrator.sqlite')); seed(store); store.close()
@@ -1696,6 +1699,62 @@ it('applies a saved agents block to the main Session, a running Executor and its
   const executor = runtime.store.settings().executor
   await runtime.settings.save('executor', { ...executor, maxWorkers: executor.maxWorkers + 1 }, runtime.store.blockRevision('executor'), 'panel')
   expect(restricts.get(sessionId)!.length).toBe(installed)
+})
+
+it('applies a role\'s added tools to the main Session and an Executor with its subagents, gaining and losing them on save', async () => {
+  // A plugin registers a tool after the Sessions exist, as billion-context does; it is not in any role's catalog.
+  lateTools.push('plugin_tool')
+  ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
+  // Without a configured added tool the allow lists stay exactly the catalog lists.
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
+  const running = await acceptedTicket()
+  await (controller.create as (options: { sessionId: string }) => Promise<void>)({ sessionId: 'child-1' })
+  const child = agents.get('child-1')! as unknown as { session: { header: { parentSession?: string } } }
+  child.session.header = { parentSession: running.sessionId }
+  await (runtime as unknown as { ctx: Context }).ctx.parallel('agent/created', { agent: child } as never)
+  const workerTools = ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill']
+  expect(restricts.get(running.sessionId)).toEqual([{ allow: workerTools }])
+  // Saving the block adds the tool at each Session's next step, its subagent included.
+  const saved = runtime.store.settings()
+  const value = { main: { model: null, disabledTools: [], addedTools: ['plugin_tool'] }, aligner: saved.agents.aligner,
+    executor: { model: null, disabledTools: [], addedTools: ['plugin_tool'] } }
+  await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, 'plugin_tool'] })
+  expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: [...workerTools, 'plugin_tool'] })
+  expect(restricts.get('child-1')!.at(-1)).toEqual({ allow: [...workerTools, 'plugin_tool'] })
+  // An Executor Session created after the save starts with it, after its catalog.
+  const next = await acceptedTicket(feishu('2', '@bot 再修一个回归'))
+  expect(restricts.get(next.sessionId)).toEqual([{ allow: [...workerTools, 'plugin_tool'] }])
+  // Removing it loses it at the next step of every running Session, the subagent and main Session included.
+  const removed = { ...value, main: { ...value.main, addedTools: [] }, executor: { ...value.executor, addedTools: [] } }
+  await runtime.settings.save('agents', removed, runtime.store.blockRevision('agents'), 'panel')
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
+  expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: workerTools })
+  expect(restricts.get('child-1')!.at(-1)).toEqual({ allow: workerTools })
+  expect(restricts.get(next.sessionId)!.at(-1)).toEqual({ allow: workerTools })
+})
+
+it('ignores an added tool the host stops providing, without admitting other tools or throwing', async () => {
+  lateTools.push('plugin_tool')
+  const saved = runtime.store.settings()
+  const value = { main: { model: null, disabledTools: [], addedTools: ['plugin_tool'] }, aligner: saved.agents.aligner,
+    executor: { model: null, disabledTools: [], addedTools: ['plugin_tool'] } }
+  await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
+  const running = await acceptedTicket()
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, 'plugin_tool'] })
+  expect((restricts.get(running.sessionId)!.at(-1) as { allow: string[] }).allow).toContain('plugin_tool')
+  // The plugin is uninstalled: the registry change recomputes the main Session without throwing, and drops the name instead
+  // of naming a tool the host cannot resolve.
+  lateTools.splice(lateTools.indexOf('plugin_tool'), 1)
+  expect(() => (runtime as unknown as { ctx: Context }).ctx.emit('tools/change')).not.toThrow()
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
+  // A running Executor recomputes on its next agents refresh and keeps exactly its work tools, none added and none opened.
+  const workerTools = ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill']
+  expect(() => runtime.sessions.agentsChanged()).not.toThrow()
+  expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: workerTools })
+  // A Session created while the plugin stays uninstalled starts without the unavailable name.
+  const next = await acceptedTicket(feishu('2', '@bot 再修一个回归'))
+  expect(restricts.get(next.sessionId)).toEqual([{ allow: workerTools }])
 })
 
 it('keeps the host\'s compression tools on the main Session while a person turns read_image off', async () => {
