@@ -185,6 +185,49 @@ it('keeps required tools fixed, toggles optional ones, and saves disabledTools i
     executor: { disabledTools: ['web_search', 'skill'] } })
 })
 
+it('offers plugin-provided tools, adds and removes them, and saves addedTools', async () => {
+  await open()
+  const row = (role: string, tool: string) => card(role).querySelector<HTMLElement>(`[data-plugin-tool="${tool}"]`)
+  const action = (role: string, tool: string) => row(role, tool)!.querySelector<HTMLElement>('button[aria-label^="添加"], button[aria-label^="移除"]')!
+  expect(text()).toContain(zh.agentPluginTools)
+  // The role's addable catalog is the host's registered tools outside its own built-ins, sorted by name.
+  expect(all('[data-agent-role="main"] [data-plugin-tool]').map(item => item.getAttribute('data-plugin-tool')))
+    .toEqual(['agent_teams_status', 'automation_create', 'glob', 'web_search'])
+  expect(all('[data-agent-role="executor"] [data-plugin-tool]').map(item => item.getAttribute('data-plugin-tool')))
+    .toEqual(['agent_teams_status', 'automation_create'])
+  await click(action('main', 'automation_create'))
+  expect(row('main', 'automation_create')?.getAttribute('data-plugin-state')).toBe('added')
+  expect(card('main').querySelector('[data-plugin-group="added"]')?.textContent).toContain(zh.agentPluginAdded)
+  await click(zh.save)
+  const saved = server.requests.filter(request => request.path === 'settings/agents' && request.method === 'PUT').at(-1)!
+  expect((saved.body as { value: AgentsConfig }).value.main.addedTools).toEqual(['automation_create'])
+  expect(server.settings.agents.main.addedTools).toEqual(['automation_create'])
+  // The reloaded view keeps it in the added group; removing it returns it to the addable one.
+  expect(row('main', 'automation_create')?.getAttribute('data-plugin-state')).toBe('added')
+  await click(action('main', 'automation_create'))
+  expect(row('main', 'automation_create')?.getAttribute('data-plugin-state')).toBe('available')
+  await click(zh.save)
+  expect(server.settings.agents.main.addedTools).toEqual([])
+})
+
+it('does not render an empty plugin-tool section', async () => {
+  server.registeredTools = []
+  await open()
+  for (const role of ['main', 'aligner', 'executor']) expect(card(role).textContent).not.toContain(zh.agentPluginTools)
+})
+
+it('keeps the plugin-tool draft and shows the localized reason when the host does not provide an added tool', async () => {
+  await open()
+  await click(card('executor').querySelector('[data-plugin-tool="automation_create"] button[aria-label^="添加"]')!)
+  // The plugin unregisters between the page reading the catalog and the save.
+  server.registeredTools = []
+  await click(zh.save)
+  expect(document.querySelector('.dt-savebar [role="alert"]')?.textContent)
+    .toBe(zh['userError.agentsUnknownAddedTool'].replace('{role}', 'executor').replace('{tools}', 'automation_create'))
+  expect(card('executor').querySelector('[data-plugin-tool="automation_create"]')?.getAttribute('data-plugin-state')).toBe('added')
+  expect(server.settings.agents.executor.addedTools).toEqual([])
+})
+
 it('keeps the draft and shows the conflict when another save changed the same Agent setting', async () => {
   await open()
   await pick('main', 'provider', 'worker-provider'); await pick('main', 'model', 'worker-model')
@@ -211,12 +254,14 @@ it('lists an Agents save with its role, model and tool change lines', async () =
   server.history = { current: 4, policyVersion: 'abcdef1234567890', items: [{ revision: 4, savedAt: '2026-09-22T00:00:00Z',
     source: 'panel', policyVersion: 'abcdef1234567890', policyChanged: false, notified: [], block: 'agents',
     changes: [{ code: 'agentExecutorModel' }, { code: 'agentMainTools', from: '', to: 'read_image' },
-      { code: 'agentAlignerTools', from: 'web_search', to: '' }] }] }
+      { code: 'agentAlignerTools', from: 'web_search', to: '' },
+      { code: 'agentMainAdded', from: '', to: 'automation_create' }] }] }
   await open()
   await click(zh.configHistory)
   expect(text()).toContain(zh['change.agentExecutorModel'])
   expect(text()).toContain(zh['change.agentMainTools'].replace('{from}', zh.unsetValue).replace('{to}', 'read_image'))
   expect(text()).toContain(zh['change.agentAlignerTools'].replace('{from}', 'web_search').replace('{to}', zh.unsetValue))
+  expect(text()).toContain(zh['change.agentMainAdded'].replace('{from}', zh.unsetValue).replace('{to}', 'automation_create'))
 })
 
 it('shows the Agents group and its role copy in English', async () => {
@@ -227,4 +272,5 @@ it('shows the Agents group and its role copy in English', async () => {
   expect(all('[data-agent-role]').map(item => item.querySelector('.dt-block-title')?.textContent))
     .toEqual([en['agentRole.main'], en['agentRole.aligner'], en['agentRole.executor']])
   expect(text()).toContain(en.agentToolRequired)
+  expect(text()).toContain(en.agentPluginTools)
 })

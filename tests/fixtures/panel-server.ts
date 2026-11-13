@@ -122,6 +122,8 @@ export interface PanelServer {
   joined?: Record<string, string>; joining?: Record<string, string>
   joinError?: string
   settings: Settings; revisions: Record<string, number>
+  /** The global tools the fake host's DSH plugins register, which each role's `addableTools` is drawn from. */
+  registeredTools: { name: string; description: string }[]
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
   /** Stored requirement records; every route returns them through `issueView`, so the API types stay the view type. */
@@ -228,7 +230,7 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
     executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 },
     agents: { value: server.settings.agents, revision: server.revisions.agents ?? 0 } },
   // The catalog the Agents page offers, as the host's own catalog defines it.
-  agents: { roles: agentCatalog() },
+  agents: { roles: agentCatalog(server.registeredTools) },
   sources: sourceSettings(),
   environment: { root: '/srv/dsh-superagent/work', variables: [
     { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
@@ -317,6 +319,10 @@ function initial(): PanelServer {
       remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true, reasons: [], restartRequired: false },
       chain: 'default', repository: 'acme/widgets', available: true, reasons: [], running: false },
     settings, revisions: { policy: 3, eval: 1, executor: 0 },
+    registeredTools: [{ name: 'agent_teams_status', description: 'Read a team and its tasks' },
+      { name: 'automation_create', description: 'Schedule work outside the worker slots' },
+      { name: 'glob', description: 'Find files by path pattern' },
+      { name: 'web_search', description: 'Search the web' }],
     prompts: { masterId: 'master', sections: TEAM_SECTIONS, skillName: SKILL_NAME.source, builtin: ['feishu', 'github'],
       skillPrefix: SKILL_PREFIX, revision: 0, current: { ...defaults, config: defaultPrompts() },
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
@@ -597,7 +603,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     else if (block === 'agents') {
       // Mirror the host: validate the catalog rules and refuse with the same structured user error the panel localizes.
       const agents = AgentsConfigSchema.parse(body.value)
-      try { validateAgentTools(agents) }
+      try { validateAgentTools(agents, server.registeredTools) }
       catch (error) {
         if (error instanceof UserError) return refuse(400, error.message, { code: error.code, values: error.values })
         throw error
