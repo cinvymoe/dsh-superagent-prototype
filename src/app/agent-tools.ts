@@ -99,7 +99,7 @@ export function turnedOff(role: AgentRole, agents: AgentsConfig): ReadonlySet<st
 export function roleTools(role: AgentRole, agents: AgentsConfig): string[] {
   const off = turnedOff(role, agents)
   const catalog = orderedTools(role).filter(name => !off.has(name))
-  const added = [...new Set(agents[role].addedTools ?? [])].filter(name => !catalog.includes(name))
+  const added = [...new Set(agents[role].addedTools)].filter(name => !catalog.includes(name))
   return [...catalog, ...added]
 }
 /**
