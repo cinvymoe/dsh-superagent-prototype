@@ -92,15 +92,15 @@ export function turnedOff(role: AgentRole, agents: AgentsConfig): ReadonlySet<st
 }
 /**
  * The tools a role may call: its catalog in catalog order, with the optional tools a person turned off removed, then the
- * extra tools a person added beyond the catalog in saved order. A name the catalog already has stays in its catalog position,
- * so an added tool never appears twice; the host's availability is checked by the Session that installs the allow list, as a
- * plugin may be uninstalled after the save.
+ * extra tools a person added beyond the catalog in saved order. A name the catalog already has stays in its catalog position
+ * and is never re-admitted by `addedTools`, so a turned-off built-in stays off; the host's availability is checked by the
+ * Session that installs the allow list, as a plugin may be uninstalled after the save.
  */
 export function roleTools(role: AgentRole, agents: AgentsConfig): string[] {
   const off = turnedOff(role, agents)
-  const catalog = orderedTools(role).filter(name => !off.has(name))
+  const catalog = orderedTools(role)
   const added = [...new Set(agents[role].addedTools)].filter(name => !catalog.includes(name))
-  return [...catalog, ...added]
+  return [...catalog.filter(name => !off.has(name)), ...added]
 }
 /**
  * Refuse a save that turns off a required tool or names a tool the role does not have, and refuse an added tool that is

@@ -228,4 +228,6 @@ it('appends each role\'s added tools after its catalog, in saved order and witho
     .toEqual([...WORK_TOOLS.filter(name => name !== 'web_search'), 'plugin_tool', 'other_tool'])
   // A name the catalog already has stays in its catalog position, and a repeated added name is named once.
   expect(roleTools('executor', agents('executor', ['bash', 'plugin_tool', 'plugin_tool']))).toEqual([...WORK_TOOLS, 'plugin_tool'])
+  // A built-in a person turned off cannot come back through `addedTools`: the catalog decides it stays off.
+  expect(roleTools('executor', agents('executor', ['web_search'], ['web_search']))).toEqual(WORK_TOOLS.filter(name => name !== 'web_search'))
 })
