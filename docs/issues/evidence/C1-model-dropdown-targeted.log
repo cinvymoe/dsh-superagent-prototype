@@ -1,0 +1,25 @@
+(node:2045506) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2045518) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v4.1.8 /data/project/workspace/dsh-worktrees/slice-5708b1deec86
+
+(node:2045571) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2045578) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2045572) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/locales.spec.ts (7 tests) 13ms
+ ✓ tests/panel-settings.spec.tsx (6 tests) 1125ms
+   ✓ keeps a person's own value where another save changed the same setting, and says so  319ms
+   ✓ saves the Eval block on the Policy settings and the Executor with its execution environment on the Execution settings, each against its own revision  303ms
+ ✓ tests/panel-agents.spec.tsx (12 tests) 1755ms
+   ✓ adds Agents between Execution and Prompts and keeps the group when the panel remounts  467ms
+
+ Test Files  3 passed (3)
+      Tests  25 passed (25)
+   Start at  08:41:54
+   Duration  4.07s (transform 1.89s, setup 0ms, import 2.87s, tests 2.89s, environment 1.69s)
+

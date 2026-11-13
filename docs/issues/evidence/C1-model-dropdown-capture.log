@@ -1,0 +1,41 @@
+# C1 model dropdown — Before/After capture log
+# Baseline (Before): deployment main ef0ba5c879f915c911112cac5451705983db1504
+#   (the merge of PR #36; the panel still render ModelField as three datalist-backed text inputs).
+#   Build: git archive ef0ba5c8 | tar -x -C /tmp/model-before-src; pnpm install --frozen-lockfile && pnpm build (both exit 0).
+# After: ticket branch agent/slice-5708b1deec86 working tree (this change), pnpm check build (exit 0).
+# Profile: DSH profile model-capture (copy of c3-after), webserver 10.126.126.6:3155, stateDir /root/.dsh/state/model-capture,
+#   dsh-superagent linked first to /tmp/model-before-src and then to this ticket worktree.
+# State: one seed copied from the C3 capture state (local project Widgets, GitHub chain acme/widgets, setup stub CLI
+#   /tmp/c3-fake-gh); both runs read the same state directory. No credentials or private Feishu content in the capture.
+# Browser: /usr/bin/chromium 147 headed under Xvfb :99, 1440x1100, light theme, zh-CN via CDP locale override.
+#   The page screenshots are Playwright page.screenshot; the native dropdown popup is captured from the X root with
+#   ImageMagick `import -window root`, so an opened native list is real browser UI, not a re-rendered mockup.
+# Route: settings → agents, Main Session card, Role model section; the model field is scrolled into view.
+#
+# Before (baseline ef0ba5c8):
+#   LANG: zh-CN
+#   CONTROLS: {"selects":[],"inputs":[
+#     {"list":"dt-agent-main-model-providers","value":"","options":4},
+#     {"list":"dt-agent-main-model-models","value":"","options":0},
+#     {"list":"dt-agent-main-model-efforts","value":"","options":0}]}
+#   The reported bug: the Model field is a text input whose datalist holds 0 options while no provider is typed;
+#   clicking it focuses the field and opens no suggestion list. Screenshot: before-model-dropdown.png.
+#
+# After (this change):
+#   LANG: zh-CN
+#   CONTROLS: {"selects":[
+#     {"id":"dt-agent-main-model-provider","value":"","count":5,"first":"继承默认","groups":[]},
+#     {"id":"dt-agent-main-model-model","value":"","count":25,"first":"继承默认",
+#      "groups":["DeepSeek","Magpie","zai-coding-cn","Magpie · Responses"]},
+#     {"id":"dt-agent-main-model-effort","value":"","count":1,"first":"模型默认","groups":[]}],"inputs":[]}
+#   The Model select lists all 25 catalog models in 4 provider groups with 继承默认 first; the native popup is shown in
+#   after-model-dropdown.png. Choosing DeepSeek-V4-Pro moved the provider select to DeepSeek and switched the effort
+#   options to 模型默认/Off/Low/High/Max (after-model-selected.png).
+#
+# Shots:
+#   docs/evidence/c1-model-dropdown/before-model-area.png     — baseline Agents page, blank text inputs
+#   docs/evidence/c1-model-dropdown/before-model-dropdown.png — baseline Model input focused; empty suggestion list
+#   docs/evidence/c1-model-dropdown/after-model-area.png      — same page and state with the three selects
+#   docs/evidence/c1-model-dropdown/after-model-dropdown.png  — Model select opened; 25 options in 4 provider groups
+#   docs/evidence/c1-model-dropdown/after-model-selected.png  — a model picked; provider auto-set and effort options switch
+# The temporary server on 10.126.126.6:3155 was stopped after the capture; tokens are not recorded.
