@@ -304,12 +304,14 @@ export class Sessions {
     }
   }
   /**
-   * The main Session's tools: its seven mandatory built-ins, plus billion-context's compression tools when the host's plugin
-   * provides them, so its context gets compressed, minus the optional tools the saved `agents` block turns off. A host
-   * missing a built-in fails this decoration, as the restriction always did; a compression tool is named only while it is
-   * visible. The plugin registers them asynchronously, often after the Session exists, so the allow list is recomputed on
-   * DSH's unfiltered `tools/change`; saving `agents` recomputes it through the same binding. A new filter is installed
-   * before the old one is lifted: filters intersect, so the old one would keep masking the tools the new list admits.
+   * The main Session's tools: its seven mandatory built-ins, the extra tools a person added that this host provides, and
+   * billion-context's compression tools when the host's plugin provides them, so its context gets compressed, minus the
+   * optional tools the saved `agents` block turns off. A host missing a built-in fails this decoration, as the restriction
+   * always did; an added or compression tool is named only while it is visible, so a name left in the block by an uninstalled
+   * plugin neither fails the decoration nor admits anything else. The plugin registers its tools asynchronously, often after
+   * the Session exists, so the allow list is recomputed on DSH's unfiltered `tools/change`; saving `agents` recomputes it
+   * through the same binding. A new filter is installed before the old one is lifted: filters intersect, so the old one would
+   * keep masking the tools the new list admits.
    */
   private mainTools(agent: Agent, binding: SessionBinding): (() => void)[] {
     const parent = scopeParentOf(agent)
@@ -317,8 +319,13 @@ export class Sessions {
     // this Session's own restriction.
     const missing = MAIN_TOOLS.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the main Session's tools ${missing.join(', ')}, which this host does not provide`)
-    const restrict = this.installTools(agent, binding, () => [...roleTools('main', this.host.store.settings().agents),
-      ...COMPRESSION_TOOLS.filter(name => agent.ctx.tools.get(name, parent))])
+    const restrict = this.installTools(agent, binding, () => {
+      const tools = roleTools('main', this.host.store.settings().agents)
+      // Every built-in was checked above, so it stays in the list exactly as before; an added name is dropped while its
+      // plugin is not installed, instead of making `restrict` refuse a name it cannot resolve.
+      const named = tools.filter(name => MAIN_TOOLS.includes(name) || agent.ctx.tools.get(name, parent))
+      return [...new Set([...named, ...COMPRESSION_TOOLS.filter(name => agent.ctx.tools.get(name, parent))])]
+    })
     const off = this.ctx.on('tools/change', () => binding.tools?.())
     return [restrict, off]
   }
@@ -391,11 +398,11 @@ export class Sessions {
   }
   /**
    * An Executor Session's tools: only the profile's work tools, which DSH requires to be known, and none once its ticket
-   * ended; the saved `agents` block removes the optional ones a person turned off, at the next step after a save. A failed or
-   * blocked worker keeps its tools, so a person may continue it in its Session; only automated input waits (see the
-   * executor). A slice Ticket adds the execution tools and pre-run guard its pinned strategy runs. Read inherited tools
-   * through the parent scope, which includes the preset's tools. The global view misses preset tools; the agent's own view
-   * also includes local tools such as subagent, which restrict refuses to name.
+   * ended; the saved `agents` block removes the optional ones a person turned off and adds the extra tools a person added, at
+   * the next step after a save. A failed or blocked worker keeps its tools, so a person may continue it in its Session; only
+   * automated input waits (see the executor). A slice Ticket adds the execution tools and pre-run guard its pinned strategy
+   * runs. Read inherited tools through the parent scope, which includes the preset's tools. The global view misses preset
+   * tools; the agent's own view also includes local tools such as subagent, which restrict refuses to name.
    */
   private workOnly(agent: Agent, ticket: Ticket, binding: SessionBinding): (() => void)[] {
     const store = this.host.store
