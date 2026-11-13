@@ -7,7 +7,8 @@ import type { RoleModel, Settings as SettingsValue, SettingsBlock, SettingsOrigi
 import type { SourceHost } from '../sources/host.ts'
 import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
-import { validateAgentTools } from './agent-tools.ts'
+import type {} from '@deepseek-ai/dsh-tools'
+import { agentCatalog, validateAgentTools, type AgentCatalog, type RegisteredTool } from './agent-tools.ts'
 import { resolveRoleModel } from './role-models.ts'
 import { changedPaths, settingsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -26,7 +27,7 @@ const environment = ({ executor }: SettingsValue) => JSON.stringify([executor.di
 
 /** Schema parser, settings merger, and non-panel origin guard for one settings block kind. */
 interface Block {
-  parse(value: unknown, sources: SourceRegistry, id: string): unknown
+  parse(value: unknown, sources: SourceRegistry, id: string, tools: readonly RegisteredTool[]): unknown
   merge(settings: SettingsValue, value: unknown, id: string): SettingsValue
   guard?(current: SettingsValue, candidate: SettingsValue, origin: SettingsOrigin): void
 }
@@ -46,8 +47,9 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'agents' | 'source', Block
     guard: (current, candidate, origin) => { if (origin !== 'panel' && environment(current) !== environment(candidate)) throw new UserError('panelOnlyEnvironment') },
   },
   agents: {
-    // Reading stays lenient; a save is checked against each role's catalog, so a retired tool name cannot be saved again.
-    parse: value => { const agents = AgentsConfigSchema.parse(value); validateAgentTools(agents); return agents },
+    // Reading stays lenient; a save is checked against each role's catalog and the host's registered global tools, so a
+    // retired or unregistered tool name cannot be saved again.
+    parse: (value, _sources, _id, tools) => { const agents = AgentsConfigSchema.parse(value); validateAgentTools(agents, tools); return agents },
     merge: (settings, value) => ({ ...settings, agents: value as SettingsValue['agents'] }),
     // A model or tool change reaches running Sessions, so only the management panel may make one.
     guard: (current, candidate, origin) => {
@@ -116,6 +118,16 @@ export class Settings {
   /** Returns the current validated settings from `Store`. */
   current(): SettingsValue { return this.host.store.settings() }
   /**
+   * The host's globally registered tools, read through the DSH tools service's global view, which includes the tools every
+   * installed plugin registers and excludes per-agent preset registrations. A host without the service offers none.
+   */
+  registeredTools(): RegisteredTool[] {
+    const tools = this.host.context.get('tools')
+    return tools ? tools.schemas().map(({ name, description }) => ({ name, description })) : []
+  }
+  /** The three roles' catalog as `GET settings` offers it, each with the registered tools a person may add to it. */
+  catalog(): AgentCatalog[] { return agentCatalog(this.registeredTools()) }
+  /**
    * Returns an overview of all settings blocks with their current block revisions: full values for `pause`, `eval`,
    * `executor` and `agents`; rule summaries and allowed-sender counts for `policy`; and instance status switches for `sources`
    * (with `read: 'settings/<block>'` paths for full block reads).
@@ -166,7 +178,7 @@ export class Settings {
     if (!(kind in BLOCKS)) throw new UserError('unknownBlock', { block })
     const rules = BLOCKS[kind as keyof typeof BLOCKS]
     if (kind === 'source' && !sources.kind(id)) throw new UserError('sourceNotInstalled', { source: id })
-    const parsed = rules.parse(value, sources, id)
+    const parsed = rules.parse(value, sources, id, this.registeredTools())
     const current = store.settings()
     const candidate = rules.merge(current, parsed, id)
     // A changed role model must resolve, so a save cannot store one the live provider does not know; an inherited one never does.
