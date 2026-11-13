@@ -160,6 +160,10 @@ export interface PanelServer {
   opened: string[]
   dropped: DroppedReply[]
   failing: Extract<Problem, { kind: 'outgoing' }>['outgoing'][]
+  /** The model catalog `GET models` answers; omitted keeps the default two-provider catalog. */
+  modelCatalog?: ApiResponse<'GET models'>
+  /** When set, `GET models` refuses with this message, as an unreachable model host does. */
+  modelCatalogFailure?: string
 }
 export let server: PanelServer
 
@@ -353,6 +357,18 @@ const ticketOf = (id: string) =>
   [...server.tickets.open, ...server.person, ...server.tickets.ended].find(ticket => ticket.id === id) ?? server.ticketDetails[id]
 const SourceSave = z.object({ enabled: z.boolean(), config: z.unknown() })
 
+/** The catalog the panel offers by default: two providers, reasoning efforts and a model with none. */
+const DEFAULT_MODELS: ApiResponse<'GET models'> = {
+  default: { provider: 'host', model: 'default' }, routableProviders: [], failures: [],
+  groups: [
+    { id: 'worker-provider', name: 'Worker provider', models: [
+      { id: 'worker-model', name: 'Worker model', reasoning: { efforts: [{ id: 'high', name: 'High' }, { id: 'low', name: 'Low' }],
+        defaultEffort: 'high' } },
+      { id: 'worker-fast', name: 'Worker fast' }] },
+    { id: 'other-provider', name: 'Other provider', models: [
+      { id: 'other-model', name: 'Other model', reasoning: { efforts: [{ id: 'medium', name: 'Medium' }] } }] },
+  ],
+}
 const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET state': { answer: stateView },
   // The running checkout is read only; the fake answers an available checkout and its pull-and-build action.
@@ -610,9 +626,10 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET policy/history': { answer: () => server.history },
   'POST policy-sync/:id': { answer: ({ params }) => ({ policy: server.settings.policy.sources[params.id] }) },
   'POST setup/check': { answer: () => ({ restarting: true }) },
-  'GET models': { answer: () => ({ default: { provider: 'host', model: 'default' }, routableProviders: [], failures: [],
-    groups: [{ id: 'worker-provider', name: 'Worker provider', models: [{ id: 'worker-model', name: 'Worker model',
-      reasoning: { efforts: [{ id: 'high', name: 'High' }] } }] }] }) },
+  'GET models': { answer: () => {
+    if (server.modelCatalogFailure) return refuse(500, server.modelCatalogFailure)
+    return server.modelCatalog ?? DEFAULT_MODELS
+  } },
   'GET prompts': { query: ['revision', 'offset'], answer: () => server.prompts },
   'PUT prompts': { body: true, answer: ({ body }) => {
     const { revision } = server.prompts

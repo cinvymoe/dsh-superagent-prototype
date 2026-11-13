@@ -69,37 +69,89 @@ function SwitchRow({ label, hint, checked,
   </div>
 }
 type RoleModel = Settings['eval']['model']
+type ModelCatalog = ApiResponse<'GET models'>
+type ModelGroup = ModelCatalog['groups'][number]
 export function ModelField({ id, value, onChange }: { id: string; value: RoleModel; onChange: (next: RoleModel) => void }) {
   const { t, call } = usePanel()
-  const [catalog, setCatalog] = useState<ApiResponse<'GET models'>>()
+  const [catalog, setCatalog] = useState<ModelCatalog>()
   const [error, setError] = useState<string>()
   useEffect(() => { call('GET models').then(setCatalog, failure => setError(errorText(failure))) }, [call])
   const current = { provider: value?.provider ?? '', model: value?.model ?? '', effort: value?.reasoningEffort ?? '' }
-  const set = (next: Partial<typeof current>) => {
-    const { provider, model, effort } = { ...current, ...next }
-    onChange(provider.trim() || model.trim() || effort.trim() ? { provider, model, ...effort ? { reasoningEffort: effort } : {} } : null)
+  // The provider picked in the form filters the Model list even before a model is chosen; it reaches the saved value only
+  // through a complete provider/model pair, so choosing a provider alone leaves the role inheriting.
+  const [providerFilter, setProviderFilter] = useState(current.provider)
+  useEffect(() => { setProviderFilter(current.provider) }, [current.provider])
+  const groups = catalog?.groups ?? []
+  const groupOf = (provider: string) => groups.find(group => group.id === provider)
+  const modelOf = (group: ModelGroup | undefined, model: string) => group?.models.find(item => item.id === model)
+  // A model belongs to the filtering provider when that provider lists it; otherwise the first catalog group that does.
+  const ownerOf = (model: string, provider: string) => {
+    const preferred = groupOf(provider)
+    return modelOf(preferred, model) ? preferred : groups.find(group => modelOf(group, model))
   }
-  const models = catalog?.groups.find(group => group.id === current.provider.trim())?.models ?? []
+  const selectedGroup = groupOf(providerFilter)
+  // Keep a saved value visible even after its provider or model left the catalog, so saving cannot silently replace it.
+  const providerFallback = !!providerFilter && !selectedGroup
+  const modelListed = providerFilter ? !!modelOf(selectedGroup, current.model) : !!ownerOf(current.model, '')
+  const modelFallback = !!current.model && !modelListed
+  const efforts = (modelOf(ownerOf(current.model, current.provider), current.model)?.reasoning?.efforts ?? [])
+  const effortFallback = !!current.effort && !efforts.some(effort => effort.id === current.effort)
+  // A model is saved only with its provider; every empty selection is the inherited default (`null`).
+  const emit = (provider: string, model: string, effort: string) => {
+    const [nextProvider, nextModel, nextEffort] = [provider.trim(), model.trim(), effort.trim()]
+    onChange(nextProvider || nextModel || nextEffort
+      ? { provider: nextProvider, model: nextModel, ...nextEffort ? { reasoningEffort: nextEffort } : {} }
+      : null)
+  }
+  const changeProvider = (provider: string) => {
+    setProviderFilter(provider)
+    if (!provider) { onChange(null); return }
+    const kept = modelOf(groupOf(provider), current.model)
+    const keptEffort = kept?.reasoning?.efforts.some(effort => effort.id === current.effort) ? current.effort : ''
+    if (kept) emit(provider, current.model, keptEffort)
+  }
+  const changeModel = (model: string) => {
+    if (!model) { setProviderFilter(''); onChange(null); return }
+    const owner = ownerOf(model, providerFilter)
+    const keptEffort = modelOf(owner, model)?.reasoning?.efforts.some(effort => effort.id === current.effort) ? current.effort : ''
+    emit(owner?.id ?? providerFilter, model, keptEffort)
+  }
+  const change = (name: keyof typeof current, next: string) => {
+    if (name === 'provider') changeProvider(next)
+    else if (name === 'model') changeModel(next)
+    else emit(current.provider, current.model, next)
+  }
+  const select = (name: keyof typeof current, label: string, disabled: boolean, children: ReactNode,
+    selected = current[name]) => <div className="dt-field">
+    <span className="dt-field-head"><label htmlFor={`${id}-${name}`}>{label}</label></span>
+    <select id={`${id}-${name}`} className="dt-select" disabled={disabled} value={selected}
+      onChange={event => change(name, event.target.value)}>{children}</select>
+  </div>
   const fallback = catalog?.default
-  const input = (name: keyof typeof current, label: string, placeholder: string) => <Field label={label}>
-    <Input list={`${id}-${name}s`} spellCheck={false} placeholder={placeholder} value={current[name]}
-      onChange={event => set({ [name]: event.target.value })} />
-  </Field>
   return <div className="dt-model">
     <Hint>{fallback ? t('defaultModel', { model: `${fallback.provider} / ${fallback.model}${fallback.reasoningEffort
       ? ` · ${fallback.reasoningEffort}` : ''}` }) : t('defaultModelUnavailable')}</Hint>
     {error && <p className="dt-error">{t('modelCatalogError', { error })}</p>}
     <div className="dt-grid3">
-      {input('provider', t('modelProvider'), t('modelInherit'))}{input('model', t('modelName'), t('modelInherit'))}{input('effort',
-        t('modelEffort'), t('modelEffortDefault'))}
+      {select('provider', t('modelProvider'), !catalog, <>
+        <option value="">{t('modelInherit')}</option>
+        {providerFallback && <option value={providerFilter}>{providerFilter}</option>}
+        {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+      </>, providerFilter)}
+      {select('model', t('modelName'), !catalog, <>
+        <option value="">{t('modelInherit')}</option>
+        {modelFallback && <option value={current.model}>{current.model}</option>}
+        {providerFilter
+          ? (selectedGroup?.models ?? []).map(model => <option key={model.id} value={model.id}>{model.name}</option>)
+          : groups.map(group => <optgroup key={group.id} label={group.name}>{group.models.map(model => <option
+            key={`${group.id}/${model.id}`} value={model.id}>{model.name}</option>)}</optgroup>)}
+      </>)}
+      {select('effort', t('modelEffort'), !catalog || !current.model, <>
+        <option value="">{t('modelEffortDefault')}</option>
+        {effortFallback && <option value={current.effort}>{current.effort}</option>}
+        {efforts.map(effort => <option key={effort.id} value={effort.id}>{effort.name}</option>)}
+      </>)}
     </div>
-    <datalist id={`${id}-providers`}>{catalog?.groups.map(group => <option key={group.id}
-      value={group.id}>{group.name}</option>)}</datalist>
-    <datalist id={`${id}-models`}>{models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}</datalist>
-    <datalist id={`${id}-efforts`}>
-      {(models.find(model => model.id === current.model.trim())?.reasoning?.efforts ?? []).map(effort => <option key={effort.id}
-        value={effort.id}>{effort.name}</option>)}
-    </datalist>
   </div>
 }
 
