@@ -165,6 +165,7 @@ export function NewRequirementPage() {
     <PageHead back={false} title={active ? active.name : t('discuss.new')}>
       <span className="dt-hint">{t('discuss.newSubtitle')}</span>
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
+      {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
       {active && <Button variant="outline" size="sm" className="dt-project-edit" icon={<Icon name="settings" size={14} />}
         onClick={() => navigate({ page: 'requirements', edit: active.id })}>{t('discuss.editProject')}</Button>}
@@ -226,6 +227,7 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
     <PageHead back={false} title={active ? active.name : t('discuss.requirements')}>
       <span className="dt-hint">{t('discuss.listSubtitle')}</span>
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
+      {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
     </PageHead>
     <div className="dt-column">
@@ -347,7 +349,8 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.requirement')}</span></div>
         <div className="dt-row-meta"><span>{t('discuss.author')}：{issue.author}</span><When at={issue.createdAt} />
           <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}
-            {data.project.worktreeRoot ? ` · ${data.project.worktreeRoot}` : ''}</span>}</div>
+            {data.project.worktreeRoot ? ` · ${data.project.worktreeRoot}` : ''}</span>}
+          {data.project?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: data.project.bot })}</span>}</div>
         {issue.body && <MarkdownLite text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
         <RequirementImages issue={issue} />

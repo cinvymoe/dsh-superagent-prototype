@@ -136,9 +136,9 @@ export function subagentRuntime(agents: Map<string, FakeAgent>) {
 }
 
 /** @param seed - writes to the database before the Runtime opens it, such as records an earlier version stored. */
-export async function startRuntime(seed?: (store: Store) => void) {
+export async function startRuntime(seed?: (store: Store, clis: { agentCli: string; projectBotCli: string }) => void) {
   const directory = mkdtempSync(join(tmpdir(), 'orchestrator-host-'))
-  const AGENT = join(directory, 'agent-gh'), BOT = join(directory, 'lark-bot')
+  const AGENT = join(directory, 'agent-gh'), PROJECT_BOT = join(directory, 'project-bot-gh'), BOT = join(directory, 'lark-bot')
   const repository = { default_branch: 'master', permissions: { push: true } }
   vi.spyOn(Commands.prototype, 'gh').mockImplementation(async args => args[1] === 'user' ? { login: 'agent-bot' } : repository)
   vi.spyOn(Commands.prototype, 'lark').mockResolvedValue({ users: [{ member_id: MEMBER, name: 'Alice' }], has_more: false })
@@ -151,6 +151,10 @@ export async function startRuntime(seed?: (store: Store) => void) {
     [`${AGENT} api repos/acme/intake --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/intake","push":true}\n',
     [`${AGENT} api repos/acme/project --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/project","push":true}\n',
     [`${AGENT} api repos/acme/readonly --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/readonly","push":false}\n',
+    // A second account for a project's own bot: signed in as another login and able to push its chain's repositories.
+    [`${PROJECT_BOT} api user`]: '{"login":"project-bot","id":8}',
+    ...Object.fromEntries(['intake', 'widgets', 'other', 'rooted', 'plain', 'project'].map(name =>
+      [`${PROJECT_BOT} api repos/acme/${name} --jq {name: .full_name, push: .permissions.push}`, `{"name":"acme/${name}","push":true}\n`])),
     // Repositories the management-route specs create projects with; each is readable and pushable.
     ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative', 'demo', 'demo-issues', 'other-issues',
       'protected', 'protected-issues', 'rooted-issues', 'plain-issues', 'omitted-issues', 'blank-issues', 'relative-issues', 'alpha-issues', 'beta-issues']
@@ -170,10 +174,12 @@ export async function startRuntime(seed?: (store: Store) => void) {
     const exited = { exitCode: 0, signal: null }
     const done = argv[0] === 'sh' && hooks.prepare ? hooks.prepare.then(() => exited) : Promise.resolve(exited)
     const key = argv.join(' ')
-    // Setup checks each chain's own git configuration, which the command names in GIT_CONFIG_GLOBAL.
+    // Setup checks each chain's own git configuration, which the command names in GIT_CONFIG_GLOBAL; the file carries
+    // that chain's own CLI helper, so a second chain's wrapper is expected here too.
     const gitconfig = spec.env?.GIT_CONFIG_GLOBAL
+    const helpers: Record<string, string> = { [workerGitConfig(directory)]: AGENT, [workerGitConfig(directory, 'beta')]: PROJECT_BOT }
     const text = key === 'git config -z --show-origin --get-all credential.https://github.com.helper' && gitconfig
-      ? `file:${gitconfig}\0${credentialHelper(AGENT)}\0` : answers[key] ?? ''
+      ? `file:${gitconfig}\0${credentialHelper(helpers[gitconfig] ?? AGENT)}\0` : answers[key] ?? ''
     return { done, collected: { stdout: reader(text), stderr: reader('') } }
   }) }
   const agents = new Map<string, FakeAgent>()
@@ -313,11 +319,11 @@ export async function startRuntime(seed?: (store: Store) => void) {
     jobs: jobs.service, subagents: subagents.service, tools: toolRegistry }
   const ctx = new Context()
   for (const [name, service] of Object.entries(services)) ctx.reflect.provide(name, service)
-  for (const cli of [AGENT, BOT]) writeFileSync(cli, '#!/bin/sh\n', { mode: 0o755 })
+  for (const cli of [AGENT, PROJECT_BOT, BOT]) writeFileSync(cli, '#!/bin/sh\n', { mode: 0o755 })
   const seeded = new Store(join(directory, 'orchestrator.sqlite'))
   const sources = { github: { enabled: true, config: { chains: [{ id: 'default', intakeRepository: 'acme/widgets', codeRepository: 'acme/widgets' }], cli: AGENT } }, feishu: { enabled: true, config: { cli: BOT } } }
   seeded.saveSettings(SettingsSchema.parse({ ...seeded.settings(), sources }))
-  seed?.(seeded)
+  seed?.(seeded, { agentCli: AGENT, projectBotCli: PROJECT_BOT })
   seeded.close()
   const runtime = new Runtime(ctx, testMachine({ stateDir: directory }), vi.fn())
   await runtime.ready
@@ -372,7 +378,7 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const step = (sessionId: string) => { steps.get(sessionId)!() }
   /** A step of the worker claims what waits for it, and is cut off before the Session took it. */
   const claim = (sessionId: string) => { claims.get(sessionId)!() }
-  return { runtime, ctx, directory, agents, tools, globalTools: toolRegistry, deliveries, relays, candidates, runTool, route, acceptedTicket, api, raw, controller, subprocess, hooks, resolveDefault, stop,
+  return { runtime, ctx, directory, agentCli: AGENT, projectBotCli: PROJECT_BOT, agents, tools, globalTools: toolRegistry, deliveries, relays, candidates, runTool, route, acceptedTicket, api, raw, controller, subprocess, hooks, resolveDefault, stop,
     jobs, subagents, step, claim, events, headers, sections, restrictions, archiveSession }
 }
 export type Host = Awaited<ReturnType<typeof startRuntime>>

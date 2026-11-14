@@ -31,6 +31,17 @@ export function projectRepositories(project: Pick<LocalProject, 'repository' | '
     : project.repository ?? ''
 }
 
+/**
+ * A project as the panel receives it: the stored record plus two values derived from its GitHub chain. Neither is
+ * stored on the project, because the chain row is the one place a bot is configured.
+ */
+export interface LocalProjectView extends LocalProject {
+  /** GitHub CLI of this project's chain, empty when the chain uses the Source-level CLI. */
+  cli?: string
+  /** Account that CLI is signed in to, as setup resolved it; absent until setup has resolved the chain. */
+  bot?: string
+}
+
 /** One task slice produced by the alignment stage of a local requirement. */
 export interface LocalSlice {
   id: string
