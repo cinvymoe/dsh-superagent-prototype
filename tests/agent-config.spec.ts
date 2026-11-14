@@ -5,7 +5,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { AGENT_ROLES, AgentsConfigSchema, DEFAULT_ENABLED_PLUGINS, SettingsSchema, type AgentsConfig } from '../src/policy.ts'
 import { AGENT_TOOLS, BUILTIN_PLUGINS, COMPRESSION_TOOLS, FORBIDDEN_ADDED_TOOLS, MAIN_TOOLS, REQUIRED_TOOLS, WORK_TOOLS, agentCatalog,
-  roleTools } from '../src/app/agent-tools.ts'
+  pluginSuggestions, roleTools } from '../src/app/agent-tools.ts'
 import { roleModel } from '../src/app/role-models.ts'
 import { UserError } from '../src/core/index.ts'
 import { startRuntime, feishu, type Host } from './fixtures/host.ts'
@@ -20,7 +20,8 @@ const roleOf = (agents: AgentsConfig, role: keyof AgentsConfig, enabledPlugins: 
 type RoleCatalog = { role: string; preset: string; required: string[]; plugins: string[]; enabledPlugins: string[] }
 type PluginCatalog = { id: string; name: string; tools: string[]; roles: string[]; builtIn: boolean; provided: boolean; missingTools: string[] }
 type SettingsBody = { blocks: { agents: { revision: number; value: AgentsConfig } }; agents: {
-  roles: RoleCatalog[]; plugins: PluginCatalog[]; ungroupedTools: { name: string; description: string }[] } }
+  roles: RoleCatalog[]; plugins: PluginCatalog[]; suggestions: { name: string; kind: string; tools: { name: string; description: string }[] }[]
+  ungroupedTools: { name: string; description: string }[]; availableTools: string[] } }
 type HistoryBody = { items: { block: string; changes: { code: string; items?: string[] }[] | null }[] }
 
 it('catalogs each Agent role and the built-in plugin groups that reproduce the previous tool surface', () => {
@@ -147,6 +148,54 @@ it('offers the host\'s registered global tools that belong to no plugin as ungro
   expect(settings.agents.ungroupedTools).toEqual([plugin])
 })
 
+it('suggests an MCP server group and each shared tool-name prefix, leaving a lone tool ungrouped', () => {
+  const agents = SettingsSchema.parse({}).agents
+  const registered = [
+    { name: 'mcp__magpie__repos', description: 'List repositories' },
+    { name: 'mcp__magpie__call_tool', description: 'Call a tool' },
+    { name: 'feature_exec_start', description: 'Start a flow' },
+    { name: 'feature_exec_advance', description: 'Advance a flow' },
+    { name: 'automation_create', description: 'Schedule work' },
+    { name: 'automation_list', description: 'List schedules' },
+    { name: 'plugin_lint', description: 'Lint a plugin manifest' },
+    { name: 'agent_teams_status', description: 'Read a team' },
+    { name: 'bash', description: 'A required tool' },
+    { name: 'web_search', description: 'A built-in plugin tool' },
+    { name: FORBIDDEN_ADDED_TOOLS[0]!, description: 'Ask a person a question' },
+  ]
+  const { suggestions, ungroupedTools } = pluginSuggestions(agents, registered)
+  // MCP servers first, then tool families, each in name order and with its tools in name order.
+  expect(suggestions).toEqual([
+    { name: 'magpie', kind: 'mcp', tools: [{ name: 'mcp__magpie__call_tool', description: 'Call a tool' },
+      { name: 'mcp__magpie__repos', description: 'List repositories' }] },
+    { name: 'automation', kind: 'family', tools: [{ name: 'automation_create', description: 'Schedule work' },
+      { name: 'automation_list', description: 'List schedules' }] },
+    { name: 'feature_exec', kind: 'family', tools: [{ name: 'feature_exec_advance', description: 'Advance a flow' },
+      { name: 'feature_exec_start', description: 'Start a flow' }] },
+  ])
+  // A one-word tool and a prefix with no sibling stay on their own; a built-in plugin tool, a required tool and a
+  // forbidden name never appear in either list.
+  expect(ungroupedTools).toEqual([{ name: 'agent_teams_status', description: 'Read a team' },
+    { name: 'plugin_lint', description: 'Lint a plugin manifest' }])
+})
+
+it('saves a plugin declaring a tool the host does not register, and marks the tool missing instead of refusing it', async () => {
+  h = await startRuntime()
+  const { store } = h.runtime
+  const ghost = { id: 'ghost', name: 'Ghost tools', tools: ['ghost_tool'] }
+  const value = settingsOf({ ...emptyAgents, plugins: [ghost], executor: { ...emptyAgents.executor,
+    enabledPlugins: [...emptyAgents.executor.enabledPlugins, 'ghost'] } })
+  expect(await h.api('PUT', 'settings/agents', { value, revision: 0 })).toMatchObject({ status: 200, body: { saved: true } })
+  const settings = (await h.api('GET', 'settings')).body as unknown as SettingsBody
+  expect(settings.agents.plugins.find(plugin => plugin.id === 'ghost')).toMatchObject({ provided: false, missingTools: ['ghost_tool'] })
+  expect(settings.agents.availableTools).not.toContain('ghost_tool')
+  // The declaration stays in the role's configured surface; each Session drops it because the host cannot resolve it.
+  expect(roleTools('executor', store.settings().agents)).toContain('ghost_tool')
+  const history = (await h.api('GET', 'policy/history')).body as unknown as HistoryBody
+  expect(history.items[0]!.changes).toEqual(expect.arrayContaining([{ code: 'agentPluginAdded', items: ['Ghost tools'] },
+    { code: 'agentExecutorPluginEnabled', items: ['Ghost tools'] }]))
+})
+
 it('saves a valid plugin value, increments the block revision and diffs plugin enable, disable, add and remove', async () => {
   h = await startRuntime()
   const { store } = h.runtime
@@ -162,13 +211,13 @@ it('saves a valid plugin value, increments the block revision and diffs plugin e
   const history = (await h.api('GET', 'policy/history')).body as unknown as HistoryBody
   expect(history.items[0]).toMatchObject({ block: 'agents' })
   expect(history.items[0]!.changes).toEqual(expect.arrayContaining([{ code: 'agentMainModel' },
-    { code: 'agentMainPluginEnabled', items: ['extra'] }, { code: 'agentPluginAdded', items: ['extra'] }]))
+    { code: 'agentMainPluginEnabled', items: ['Extra tools'] }, { code: 'agentPluginAdded', items: ['Extra tools'] }]))
   // Turning a built-in group off and removing the stored plugin words their own entries on the next save.
   const next = settingsOf({ ...value, plugins: [], main: { ...value.main, enabledPlugins: ['billion-context'] } })
   await h.runtime.settings.save('agents', next, store.blockRevision('agents'), 'panel')
   const after = (await h.api('GET', 'policy/history')).body as unknown as HistoryBody
-  expect(after.items[0]!.changes).toEqual(expect.arrayContaining([{ code: 'agentMainPluginDisabled', items: ['image', 'extra'] },
-    { code: 'agentPluginRemoved', items: ['extra'] }]))
+  expect(after.items[0]!.changes).toEqual(expect.arrayContaining([{ code: 'agentMainPluginDisabled', items: ['Image', 'Extra tools'] },
+    { code: 'agentPluginRemoved', items: ['Extra tools'] }]))
   expect(store.settings().agents).toEqual(next)
 })
 

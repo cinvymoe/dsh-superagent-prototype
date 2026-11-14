@@ -36,6 +36,9 @@ export async function settle() {
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
 export async function mount(dictionary: Record<string, string> = zh) {
+  // A test that mounts twice, such as one re-reading the server after a save, must not leave the earlier app polling in
+  // the same document: its stale draft revision or duplicated controls would shadow the app under test.
+  unmount()
   container = document.createElement('div'); document.body.append(container)
   root = createRoot(container)
   await act(async () => { root!.render(<Panel t={translator(dictionary)} />) })
