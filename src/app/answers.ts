@@ -69,6 +69,14 @@ export class Answers {
           this.queue(discussion.id, answer.id)
         }
       }
+      // A discussion written before answers were recorded carries no answers at all; answer its opening message once so
+      // the person who asked it still hears back after the upgrade.
+      if (discussion.state === 'open' && !discussion.answers?.length) {
+        try { this.accept(discussion, discussion.body, key('local-trigger', discussion.id, discussion.createdAt)) }
+        catch (error) {
+          this.host.warn?.(`dsh-superagent could not queue an answer for discussion ${discussion.id}: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }
     }
   }
 

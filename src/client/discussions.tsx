@@ -116,6 +116,8 @@ export function DiscussionDetail({ id }: { id: string }) {
   if (error) return <p className="dt-error" role="alert">{error.message}</p>
   if (!discussion) return <p className="dt-hint">{t('loading')}</p>
   const shown = exchange(discussion, data.replies, data.thread?.timeline ?? [])
+  // The newest answered message is the discussion's current conclusion; older ones stay in the timeline below.
+  const result = shown.find(item => item.kind === 'answer' && item.answer.state === 'answered')
   return <>
     <PageHead title={discussion.title} back={{ label: t('discussion.back'), onClick: () => navigate({ page: 'discussions' }, true) }}>
       <span className="dt-hint">{t('discussion.detail')}</span>{stateTag(t, discussion)}{linkTag(t, discussion)}
@@ -132,6 +134,13 @@ export function DiscussionDetail({ id }: { id: string }) {
             onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
         </div>}
       </section>
+
+      {result?.kind === 'answer' && result.answer.answer !== undefined && <section className="dt-card">
+        <div className="dt-card-head"><span className="dt-card-title">{t('discussion.result')}</span>
+          <Tag tone="success">{t('discuss.agent')}</Tag></div>
+        <div className="dt-result"><MarkdownLite text={result.answer.answer} /></div>
+        <p className="dt-hint">{t('discussion.resultHint')}</p>
+      </section>}
 
       <Section title={t('discussion.messages')} count={shown.length}>
         {/* The box sits above the list, so a submitted message appears first, directly under it. */}
@@ -203,14 +212,17 @@ export function SourceDiscussion({ id }: { id: string }) {
 
 /** Prefill the New requirement form from a discussion once, without overwriting anything a person has typed. */
 export function useDiscussionPrefill(id: string | undefined, fill: (text: string) => void): LocalDiscussion | undefined {
-  const { call } = usePanel()
+  const { call, t } = usePanel()
   const { data } = usePoll(async () => id ? call('GET local/discussions/:id', { id }) : undefined, [call, id])
   const filled = useRef<string>()
   const discussion = data?.discussion
   useEffect(() => {
     if (!discussion || filled.current === discussion.id) return
     filled.current = discussion.id
-    fill(discussion.body)
+    // The latest answered message becomes the description's conclusion when the discussion has one.
+    const answer = (discussion.answers ?? []).filter(item => item.state === 'answered').sort((a, b) => a.at.localeCompare(b.at)).at(-1)
+    const text = answer?.answer ? `${discussion.body}\n\n---\n\n## ${t('discussion.result')}\n\n${answer.answer}` : discussion.body
+    fill(text.slice(0, 20000))
     // `fill` only clears or seeds the form's own draft; re-running it for the same discussion would overwrite typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discussion])

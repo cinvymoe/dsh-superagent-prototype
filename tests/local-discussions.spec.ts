@@ -7,6 +7,7 @@ import { Discussions } from '../src/app/discussions.ts'
 import { LocalIssues } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
 import type { Trigger } from '../src/core/index.ts'
+import { KV } from '../src/kv.ts'
 import type { LocalDiscussion } from '../src/sources/local-format.ts'
 import { startRuntime, type Host } from './fixtures/host.ts'
 
@@ -169,6 +170,18 @@ describe('the discussion answers', () => {
     // That Session is read-only and cannot publish an alignment.
     expect(h.restrictions.get(`answerer-${discussion.id}`)!.at(-1)).toEqual(['read', 'read_image', 'glob', 'grep'])
     expect(h.tools.get(`answerer-${discussion.id}`)!.has('orchestrator_align')).toBe(false)
+  })
+
+  it('answers a discussion written before answers were recorded once answers resume', async () => {
+    const id = 'd-legacy'
+    const at = '2026-11-14T00:00:00.000Z'
+    h.runtime.store.set(KV.local.discussion(id), {
+      id, title: 'Legacy question', body: 'Legacy question', author: 'local', project: project.id,
+      createdAt: at, updatedAt: at, state: 'open',
+    })
+    h.runtime.answers.resume()
+    await settle(id, 'Answered after the upgrade')
+    expect(h.runtime.discussions.get(id)!.answers).toMatchObject([{ state: 'answered', answer: 'Answered after the upgrade' }])
   })
 
   it('answers every later message in the same Session, still without a Ticket', async () => {

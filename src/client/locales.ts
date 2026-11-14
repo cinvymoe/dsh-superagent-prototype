@@ -135,6 +135,8 @@ const TEXT = {
   'discussion.detail': ['讨论正文与消息记录', 'Discussion and messages'],
   'discussion.body': ['讨论正文', 'Discussion'],
   'discussion.messages': ['消息记录', 'Messages'],
+  'discussion.result': ['讨论结论', 'Discussion result'],
+  'discussion.resultHint': ['来自最新一次回答；创建 Issue 时会连同讨论正文一起带入。', 'From the latest answer; creating an Issue copies it into the description.'],
   'discussion.comment': ['发表评论', 'Comment'],
   'discussion.commentPlaceholder': ['继续讨论，或补充信息', 'Continue the discussion, or add context'],
   'discussion.noMessages': ['还没有消息。', 'No messages yet.'],
