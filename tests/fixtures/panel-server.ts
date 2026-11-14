@@ -25,7 +25,7 @@ import { feishuKind } from '../../src/sources/feishu.ts'
 import { githubKind } from '../../src/sources/github.ts'
 import type { Health } from '../../src/sources/host.ts'
 import type { SourceKind } from '../../src/sources/kind.ts'
-import type { LocalIssue } from '../../src/sources/local-format.ts'
+import type { LocalDiscussion, LocalIssue } from '../../src/sources/local-format.ts'
 import { testDeployment } from './deployment.ts'
 
 export const MEMBER = 'ou_alice'
@@ -53,9 +53,9 @@ export const localIssue = (title: string, body = '', project = 'p-fixture'): Loc
   project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
 /** The HTTP requirement view: the stored record plus the derived completion flag the host adds on every response. */
 const issueView = (issue: LocalIssue) => ({ ...issue, slicesFinished: server.issueSlicesFinished.has(issue.id) })
-const localTrigger = (issue: LocalIssue): TriggerRow => ({ id: `local-${issue.id}`, source: 'local',
-  actor: { source: 'local', id: issue.author || 'local' }, human: true, at: issue.createdAt, text: issue.body || issue.title,
-  preview: issue.body || issue.title, url: undefined, threads: [`local:${issue.id}`], actions: { requeue: false },
+const localTrigger = (record: LocalIssue | LocalDiscussion): TriggerRow => ({ id: `local-${record.id}`, source: 'local',
+  actor: { source: 'local', id: record.author || 'local' }, human: true, at: record.createdAt, text: record.body || record.title,
+  preview: record.body || record.title, url: undefined, threads: [`local:${record.id}`], actions: { requeue: false },
   disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined } })
 /** A human message on a requirement's thread, as the panel's comment form posts it. */
 export const localComment = (issue: LocalIssue, text: string, at: string): TriggerRow =>
@@ -79,6 +79,18 @@ const localThread = (issue: LocalIssue, extra: TriggerRow[] = [], dispatched = f
     // The original requirement is the Thread's first Trigger, as the host records it, so detail de-duplication stays testable.
     timeline: [{ ...localTrigger(issue), text, preview: text }, ...extra], earlier: null }
 }
+/** A discussion record the fixture serves; `id` stays stable per fixture scenario. */
+export const localDiscussion = (title: string, body = '', project = 'p-fixture', id = 'd-fixture'): LocalDiscussion =>
+  ({ id, title, body, author: 'local', project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+/** A human message on a discussion's own thread. */
+export const localDiscussionComment = (discussion: LocalDiscussion, text: string, at: string): TriggerRow => ({
+  ...localTrigger(discussion), id: `local-discussion-comment-${at}`, at, text, preview: text })
+const localDiscussionThread = (discussion: LocalDiscussion, extra: TriggerRow[] = []): ThreadPageView => ({
+  key: `local:${discussion.id}`, source: 'local', title: discussion.title, stage: 'unsubscribed', latest: undefined,
+  lastAt: discussion.updatedAt, createdAt: discussion.createdAt, subscriptions: 0, tickets: [], evaluating: undefined,
+  pending: 0, pollError: undefined, url: undefined, facts: {}, context: [], correlated: [], decisions: [],
+  timeline: [{ ...localTrigger(discussion), text: discussion.body || discussion.title, preview: discussion.body || discussion.title }, ...extra],
+  earlier: null })
 export const threadSummary = (fields: Partial<ThreadRow> = {}): ThreadRow => ({
   key: 'feishu:oc_1:om_root', source: 'feishu', title: '这个文案好奇怪', stage: 'subscribed', latest: undefined, lastAt: '2026-09-23T00:00:00Z',
   createdAt: '2026-09-22T00:00:00Z', subscriptions: 1, tickets: [{ id: 't1', title: '修复回归', state: 'open' }], evaluating: undefined,
@@ -137,6 +149,10 @@ export interface PanelServer {
   localReplies: Record<string, Receipt[]>
   /** Requirements whose confirmed alignment already dispatched tickets, so their execution mode is read-only. */
   dispatchedIssues: Set<string>
+  /** Stored discussion records, kept apart from `localIssues` as the host keeps its own record family. */
+  localDiscussions: LocalDiscussion[]
+  /** Human messages posted into a discussion's thread, oldest first, keyed by discussion id. */
+  localDiscussionComments: Record<string, TriggerRow[]>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
 worktreeRoot?: string; prepare?: string; blockedCommands?: string[]; cli?: string; bot?: string; missingChain?: string;
     createdAt: string; updatedAt: string }[]
@@ -354,7 +370,7 @@ function initial(): PanelServer {
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
     tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
-    issueSlicesFinished: new Set(), localComments: {}, localReplies: {}, dispatchedIssues: new Set(),
+    issueSlicesFinished: new Set(), localComments: {}, localReplies: {}, dispatchedIssues: new Set(), localDiscussions: [], localDiscussionComments: {},
     localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
@@ -518,6 +534,41 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     }
     server.localProjects = server.localProjects.map(item => item.id === params.id ? next : item)
     return { project: next }
+  } },
+  // Discussions are their own records and Threads; a requirement is created from one only by an explicit later action.
+  'GET local/discussions': { query: ['project'], answer: ({ query }) =>
+    ({ discussions: server.localDiscussions.filter(discussion => !query.project || discussion.project === query.project) }) },
+  'POST local/discussions': { body: true, answer: ({ body }) => {
+    const text = String(body.body ?? '').trim()
+    const title = text.split('\n').find((line: string) => line.trim())?.trim().replace(/\s+/g, ' ').slice(0, 200) ?? ''
+    if (!title) return refuse(400, 'A discussion needs a description', { code: 'discussionEmpty' })
+    const discussion = { ...localDiscussion(title, text, body.project), id: `d-fixture-${server.localDiscussions.length + 1}` }
+    server.localDiscussions = [discussion, ...server.localDiscussions]
+    return { discussion }
+  } },
+  'GET local/discussions/:id': { answer: ({ params }) => {
+    const discussion = server.localDiscussions.find(item => item.id === params.id)
+    if (!discussion) return refuse(404, 'Local discussion not found')
+    return { discussion, project: server.localProjects.find(project => project.id === discussion.project) ?? null,
+      thread: server.threadPages(`local:${params.id}`, {}) ?? localDiscussionThread(discussion, server.localDiscussionComments[params.id] ?? []),
+      replies: [] }
+  } },
+  'POST local/discussions/:id/comments': { body: true, answer: ({ params, body }) => {
+    const discussion = server.localDiscussions.find(item => item.id === params.id)
+    if (!discussion) return refuse(404, 'Local discussion not found')
+    const posted = server.localDiscussionComments[params.id] ?? []
+    const at = new Date(Date.UTC(2026, 8, 24, 0, 0, posted.length)).toISOString()
+    const next = { ...discussion, updatedAt: at }
+    server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
+    server.localDiscussionComments = { ...server.localDiscussionComments, [params.id]: [...posted, localDiscussionComment(next, String(body.text).trim(), at)] }
+    return { discussion: next }
+  } },
+  'POST local/discussions/:id/close': { answer: ({ params }) => {
+    const discussion = server.localDiscussions.find(item => item.id === params.id)
+    if (!discussion) return refuse(404, 'Local discussion not found')
+    const next = { ...discussion, state: 'closed' as const, updatedAt: '2026-09-24T00:00:00Z' }
+    server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
+    return { discussion: next }
   } },
   // Every route that returns a requirement answers with the view, never the stored record.
   'GET local/issues': { query: ['project'], answer: ({ query }) =>

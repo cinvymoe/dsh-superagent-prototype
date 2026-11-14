@@ -10,7 +10,7 @@ import type { SettingsView } from './views/settings.ts'
 import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
-import type { LocalImageInput, LocalIssueView, LocalProjectView, LocalQuestion, LocalSlice } from '../sources/local-format.ts'
+import type { LocalDiscussion, LocalImageInput, LocalIssueView, LocalProjectView, LocalQuestion, LocalSlice } from '../sources/local-format.ts'
 import type { ExecutionMode } from '../core/model.ts'
 import type { Receipt } from './store.ts'
 
@@ -45,6 +45,12 @@ export interface Api {
     blockedCommands?: string[]; cli?: string }; response: { project: LocalProjectView } }
   'PUT local/projects/:id': { body: { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string; prepare?: string;
     blockedCommands?: string[]; cli?: string }; response: { project: LocalProjectView } }
+  // Local discussions are their own records and Threads; a requirement is made from one only by an explicit action.
+  'GET local/discussions': { query?: { project?: string }; response: { discussions: LocalDiscussion[] } }
+  'POST local/discussions': { body: { body: string; project: string; author?: string }; response: { discussion: LocalDiscussion } }
+  'GET local/discussions/:id': { response: { discussion: LocalDiscussion; project: LocalProjectView | null; thread: ThreadDetailView; replies: Receipt[] } }
+  'POST local/discussions/:id/comments': { body: { text: string }; response: { discussion: LocalDiscussion } }
+  'POST local/discussions/:id/close': { response: { discussion: LocalDiscussion } }
   // Local requirement responses carry the HTTP view (`LocalIssueView`), whose `slicesFinished` is derived per read.
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }
   'POST local/issues': { body: { title?: string; body?: string; project: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }

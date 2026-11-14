@@ -227,6 +227,7 @@ const TEXT = {
   'userError.chainIntakeTaken': ['接收 Issue 的仓库 {repository} 已被链路 {chain} 使用。', USER_ERRORS.chainIntakeTaken[1]],
   'userError.projectChainInUse': ['链路 {chain} 正被项目 {project} 使用；请通过项目表单修改该项目的链路，而不是删除或改名。', USER_ERRORS.projectChainInUse[1]],
   'userError.issueEmpty': ['需求需要填写描述。', 'A requirement needs a description.'],
+  'userError.discussionEmpty': ['讨论需要填写正文。', 'A discussion needs a description.'],
   'userError.issueImageCount': ['一次需求最多附带 {max} 张图片。', 'A requirement accepts at most {max} images.'],
   'userError.issueImageName': ['图片缺少原始文件名。', 'A requirement image needs its original file name.'],
   'userError.issueImageType': ['图片 {name} 必须是 PNG、JPEG、WebP 或 GIF。', 'Image {name} must be a PNG, JPEG, WebP or GIF image.'],
