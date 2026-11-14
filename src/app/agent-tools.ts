@@ -179,20 +179,27 @@ export function pluginSuggestions(agents: AgentsConfig, registered: readonly Reg
     const tools = group.get(key)
     if (tools) tools.push(tool); else group.set(key, [tool])
   }
-  for (const tool of candidateTools(agents, registered)) {
+  const candidates = candidateTools(agents, registered)
+  const prefixes = new Map<string, number>()
+  const prefixesOf = (name: string) => {
+    const parts = name.split('_')
+    return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join('_'))
+  }
+  for (const tool of candidates) for (const prefix of prefixesOf(tool.name)) prefixes.set(prefix, (prefixes.get(prefix) ?? 0) + 1)
+  for (const tool of candidates) {
     const match = MCP_TOOL.exec(tool.name)
     if (match) { push(mcp, match[1]!, tool); continue }
-    const cut = tool.name.lastIndexOf('_')
-    if (cut > 0) { push(families, tool.name.slice(0, cut), tool); continue }
-    ungrouped.push(tool)
+    // The most specific prefix another tool shares, so `feature_exec_*` stays one family rather than splitting on a
+    // later segment; a tool with no shared prefix is offered on its own.
+    const shared = prefixesOf(tool.name).filter(prefix => (prefixes.get(prefix) ?? 0) > 1)
+    const family = shared.at(-1)
+    if (family) push(families, family, tool); else ungrouped.push(tool)
   }
   const suggestions: PluginSuggestion[] = [
     ...[...mcp.keys()].sort().map(name => ({ name, kind: 'mcp' as const, tools: [...mcp.get(name)!].sort(byName) })),
     ...[...families.keys()].filter(prefix => families.get(prefix)!.length > 1).sort()
       .map(name => ({ name, kind: 'family' as const, tools: [...families.get(name)!].sort(byName) })),
   ]
-  const grouped = new Set(suggestions.flatMap(suggestion => suggestion.tools.map(tool => tool.name)))
-  for (const tools of families.values()) for (const tool of tools) if (!grouped.has(tool.name)) ungrouped.push(tool)
   return { suggestions, ungroupedTools: ungrouped.sort(byName) }
 }
 /**
