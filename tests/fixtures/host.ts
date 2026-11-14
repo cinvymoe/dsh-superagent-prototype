@@ -165,13 +165,14 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
     ['git config -z --show-origin --get-all credential.https://github.com.helper']: `file:${workerGitConfig(directory)}\0${credentialHelper(AGENT)}\0`,
     [scoped]: `global\0credential.helper\n\0global\0credential.https://github.com.helper\n${credentialHelper(AGENT)}\0`,
   }
-  /** A prepare command (`sh -c`) waits for this while it is set. */
-  const hooks: { prepare?: Promise<void> } = {}
-  const subprocess = { spawn: vi.fn((spec: { argv: readonly string[]; env?: Record<string, string> }) => {
+  /** A prepare command (`sh -c`) waits for this while it is set; `fail` answers the stderr text that fails a command. */
+  const hooks: { prepare?: Promise<void>; fail?: (command: string, spec: { argv: readonly string[]; cwd?: string }) => string | undefined } = {}
+  const subprocess = { spawn: vi.fn((spec: { argv: readonly string[]; cwd?: string; env?: Record<string, string> }) => {
     const argv = [...spec.argv]
     while (argv[0] === 'env' || /^[A-Z_]+=/.test(argv[0] ?? '')) argv.shift()
     const reader = (text: string) => ({ readFrom: () => ({ text, nextOffset: text.length, lossy: false }) })
-    const exited = { exitCode: 0, signal: null }
+    const failure = argv[0] === 'sh' ? hooks.fail?.(argv.slice(2).join(' '), spec) : undefined
+    const exited = { exitCode: failure === undefined ? 0 : 1, signal: null }
     const done = argv[0] === 'sh' && hooks.prepare ? hooks.prepare.then(() => exited) : Promise.resolve(exited)
     const key = argv.join(' ')
     // Setup checks each chain's own git configuration, which the command names in GIT_CONFIG_GLOBAL; the file carries
@@ -180,7 +181,7 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
     const helpers: Record<string, string> = { [workerGitConfig(directory)]: AGENT, [workerGitConfig(directory, 'beta')]: PROJECT_BOT }
     const text = key === 'git config -z --show-origin --get-all credential.https://github.com.helper' && gitconfig
       ? `file:${gitconfig}\0${credentialHelper(helpers[gitconfig] ?? AGENT)}\0` : answers[key] ?? ''
-    return { done, collected: { stdout: reader(text), stderr: reader('') } }
+    return { done, collected: { stdout: reader(failure === undefined ? text : ''), stderr: reader(failure ?? '') } }
   }) }
   const agents = new Map<string, FakeAgent>()
   /** Each Session's next step, which takes the messages that wait for one. */

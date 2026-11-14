@@ -56,7 +56,7 @@ Worker subagents, including nested ones, use DeepSeek Harness's `standard` prese
 
 ### Preparing a Ticket directory
 
-Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` and the chosen root as its working directory. It has ten minutes to finish. The command creates the checkout; it does not choose the root. Without a prepare command, the worker starts in an empty directory.
+Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` and the chosen root as its working directory. It has ten minutes to finish. The command creates the checkout; it does not choose the root. A local project's own `prepare` command replaces the Execution setting for its Tickets. A Ticket whose project sets none, or which has no local project such as a GitHub or Feishu one, uses the Execution command. Without a prepare command, the worker starts in an empty directory.
 
 An explicitly configured root (a project's `worktreeRoot` or a non-empty `executor.directory`) is checked before anything is created: it must exist, be a directory and accept a write. A missing, non-directory or read-only root fails the Ticket with the absolute path and the reason; the launch never creates that root, never creates the Ticket directory under the default root, and never falls back. Fix the root, then retry the Ticket or write on its Thread: preparation runs again. The default `<stateDir>/work` is different: it is still created when missing.
 

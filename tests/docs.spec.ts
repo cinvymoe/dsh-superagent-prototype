@@ -105,12 +105,20 @@ describe('worktree root documentation', () => {
     expect(architecture).toContain('`Execution` with its optional explicit `worktreeRoot`')
     expect(architecture).toContain('the worktree-root sections state the root priority, the prepare working directory and the no-fallback failure')
   })
+  it('states that a local project\'s own prepare command replaces the Execution command for its Tickets', () => {
+    const execution = prose('docs/003-execution.md'), panel = prose('docs/005-panel.md'), deployment = prose('docs/006-deployment.md'),
+      architecture = prose('docs/007-architecture.md')
+    expect(execution).toContain('A local project\'s own `prepare` command replaces the Execution setting for its Tickets')
+    expect(panel).toContain('A local project\'s own `prepare` command replaces it for that project\'s Tickets')
+    expect(deployment).toContain('A local project\'s optional `prepare` command replaces this command for its own Tickets')
+    expect(architecture).toContain('The prepare command is the Ticket\'s local project\'s own `prepare` command when it sets one, and otherwise `executor.prepare`')
+  })
 })
 
 describe('project edit documentation', () => {
   it('states that the same form edits the current project, pre-filled, and that Cancel or Back writes nothing', () => {
     const panel = prose('docs/005-panel.md')
-    expect(panel).toContain('**Edit project** on the New requirement page head opens the same form for the current project with its four fields already filled in')
+    expect(panel).toContain('**Edit project** on the New requirement page head opens the same form for the current project with its fields already filled in')
     expect(panel).toContain('Cancel or Back on either page writes nothing')
   })
   it('states that saving reloads and returns, an edit changes only that project, and a refusal keeps the page', () => {
