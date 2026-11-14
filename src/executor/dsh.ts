@@ -99,8 +99,10 @@ export interface ExecutorHost {
   paused(): boolean
   /** Execution environment variables for `ticket`, passed to its workspace prepare command. */
   environment(ticket: Ticket): Variable[]
-  /** Explicit environment for worker commands and worker shells. */
+  /** Explicit environment for worker commands and worker shells of the deployment's primary chain. */
   workerEnvironment(): Record<string, string>
+  /** Explicit environment for worker commands and worker shells of `chain`, or of the primary chain when it is unknown. */
+  environmentFor?(chain?: string): Record<string, string>
   /** The deployment of one configured chain, or the default deployment when the chain is absent. */
   deploymentFor?(chain?: string): Deployment
   /** The deployment for one ticket, including a local project's repository override. */
@@ -300,7 +302,9 @@ export class DshExecutor implements Executor {
     if (explicitRoot) await verifyWorktreeRoot(explicitRoot)
     else await mkdir(root, { recursive: true })
     const command = this.host.store.settings().executor.prepare.trim()
-    const env = { ...this.host.workerEnvironment(), ...Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value])) }
+    // The prepare command and the worker shell that follows it read the same chain's shims and credential helper.
+    const chain = this.host.deploymentForTicket?.(ticket)?.chain ?? ticket.execution?.chain
+    const env = { ...(this.host.environmentFor?.(chain) ?? this.host.workerEnvironment()), ...Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value])) }
     // Enforce a timeout so a hung prepare command (such as on a credential prompt) fails the ticket instead of holding a worker slot indefinitely.
     const signal = AbortSignal.any([this.host.lifetime, AbortSignal.timeout(PREPARE_TIMEOUT_MS)])
     if (command) await runAsWorker(this.host.context.subprocess, ['sh', '-c', command], root, signal, env)

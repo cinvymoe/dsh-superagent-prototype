@@ -162,13 +162,18 @@ export async function startRuntime(seed?: (store: Store) => void) {
   }
   /** A prepare command (`sh -c`) waits for this while it is set. */
   const hooks: { prepare?: Promise<void> } = {}
-  const subprocess = { spawn: vi.fn((spec: { argv: readonly string[] }) => {
+  const subprocess = { spawn: vi.fn((spec: { argv: readonly string[]; env?: Record<string, string> }) => {
     const argv = [...spec.argv]
     while (argv[0] === 'env' || /^[A-Z_]+=/.test(argv[0] ?? '')) argv.shift()
     const reader = (text: string) => ({ readFrom: () => ({ text, nextOffset: text.length, lossy: false }) })
     const exited = { exitCode: 0, signal: null }
     const done = argv[0] === 'sh' && hooks.prepare ? hooks.prepare.then(() => exited) : Promise.resolve(exited)
-    return { done, collected: { stdout: reader(answers[argv.join(' ')] ?? ''), stderr: reader('') } }
+    const key = argv.join(' ')
+    // Setup checks each chain's own git configuration, which the command names in GIT_CONFIG_GLOBAL.
+    const gitconfig = spec.env?.GIT_CONFIG_GLOBAL
+    const text = key === 'git config -z --show-origin --get-all credential.https://github.com.helper' && gitconfig
+      ? `file:${gitconfig}\0${credentialHelper(AGENT)}\0` : answers[key] ?? ''
+    return { done, collected: { stdout: reader(text), stderr: reader('') } }
   }) }
   const agents = new Map<string, FakeAgent>()
   /** Each Session's next step, which takes the messages that wait for one. */

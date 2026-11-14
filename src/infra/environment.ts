@@ -16,8 +16,20 @@ const MARKER = '# Written by dsh-superagent on every start; edits are lost.'
 const LEGACY_MARKERS = ['dsh-tag', 'dsh-go', 'dsh-freelancer'].map(name => `# Written by ${name} on every start; edits are lost.`)
 /** Commands workers need, which `blockedCommands` cannot block: the shims and git. */
 export const WORKER_COMMANDS: readonly string[] = ['gh', 'git', 'lark-cli']
-export const workerBin = (stateDir: string): string => join(stateDir, 'worker-bin')
-export const workerGitConfig = (stateDir: string): string => join(stateDir, 'worker-gitconfig')
+/** A chain's command shims and isolated git configuration. */
+export interface WorkerPaths { bin: string; gitconfig: string }
+/**
+ * The worker environment files of one chain. The deployment's primary chain keeps the installation-wide paths; every other
+ * chain gets its own `worker-bin-<chain>` and `worker-gitconfig-<chain>` beside them, so two chains never share a `gh` shim
+ * or a github.com credential helper.
+ * @param chain - chain id, or undefined for the primary chain.
+ */
+export function workerPaths(stateDir: string, chain?: string): WorkerPaths {
+  const suffix = chain ? `-${chain}` : ''
+  return { bin: join(stateDir, `worker-bin${suffix}`), gitconfig: join(stateDir, `worker-gitconfig${suffix}`) }
+}
+export const workerBin = (stateDir: string, chain?: string): string => workerPaths(stateDir, chain).bin
+export const workerGitConfig = (stateDir: string, chain?: string): string => workerPaths(stateDir, chain).gitconfig
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 const gitQuote = (value: string): string => `"${value.replace(/[\\"]/g, char => `\\${char}`)}"`
 export const credentialHelper = (cli: string): string => `!${shellQuote(cli)} auth git-credential`
@@ -31,10 +43,11 @@ export function withoutDirectory(path: string, dir: string): string {
 }
 
 /** The explicit environment of a worker command: worker shims first, the isolated git configuration, and no interactive git prompts. */
-export function workerEnvironment(stateDir: string, path: string): Record<string, string> {
+export function workerEnvironment(stateDir: string, path: string, chain?: string): Record<string, string> {
+  const paths = workerPaths(stateDir, chain)
   return {
-    PATH: [workerBin(stateDir), path].join(delimiter),
-    GIT_CONFIG_GLOBAL: workerGitConfig(stateDir),
+    PATH: [paths.bin, path].join(delimiter),
+    GIT_CONFIG_GLOBAL: paths.gitconfig,
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_ASKPASS: '',
     GIT_TERMINAL_PROMPT: '0',
@@ -83,13 +96,35 @@ async function own(file: string, text: string, mode = 0o644): Promise<void> {
   await rename(temporary, file)
 }
 
+/** One chain's worker accounts: its GitHub CLI and login, and the Feishu bot every chain shares. */
+export type WorkerTarget = Pick<Deployment, 'stateDir' | 'github'> & { chain?: string }
+/** A deployment's worker accounts, with the configured chains when the Source carries more than the primary one. */
+export type WorkerDeployment = WorkerTarget & { feishu?: Deployment['feishu']; chains?: Record<string, WorkerTarget> }
 /**
- * Atomically writes worker CLI shims and the isolated git configuration file into the state directory, refusing to overwrite foreign files.
+ * The worker environments to write or check, keyed by the chain id that names their files: `undefined` for the deployment's
+ * primary chain, which keeps the installation-wide paths, then every other configured chain.
+ */
+export function workerTargets(deployment: WorkerDeployment): [string | undefined, WorkerTarget][] {
+  const chains = deployment.chains ? Object.values(deployment.chains) : []
+  if (!chains.length) return [[undefined, deployment]]
+  const primary = deployment.chain ?? chains[0]?.chain
+  return chains.map(target => [target.chain === undefined || target.chain === primary ? undefined : target.chain, target])
+}
+
+/**
+ * Atomically writes the worker CLI shims and the isolated git configuration file of every chain into the state directory,
+ * refusing to overwrite foreign files.
  * Each shim strips the shim directory from PATH before exec so wrapper scripts resolving `gh` or `lark-cli` by name reach the real binary.
  */
-export async function writeEnvironment(deployment: Pick<Deployment, 'stateDir' | 'repository' | 'github' | 'feishu'>, blockedCommands: readonly string[]): Promise<void> {
-  const { stateDir, repository, github, feishu } = deployment
-  const dir = workerBin(stateDir)
+export async function writeEnvironment(deployment: WorkerDeployment, blockedCommands: readonly string[]): Promise<void> {
+  for (const [chain, target] of workerTargets(deployment)) await writeChain(deployment.stateDir, chain, target, deployment.feishu, blockedCommands)
+}
+
+/** Writes one chain's shims and git configuration, and removes the shims of commands it no longer blocks. */
+async function writeChain(stateDir: string, chain: string | undefined, target: WorkerTarget, feishu: Deployment['feishu'],
+  blockedCommands: readonly string[]): Promise<void> {
+  const { github } = target
+  const { bin: dir, gitconfig } = workerPaths(stateDir, chain)
   await mkdir(dir, { recursive: true })
   const before = await readdir(dir)
   for (const name of before) { const file = join(dir, name); if (!await written(file)) throw new SetupError('foreignFile', { file }) }
@@ -114,7 +149,7 @@ export async function writeEnvironment(deployment: Pick<Deployment, 'stateDir' |
     await shim(name, fail(`${name} is blocked in this installation; use gh, which acts as ${github.login}.`))
   }
   for (const name of before) if (!kept.has(name)) await unlink(join(dir, name))
-  await own(workerGitConfig(stateDir), [
+  await own(gitconfig, [
     MARKER,
     // Make git refuse to commit without an explicit identity set by the worker instead of guessing from the operator's OS user.
     '[user]', '\tuseConfigOnly = true',
@@ -136,14 +171,16 @@ export async function runAsWorker(subprocess: SubprocessRuntime, argv: string[],
   throw new CliError(read(handle.collected.stderr).trim() || `${argv.join(' ')} ${ended}`, undefined, exitCode ?? undefined)
 }
 
-/** Verifies that worker git invocations resolve the deployment's GitHub credential helper. */
-export async function verifyEnvironment(deployment: Pick<Deployment, 'github' | 'stateDir'>, subprocess: SubprocessRuntime, signal: AbortSignal,
-  env?: Record<string, string>): Promise<void> {
-  const { github, stateDir } = deployment
-  // `-z` separates fields with NUL and never quotes paths.
-  const helpers = (await runAsWorker(subprocess, ['git', 'config', '-z', '--show-origin', '--get-all', 'credential.https://github.com.helper'],
-    stateDir, AbortSignal.any([signal, AbortSignal.timeout(60_000)]), env).catch(() => '')).split('\0')
-  if (helpers.join('\0') !== [`file:${workerGitConfig(stateDir)}`, credentialHelper(github.cli), ''].join('\0')) throw new SetupError('gitTooOld')
+/** Verifies that every chain's worker git resolves that chain's GitHub credential helper. */
+export async function verifyEnvironment(deployment: WorkerDeployment, subprocess: SubprocessRuntime, signal: AbortSignal,
+  environment: (chain?: string) => Record<string, string>): Promise<void> {
+  for (const [chain, target] of workerTargets(deployment)) {
+    const { gitconfig } = workerPaths(deployment.stateDir, chain)
+    // `-z` separates fields with NUL and never quotes paths.
+    const helpers = (await runAsWorker(subprocess, ['git', 'config', '-z', '--show-origin', '--get-all', 'credential.https://github.com.helper'],
+      deployment.stateDir, AbortSignal.any([signal, AbortSignal.timeout(60_000)]), environment(chain)).catch(() => '')).split('\0')
+    if (helpers.join('\0') !== [`file:${gitconfig}`, credentialHelper(target.github.cli), ''].join('\0')) throw new SetupError('gitTooOld')
+  }
 }
 
 /**

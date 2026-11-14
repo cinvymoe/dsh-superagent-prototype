@@ -46,6 +46,14 @@ export class Setup {
   get commandEnvironment(): Record<string, string | undefined> { return { ...this.variables, PATH: this.path } }
   /** Explicit environment for worker commands and worker shells. */
   get workerEnvironment(): Record<string, string> { return workerEnvironment(this.host.machine.stateDir, this.path) }
+  /** Explicit environment for worker commands and worker shells of a chain, or of the deployment's primary chain. */
+  environmentFor(chain?: string): Record<string, string> { return this.environmentOf(this.resolved, chain) }
+  /** The worker environment of `chain` under `deployment`, which may be the one being resolved. */
+  private environmentOf(deployment: Deployment | undefined, chain?: string): Record<string, string> {
+    // A chain that startup has not resolved yet keeps the primary chain's environment until the restart that resolves it.
+    const other = chain !== undefined && deployment !== undefined && chain !== deployment.chain && deployment.chains?.[chain] ? chain : undefined
+    return workerEnvironment(this.host.machine.stateDir, this.path, other)
+  }
   get deployment(): Deployment {
     if (!this.resolved) throw new Error(`dsh-superagent is waiting for setup: ${this.problem?.detail ?? 'setup has not run'}`)
     return this.resolved
@@ -100,7 +108,7 @@ export class Setup {
       throw new SetupError('environmentFailed', { output: error instanceof Error ? error.message : String(error) })
     }
     await writeEnvironment(resolved, settings.executor.blockedCommands).catch(machineProblem)
-    await verifyEnvironment(resolved, context.subprocess, lifetime, this.workerEnvironment).catch(machineProblem)
+    await verifyEnvironment(resolved, context.subprocess, lifetime, chain => this.environmentOf(resolved, chain)).catch(machineProblem)
     return resolved
   }
 }
