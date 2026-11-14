@@ -106,7 +106,7 @@ function MandateDetails({ ticket, actor }: { ticket: TicketPageView; actor: stri
 }
 
 export function TicketPage({ id }: { id: string }) {
-  const { t, call } = usePanel()
+  const { t, call, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET tickets/:id', { id }), [id])
   const after = async (request: Promise<unknown>) => { await request; await reload() }
   if (!data) return <><PageHead
@@ -125,6 +125,10 @@ export function TicketPage({ id }: { id: string }) {
     return reason ? t('endedAt', { time, outcome, reason }) : t('endedAtShort', { time, outcome })
   })()
   const channel = data.channels[0]
+  // A local Channel has no URL of its own: answering it means opening the requirement that owns the thread.
+  const localIssue = channel?.source === 'local'
+    ? data.threads.map(thread => thread.key).find(key => key.startsWith('local:'))?.slice('local:'.length)
+    : undefined
   return <>
     <PageHead title={data.title}>
       {opening?.url && <ActionLink href={opening.url}>{t('openThread', { source: valueLabel(t, 'source', opening.source) })}</ActionLink>}
@@ -144,7 +148,12 @@ export function TicketPage({ id }: { id: string }) {
     {data.attention && <div className="dt-banner"><span className="dt-banner-label">{t('attentionPrefix')}</span><MarkdownLite
       text={data.attention.question} />
       {channel && <div className="dt-banner-actions">
-        <ActionLink href={channel.url} icon="message">{t('answerIn', { source: valueLabel(t, 'source', channel.source) })}</ActionLink>
+        {localIssue
+          ? <button type="button" className="dt-btn dt-btn-outline dt-btn-sm" onClick={() => navigate({ page: 'requirements',
+            id: localIssue })}><span className="dt-btn-icon"><Icon name="message" size={14} /></span>{t('answerIn',
+            { source: valueLabel(t, 'source', channel.source) })}</button>
+          : <ActionLink href={channel.url} icon="message">{t('answerIn', { source: valueLabel(t, 'source', channel.source) })}
+            </ActionLink>}
       </div>}</div>}
     {/* Ordinary progress stays in the Session/Channels; only a report that halted work (blocked/failed) is shown here. */}
     {data.actions.retry && data.summary && <p className={`dt-banner${failed ? ' dt-danger' : ''}${failedText ? ' dt-mono' : ''}`}>
