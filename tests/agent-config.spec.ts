@@ -93,7 +93,7 @@ it('resolves each role\'s model through its own override, then the role default,
   expect(roleModel(value({ aligner: { model: alignerModel } }), 'aligner')).toEqual(alignerModel)
 })
 
-it('applies an aligner\'s own plugin switches to its Session while the executor keeps its set', async () => {
+it('applies an aligner\'s own plugin switches to its alignment and discussion Sessions while the executor keeps its set', async () => {
   h = await startRuntime()
   const project = h.runtime.local.createProject({ name: 'Demo', repository: 'deepseek-ai/dsh-superagent-prototype' })
   const issue = h.runtime.local.create({ title: 'Align the local board', body: 'Requirements arrive in the panel.', project: project.id })
@@ -112,6 +112,19 @@ it('applies an aligner\'s own plugin switches to its Session while the executor 
   const alignAllow = h.restrictions.get(`worker-${align.ticket.ticket_id}`)!.at(-1)!
   expect(alignAllow).not.toContain('read_image')
   expect(alignAllow).toContain('bash')
+  // A discussion Session reuses the aligner's model and plugins, and has no alignment tool.
+  const discussion = h.runtime.discussions.create({ body: 'Discuss the split', project: project.id })
+  await h.runtime.idle()
+  llm.resolveCallConfig.mockClear()
+  const discuss = await h.route({ kind: 'accept', trigger_id: h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 1)[0]!.id,
+    title: 'Discuss the split', worktree_name: 'discuss-split', acknowledgement: '收到，先讨论。' }) as { ticket: { ticket_id: string } }
+  await h.runtime.idle()
+  const discussSession = `worker-${discuss.ticket.ticket_id}`
+  expect(llm.resolveCallConfig).toHaveBeenCalledWith(alignerModel)
+  const discussAllow = h.restrictions.get(discussSession)!.at(-1)!
+  expect(discussAllow).not.toContain('read_image')
+  expect(discussAllow).toContain('bash')
+  expect(h.tools.get(discussSession)!.has('orchestrator_align')).toBe(false)
   const work = await h.acceptedTicket(feishu('2', '@bot 修一下回归'))
   expect(h.restrictions.get(work.sessionId)!.at(-1)).toContain('read_image')
 })

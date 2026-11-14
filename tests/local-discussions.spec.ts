@@ -84,6 +84,55 @@ describe('the discussion records', () => {
   })
 })
 
+describe('the discussion sessions', () => {
+  let h: Host
+  let project: { id: string }
+  beforeEach(async () => {
+    h = await startRuntime()
+    project = h.runtime.local.createProject({ name: 'Demo', repository: 'deepseek-ai/dsh-superagent-prototype' })
+  })
+  afterEach(async () => { await h.stop() })
+
+  /** The id of the first human message on a local record's thread. */
+  const firstTrigger = (recordId: string) => h.runtime.store.read.threadTriggers(`local:${recordId}`, 1)[0]!.id
+  /** Accept a local discussion's first message and return its discuss Ticket. */
+  const acceptDiscussion = async (discussionId: string) => {
+    await h.runtime.idle()
+    const result = await h.route({ kind: 'accept', trigger_id: firstTrigger(discussionId), title: 'Discuss the split',
+      worktree_name: 'discuss-split', acknowledgement: '收到，先讨论。' }) as { ticket: { ticket_id: string } }
+    await h.runtime.idle()
+    return h.runtime.store.tickets.get(result.ticket.ticket_id)!
+  }
+
+  it('accepts a discussion message as a discuss Ticket with the discussion prompt and no align tool', async () => {
+    const discussion = h.runtime.discussions.create({ body: 'How should discussion and issue creation split?', project: project.id })
+    const before = h.runtime.store.tickets.list().length
+    const ticket = await acceptDiscussion(discussion.id)
+    expect(ticket.mode).toBe('discuss')
+    // The message made one Ticket for the discussion, never a plan slice.
+    expect(h.runtime.store.tickets.list()).toHaveLength(before + 1)
+    expect(h.runtime.store.tickets.list().filter(item => item.plan)).toEqual([])
+    const sessionId = `worker-${ticket.id}`
+    // The Session answers on the discussion Thread: it reads the discussion guide and has no way to publish an alignment.
+    expect(h.tools.get(sessionId)!.has('orchestrator_align')).toBe(false)
+    expect(h.tools.get(sessionId)!.has('orchestrator_report')).toBe(true)
+    const prompt = h.sections.get(sessionId)!.text({})
+    expect(prompt).toContain('## discussion')
+    expect(prompt).not.toContain('## requirement alignment')
+  })
+
+  it('keeps a further discussion message on the same Ticket and dispatches no slice Tickets', async () => {
+    const discussion = h.runtime.discussions.create({ body: 'First thought', project: project.id })
+    const ticket = await acceptDiscussion(discussion.id)
+    expect(h.runtime.discussions.comment(discussion.id, ' One more thought ')).toMatchObject({ id: discussion.id })
+    await h.runtime.idle()
+    // The comment reached the live discuss Ticket instead of starting another Ticket or a slice of its own.
+    expect(h.runtime.store.tickets.list()).toHaveLength(1)
+    expect(h.runtime.store.tickets.list().filter(item => item.plan)).toEqual([])
+    expect(h.runtime.store.tickets.get(ticket.id)!.inputs.some(input => input.kind === 'trigger')).toBe(true)
+  })
+})
+
 describe('the discussion HTTP API', () => {
   let h: Host
   let project: { id: string }

@@ -42,7 +42,7 @@ export type AssessmentOutcome =
   | { kind: 'unavailable'; reason: string | Reason; audit?: Record<string, unknown> }
   /** An accept: `rules` the assessment matched, `name` the ticket's requested short name, and `note` a routing note for its worker. */
   | { kind: 'accept'; title: string; scope: string; reason: string | Reason; acknowledgement?: string; rules?: string[]; audit?: Record<string, unknown>;
-    name?: string; note?: string; mode?: 'work' | 'align'; dependsOn?: string[];
+    name?: string; note?: string; mode?: 'work' | 'discuss' | 'align'; dependsOn?: string[];
     plan?: { issueId: string; sliceId: string; acceptance?: string[]; execution?: ExecutionStrategy } }
   | { kind: 'stop'; ticketId: string; reason: string | Reason; audit?: Record<string, unknown> }
 

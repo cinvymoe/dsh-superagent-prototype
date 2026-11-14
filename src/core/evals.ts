@@ -22,6 +22,11 @@ export type Outcome = AssessmentOutcome & { evalId?: string }
 interface Finished { kind: DecisionKind; reason: Reason[]; audit?: Record<string, unknown>; ticketId?: string; mandate?: Mandate }
 /** An outcome's reason: a code it carries, else the words its assessor or person wrote. */
 const reasonOf = (reason: string | Reason): Reason[] => [typeof reason === 'string' ? said(reason) : reason]
+/**
+ * The mode a local Eval's accept gives its Ticket, by the record kind its Thread belongs to: a discussion's Thread
+ * (`local:d-…`) answers only, while a requirement's (`local:q-…`) aligns before the panel dispatches its slices.
+ */
+const localTicketMode = (thread: Thread): 'align' | 'discuss' => thread.ref.id.startsWith('d-') ? 'discuss' : 'align'
 const stronger = (a: Strength, b: Strength): Strength => a === 'explicit' || b === 'explicit' ? 'explicit' : 'inferred'
 /** How many times in a row an expired Eval queues its Triggers again before it is recorded unavailable. */
 const REQUEUES = 2
@@ -318,9 +323,9 @@ export class Evals extends EnginePart {
     const mandate: Mandate = { strength, policyVersion, basis, actor, scope: outcome.scope }
     const ticketId = key('ticket', evaluation.id)
     const audit = outcome.audit ? { audit: outcome.audit } : {}
-    // A local requirement always goes through its alignment stage first; the panel's confirmation dispatches its slices.
+    // A local discussion only answers on its Thread; a local requirement aligns before the panel dispatches its slices.
     const accepted: Extract<AssessmentOutcome, { kind: 'accept' }> = evaluation.actor.source === 'local'
-      ? { ...outcome, mode: 'align' } : outcome
+      ? { ...outcome, mode: localTicketMode(thread) } : outcome
     const decision = this.finish(thread, evaluation, { kind: 'accept', reason: reasonOf(outcome.reason), ...audit, mandate, ticketId })
     this.tickets.create(ticketId, decision.id, mandate, evaluation, accepted, at)
     return decision

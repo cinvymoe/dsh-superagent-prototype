@@ -134,6 +134,18 @@ describe('eval', () => {
     expect(() => h.decide(first, { kind: 'ignore', reason: 'chatter' })).toThrow('has finished or a later eval replaced it')
     expect(h.decide(second, { kind: 'ignore', reason: 'chatter' })).toMatchObject({ kind: 'ignore', evalId: second.evalId })
   })
+  it('gives a local discussion Thread a discuss Ticket and a local requirement Thread an align one, with no plan', () => {
+    const local = { source: 'local', id: 'local' }
+    const gate = { gate: () => ({ admissible: true as const, strength: 'explicit' as const, basis: { via: 'listed' as const } }) }
+    for (const [thread, mode] of [['d-00000001', 'discuss'], ['q-00000001', 'align']] as const) {
+      const h = harness(gate)
+      h.engine.receive(trigger('1', { source: 'local', actor: local, threads: [{ source: 'local', id: thread }] })); h.pump()
+      const decision = h.decide(h.requests.at(-1)!, { kind: 'accept', title: 'x', scope: 'x', reason: 'x' })
+      h.settle()
+      expect(h.repo.tickets.get(decision.ticketId!)?.mode).toBe(mode)
+      expect(h.repo.tickets.list().filter(ticket => ticket.plan)).toEqual([])
+    }
+  })
   it('records an accept with its ticket, subscriptions and acknowledgement together, or none of them', async () => {
     const h = harness({}, { prepareTicket: () => { throw new Error('No directory for the ticket') } })
     h.engine.receive(trigger('1')); h.pump()
