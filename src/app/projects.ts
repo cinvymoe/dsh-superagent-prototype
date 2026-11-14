@@ -19,8 +19,10 @@ export interface ProjectsHost {
 }
 
 /** The editable project fields; `cli` is not a project field but the GitHub CLI written to the project's chain row. */
-export type ProjectInput = { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string; cli?: string }
-export type ProjectUpdate = { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string; cli?: string }
+export type ProjectInput = { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string; prepare?: string;
+  blockedCommands?: string[]; cli?: string }
+export type ProjectUpdate = { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string; prepare?: string;
+  blockedCommands?: string[]; cli?: string }
 
 /** A project whose own GitHub chain the stored Source configuration no longer holds, as the health summary reads it. */
 export interface MissingProjectChain { id: string; name: string; chain: string }
@@ -179,7 +181,8 @@ export class Projects {
       const root = 'worktreeRoot' in input ? input.worktreeRoot : project.worktreeRoot
       const fields = local.validateProject({ name: input.name ?? project.name,
         ...(project.repository !== undefined ? { repository: project.repository } : {}),
-        ...(root !== undefined ? { worktreeRoot: root } : {}) }, project)
+        ...(root !== undefined ? { worktreeRoot: root } : {}),
+        ...this.prepare(input, project), ...this.blockedCommands(input, project) }, project)
       const updated = local.patchProject(project, fields)
       local.putProject(updated)
       return updated
@@ -190,6 +193,8 @@ export class Projects {
       codeRepository: input.codeRepository ?? project.codeRepository ?? project.repository,
       intakeRepository: input.intakeRepository ?? project.intakeRepository ?? project.codeRepository ?? project.repository,
       ...this.worktreeRoot(input, project),
+      ...this.prepare(input, project),
+      ...this.blockedCommands(input, project),
     }
     const fields = local.validateProject(merged, project)
     const target = project.chain ?? project.id
@@ -239,5 +244,17 @@ export class Projects {
   private worktreeRoot(input: { worktreeRoot?: string }, project?: LocalProject): { worktreeRoot?: string } {
     if ('worktreeRoot' in input) return { worktreeRoot: input.worktreeRoot }
     return project?.worktreeRoot !== undefined ? { worktreeRoot: project.worktreeRoot } : {}
+  }
+
+  /** The `prepare` field to merge: an omitted key keeps the stored command, and an empty value clears it. */
+  private prepare(input: { prepare?: string }, project?: LocalProject): { prepare?: string } {
+    if ('prepare' in input) return { prepare: input.prepare }
+    return project?.prepare !== undefined ? { prepare: project.prepare } : {}
+  }
+
+  /** The `blockedCommands` field to merge: an omitted key keeps the stored list, and an empty list clears it. */
+  private blockedCommands(input: { blockedCommands?: string[] }, project?: LocalProject): { blockedCommands?: string[] } {
+    if ('blockedCommands' in input) return { blockedCommands: input.blockedCommands }
+    return project?.blockedCommands?.length ? { blockedCommands: project.blockedCommands } : {}
   }
 }

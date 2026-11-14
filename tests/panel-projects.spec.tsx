@@ -22,10 +22,10 @@ const openCreate = async () => {
   await click(button)
 }
 const requirementTitles = () => all('.dt-cards .dt-row-title').map(title => title.textContent)
-const field = (label: string): HTMLInputElement => {
-  const match = all('input').find(input => input.getAttribute('placeholder') === label || input.getAttribute('aria-label') === label)
-  if (!match) throw new Error(`No input ${label}`)
-  return match as HTMLInputElement
+const field = (label: string): HTMLInputElement | HTMLTextAreaElement => {
+  const match = all('input, textarea').find(element => element.getAttribute('placeholder') === label || element.getAttribute('aria-label') === label)
+  if (!match) throw new Error(`No field ${label}`)
+  return match as HTMLInputElement | HTMLTextAreaElement
 }
 const description = (): HTMLTextAreaElement => {
   const match = all('textarea').find(area => area.getAttribute('aria-label') === zh['discuss.descriptionPlaceholder'])
@@ -139,7 +139,7 @@ it('creates a project on its own page, cancels without a request, and returns to
   await openCreate()
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.newProject'])
   expect(all('.dt-cards')).toHaveLength(0)
-  expect(all('#dt-page textarea')).toHaveLength(0)
+  expect(all('#dt-page textarea').map(area => area.getAttribute('aria-label'))).toEqual([zh['discuss.projectPrepare']])
   await click(zh.cancel)
   expect(posts()).toHaveLength(0)
   expect(text()).toContain(zh['discuss.noProjects'])
@@ -194,6 +194,65 @@ it('keeps a refused project on its form with the localized reason', async () => 
   expect(server.localProjects).toEqual([])
 })
 
+it('creates a project with its own execution environment and shows it in the project head', async () => {
+  at({ page: 'requirements' })
+  await mount()
+  await openCreate()
+  await type(field(zh['discuss.projectName']), 'Isolated')
+  await type(field(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(field(zh['discuss.projectCodeRepository']), 'acme/isolated')
+  await type(field(zh['discuss.projectWorktreeRoot']), '/srv/isolated')
+  // The form trims the prepare command and splits the blocked names on spaces or commas.
+  await type(field(zh['discuss.projectPrepare']), '  git -C /srv/isolated worktree add "$DSH_SUPERAGENT_DIR"  ')
+  await type(field(zh['discuss.projectBlockedCommands']), 'rm, curl  personal-gh')
+  await click(zh['discuss.createProject'])
+  expect(posts()[0]!.body).toEqual({ name: 'Isolated', intakeRepository: 'acme/intake', codeRepository: 'acme/isolated',
+    worktreeRoot: '/srv/isolated', prepare: 'git -C /srv/isolated worktree add "$DSH_SUPERAGENT_DIR"',
+    blockedCommands: ['rm', 'curl', 'personal-gh'] })
+  // The project head shows its own execution environment, so it is visible without opening the form.
+  expect(text()).toContain('/srv/isolated')
+  expect(text()).toContain(zh['discuss.projectPrepareSet'])
+  expect(text()).toContain(zh['discuss.projectBlockedCommandsValue'].replace('{commands}', 'rm curl personal-gh'))
+})
+
+it('omits a blank prepare command and an empty blocked list from a new project payload', async () => {
+  at({ page: 'requirements' })
+  await mount()
+  await openCreate()
+  await type(field(zh['discuss.projectName']), 'Spaced env')
+  await type(field(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(field(zh['discuss.projectCodeRepository']), 'acme/spaced-env')
+  await type(field(zh['discuss.projectPrepare']), '   ')
+  await type(field(zh['discuss.projectBlockedCommands']), '  ,  ')
+  await click(zh['discuss.createProject'])
+  expect(posts()[0]!.body).toEqual({ name: 'Spaced env', intakeRepository: 'acme/intake', codeRepository: 'acme/spaced-env' })
+  expect(posts()[0]!.body).not.toHaveProperty('prepare')
+  expect(posts()[0]!.body).not.toHaveProperty('blockedCommands')
+})
+
+it('keeps the project form and its values when the host refuses a blocked command', async () => {
+  at({ page: 'requirements' })
+  await mount()
+  await openCreate()
+  await type(field(zh['discuss.projectName']), 'Reserved')
+  await type(field(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(field(zh['discuss.projectCodeRepository']), 'acme/reserved')
+  // A command every worker needs, then a name that is not a bare command name, are both refused by the host.
+  await type(field(zh['discuss.projectBlockedCommands']), 'gh')
+  await click(zh['discuss.createProject'])
+  expect(document.querySelector('.dt-toast')?.textContent)
+    .toBe(zh['userError.projectBlockedWorkerCommand'].replace('{name}', 'gh'))
+  expect(server.localProjects).toEqual([])
+  await type(field(zh['discuss.projectBlockedCommands']), 'bad/name')
+  await click(zh['discuss.createProject'])
+  expect(document.querySelector('.dt-toast')?.textContent)
+    .toBe(zh['userError.projectBlockedCommand'].replace('{name}', 'bad/name'))
+  // The creation page and its typed values stay, so one field can be corrected instead of starting over.
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.newProject'])
+  expect(field(zh['discuss.projectBlockedCommands']).value).toBe('bad/name')
+  expect(server.localProjects).toEqual([])
+})
+
 const putRequests = () => server.requests.filter(request => request.method === 'PUT' && request.path.startsWith('local/projects/'))
 /** The project form's inputs, found by their labels; editing pre-fills them from the stored project. */
 const editButton = () => {
@@ -202,7 +261,8 @@ const editButton = () => {
   return button
 }
 const values = () => [zh['discuss.projectName'], zh['discuss.projectIntakeRepository'], zh['discuss.projectCodeRepository'],
-  zh['discuss.projectWorktreeRoot'], zh['discuss.projectBot']].map(label => field(label).value)
+  zh['discuss.projectWorktreeRoot'], zh['discuss.projectPrepare'], zh['discuss.projectBlockedCommands'],
+  zh['discuss.projectBot']].map(label => field(label).value)
 
 it('edits one project from the New requirement page head and leaves the other project\'s repositories alone', async () => {
   server.localProjects = [WIDGETS, OTHER]
@@ -215,8 +275,8 @@ it('edits one project from the New requirement page head and leaves the other pr
   await click(editButton())
   // The edit page is its own route with the current project's values already filled in.
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
-  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', ''])
-  expect(all('textarea')).toHaveLength(0)
+  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', '', '', ''])
+  expect(all('textarea').map(area => area.getAttribute('aria-label'))).toEqual([zh['discuss.projectPrepare']])
   await type(field(zh['discuss.projectName']), 'Widgets renamed')
   await type(field(zh['discuss.projectCodeRepository']), 'acme/gadgets')
   await click(zh['discuss.saveProject'])
@@ -237,7 +297,7 @@ it('edits one project from the New requirement page head and leaves the other pr
     .toMatchObject({ name: 'Other', intakeRepository: 'acme/intake', codeRepository: 'acme/other' })
   // Editing the other project later writes only that project.
   await click(editButton())
-  expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', '', ''])
+  expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', '', '', '', ''])
   await type(field(zh['discuss.projectName']), 'Other renamed')
   await click(zh['discuss.saveProject'])
   expect(putRequests()).toHaveLength(2)
@@ -246,6 +306,24 @@ it('edits one project from the New requirement page head and leaves the other pr
   expect(server.localProjects.find(item => item.id === 'p-widgets'))
     .toMatchObject({ name: 'Widgets renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/gadgets', worktreeRoot: '/srv/worktrees' })
   expect(text()).toContain('acme/intake → acme/other')
+})
+
+it('pre-fills and clears the project execution environment when editing', async () => {
+  server.localProjects = [{ ...WIDGETS, prepare: 'npm ci', blockedCommands: ['rm', 'curl'] }, OTHER]
+  at({ page: 'newRequirement' })
+  await mount()
+  await click(editButton())
+  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', 'npm ci', 'rm curl', ''])
+  // An emptied prepare is sent as the empty string and an emptied list as an empty array; both clear the stored fields.
+  await type(field(zh['discuss.projectPrepare']), '   ')
+  await type(field(zh['discuss.projectBlockedCommands']), '')
+  await click(zh['discuss.saveProject'])
+  expect(putRequests().at(-1)).toMatchObject({ path: 'local/projects/p-widgets',
+    body: { name: 'Widgets', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets', worktreeRoot: '/srv/worktrees',
+      prepare: '', blockedCommands: [] } })
+  expect(server.localProjects.find(item => item.id === 'p-widgets')).not.toHaveProperty('prepare')
+  expect(server.localProjects.find(item => item.id === 'p-widgets')).not.toHaveProperty('blockedCommands')
+  expect(text()).not.toContain(zh['discuss.projectPrepareSet'])
 })
 
 it('keeps the edit page and its values when the update is refused, then clears an emptied worktree root', async () => {
@@ -259,7 +337,7 @@ it('keeps the edit page and its values when the update is refused, then clears a
   // A refused save shows the existing localized refusal and leaves the person on the form with their edits intact.
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.projectWorktreeRoot'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
-  expect(values()).toEqual(['Widgets kept', 'acme/intake', 'acme/widgets', 'relative/root', ''])
+  expect(values()).toEqual(['Widgets kept', 'acme/intake', 'acme/widgets', 'relative/root', '', '', ''])
   expect(server.localProjects.find(item => item.id === 'p-widgets')).toMatchObject({ name: 'Widgets', worktreeRoot: '/srv/worktrees' })
   // An emptied root is sent as an empty string, which clears the stored root.
   await type(field(zh['discuss.projectWorktreeRoot']), '')
@@ -312,7 +390,7 @@ it('shows each project\'s own bot account in the page head and the More menu, sw
     // The edit form pre-fills the bot CLI of the project being edited, not the Source default.
     await click(document.querySelector<HTMLElement>('.dt-project-more')!)
     await click(editButton())
-    expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', '', '/bot/gh-other'])
+    expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', '', '', '', '/bot/gh-other'])
   } finally {
     Reflect.deleteProperty(strip, 'scrollWidth')
     Reflect.deleteProperty(strip, 'clientWidth')
@@ -333,7 +411,7 @@ it('keeps the edit page and typed values when the host refuses an unusable bot C
   expect(document.querySelector('.dt-toast')?.textContent).toBe(`${reason}\n/bad/gh is not an executable file`)
   // The page and every typed value stay, so one field can be corrected instead of starting over.
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
-  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', '/bad/gh'])
+  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', '', '', '/bad/gh'])
   expect(putRequests().at(-1)).toMatchObject({ path: 'local/projects/p-widgets', body: { cli: '/bad/gh' } })
   expect(server.localProjects.find(item => item.id === 'p-widgets')?.cli).toBe('/bot/gh-widgets')
 })

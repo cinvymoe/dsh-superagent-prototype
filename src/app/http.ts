@@ -221,13 +221,14 @@ function routes(runtime: HttpHost): Routes {
     'POST local/projects': async ({ body }) => {
       const input = z.object({ name: z.string().trim().min(1).max(80), intakeRepository: z.string().trim().min(3).max(200),
         codeRepository: z.string().trim().min(3).max(200), worktreeRoot: z.string().trim().max(4096).optional(),
-        cli: z.string().trim().max(4096).optional() }).parse(await body())
+        prepare: z.string().optional(), blockedCommands: z.array(z.string()).optional(), cli: z.string().trim().max(4096).optional() }).parse(await body())
       return { project: runtime.projects.view(await runtime.projects.create(input)) }
     },
     'PUT local/projects/:id': async ({ params, body }) => {
       const input = z.object({ name: z.string().trim().min(1).max(80).optional(),
         intakeRepository: z.string().trim().min(3).max(200).optional(), codeRepository: z.string().trim().min(3).max(200).optional(),
-        worktreeRoot: z.string().trim().max(4096).optional(), cli: z.string().trim().max(4096).optional() }).parse(await body())
+        worktreeRoot: z.string().trim().max(4096).optional(), prepare: z.string().optional(),
+        blockedCommands: z.array(z.string()).optional(), cli: z.string().trim().max(4096).optional() }).parse(await body())
       if (Object.keys(input).length === 0) throw new RouteError(400, 'No project field to update')
       return { project: runtime.projects.view(await runtime.projects.update(params.id, input)) }
     },

@@ -41,8 +41,10 @@ export interface Api {
   'GET tickets': { query?: Paged & { state?: TicketFilter }; response: TicketListView }
   'GET tickets/:id': { response: TicketPageView }
   'GET local/projects': { response: { projects: LocalProjectView[] } }
-  'POST local/projects': { body: { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string; cli?: string }; response: { project: LocalProjectView } }
-  'PUT local/projects/:id': { body: { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string; cli?: string }; response: { project: LocalProjectView } }
+  'POST local/projects': { body: { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string; prepare?: string;
+    blockedCommands?: string[]; cli?: string }; response: { project: LocalProjectView } }
+  'PUT local/projects/:id': { body: { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string; prepare?: string;
+    blockedCommands?: string[]; cli?: string }; response: { project: LocalProjectView } }
   // Local requirement responses carry the HTTP view (`LocalIssueView`), whose `slicesFinished` is derived per read.
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }
   'POST local/issues': { body: { title?: string; body?: string; project: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }

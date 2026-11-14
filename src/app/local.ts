@@ -3,6 +3,8 @@ import { readFileSync, rmSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import { key, planTicketId, UserError, EXECUTION_STRATEGY_REVISION, type ActorRef, type ExecutionMode, type ExecutionStrategy,
   type ReceiveResult, type Thread, type Trigger } from '../core/index.ts'
+import { WORKER_COMMANDS, commandName } from '../infra/environment.ts'
+import { LIMITS } from '../limits.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
 import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
@@ -18,8 +20,9 @@ export interface LocalIssuesHost {
 }
 
 export interface LocalIssueInput { title?: string; body?: string; author?: string; project: string; images?: LocalImageInput[] }
-export interface LocalProjectInput { name: string; repository: string; worktreeRoot?: string }
-export interface LocalProjectFields { name: string; repository?: string; intakeRepository?: string; codeRepository?: string; chain?: string; worktreeRoot?: string }
+export interface LocalProjectInput { name: string; repository: string; worktreeRoot?: string; prepare?: string; blockedCommands?: string[] }
+export interface LocalProjectFields { name: string; repository?: string; intakeRepository?: string; codeRepository?: string; chain?: string; worktreeRoot?: string;
+  prepare?: string; blockedCommands?: string[] }
 export interface LocalAlignmentInput { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }
 
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
@@ -62,7 +65,8 @@ export class LocalIssues {
 
   /**
    * Validate and normalize the editable fields of a project: a non-empty name no other project carries, `owner/name`
-   * repositories (a code repository, or the legacy execution repository), and an optional absolute worktree root.
+   * repositories (a code repository, or the legacy execution repository), an optional absolute worktree root, and the
+   * optional execution environment (a prepare command and extra blocked commands).
    */
   validateProject(input: LocalProjectFields, except?: LocalProject): LocalProjectFields {
     const name = input.name.trim()
@@ -77,6 +81,8 @@ export class LocalIssues {
     const trimmedRoot = input.worktreeRoot?.trim()
     const worktreeRoot = trimmedRoot ? trimmedRoot : undefined
     if (worktreeRoot !== undefined && !isAbsolute(worktreeRoot)) throw new UserError('projectWorktreeRoot')
+    const prepare = this.prepareCommand(input.prepare)
+    const blockedCommands = this.blockedCommands(input.blockedCommands)
     return {
       name,
       ...(input.chain !== undefined ? { chain: input.chain } : {}),
@@ -84,7 +90,33 @@ export class LocalIssues {
       ...(input.codeRepository !== undefined ? { codeRepository: code } : {}),
       ...(input.intakeRepository !== undefined ? { intakeRepository: intake } : {}),
       ...(worktreeRoot !== undefined ? { worktreeRoot } : {}),
+      ...(prepare !== undefined ? { prepare } : {}),
+      ...(blockedCommands !== undefined ? { blockedCommands } : {}),
     }
+  }
+
+  /**
+   * A project's own prepare command: trimmed, where empty means unconfigured, and no longer than the Executor's setting.
+   * The command itself is neither parsed nor run here; it runs in the chosen root when one of its tickets launches.
+   */
+  private prepareCommand(value: string | undefined): string | undefined {
+    const command = value?.trim()
+    if (!command) return undefined
+    if (command.length > LIMITS.prepareCommand) throw new UserError('projectPrepare', { max: String(LIMITS.prepareCommand) })
+    return command
+  }
+
+  /**
+   * A project's extra blocked command names: trimmed, blank entries dropped and duplicates removed. Each name passes the
+   * Executor's own rule, so a path is not a name and the commands workers need stay available in every project.
+   */
+  private blockedCommands(names: readonly string[] | undefined): string[] | undefined {
+    const unique = [...new Set((names ?? []).map(name => name.trim()).filter(Boolean))]
+    const invalid = unique.find(name => !commandName(name))
+    if (invalid !== undefined) throw new UserError('projectBlockedCommand', { name: invalid })
+    const required = unique.find(name => WORKER_COMMANDS.includes(name))
+    if (required !== undefined) throw new UserError('projectBlockedWorkerCommand', { name: required })
+    return unique.length ? unique : undefined
   }
 
   /**
@@ -101,13 +133,15 @@ export class LocalIssues {
     }
     if (fields.repository !== undefined) project.repository = fields.repository
     if (fields.worktreeRoot !== undefined) project.worktreeRoot = fields.worktreeRoot
+    if (fields.prepare !== undefined) project.prepare = fields.prepare
+    if (fields.blockedCommands?.length) project.blockedCommands = [...fields.blockedCommands]
     return project
   }
 
   /** Store a project record, replacing any earlier one with the same id. */
   putProject(project: LocalProject): void { this.host.store.set(KV.local.project(project.id), project) }
 
-  /** The project with some validated fields replaced, without storing it. */
+  /** The project with some validated fields replaced, without storing it; an absent optional field is cleared. */
   patchProject(project: LocalProject, fields: LocalProjectFields): LocalProject {
     const updated: LocalProject = { ...project, name: fields.name, updatedAt: this.clock() }
     for (const field of ['chain', 'repository', 'intakeRepository', 'codeRepository'] as const) {
@@ -115,6 +149,10 @@ export class LocalIssues {
     }
     if (fields.worktreeRoot === undefined) delete updated.worktreeRoot
     else updated.worktreeRoot = fields.worktreeRoot
+    if (fields.prepare === undefined) delete updated.prepare
+    else updated.prepare = fields.prepare
+    if (!fields.blockedCommands?.length) delete updated.blockedCommands
+    else updated.blockedCommands = [...fields.blockedCommands]
     return updated
   }
 
@@ -130,9 +168,12 @@ export class LocalIssues {
     const trimmedRoot = input.worktreeRoot?.trim()
     const worktreeRoot = trimmedRoot ? trimmedRoot : undefined
     if (worktreeRoot !== undefined && !isAbsolute(worktreeRoot)) throw new UserError('projectWorktreeRoot')
+    const prepare = this.prepareCommand(input.prepare)
+    const blockedCommands = this.blockedCommands(input.blockedCommands)
     const at = this.clock()
     const project: LocalProject = {
       id: `p-${key('local-project', at, name).slice(0, 8)}`, name, repository, ...(worktreeRoot !== undefined ? { worktreeRoot } : {}),
+      ...(prepare !== undefined ? { prepare } : {}), ...(blockedCommands !== undefined ? { blockedCommands } : {}),
       createdAt: at, updatedAt: at,
     }
     this.host.store.set(KV.local.project(project.id), project)

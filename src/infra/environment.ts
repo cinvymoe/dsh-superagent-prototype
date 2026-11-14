@@ -16,6 +16,8 @@ const MARKER = '# Written by dsh-superagent on every start; edits are lost.'
 const LEGACY_MARKERS = ['dsh-tag', 'dsh-go', 'dsh-freelancer'].map(name => `# Written by ${name} on every start; edits are lost.`)
 /** Commands workers need, which `blockedCommands` cannot block: the shims and git. */
 export const WORKER_COMMANDS: readonly string[] = ['gh', 'git', 'lark-cli']
+/** Whether `name` is a command name a `blockedCommands` list may carry: a bare name, never `.` or `..`. */
+export const commandName = (name: string): boolean => /^[A-Za-z0-9._-]+$/.test(name) && name !== '.' && name !== '..'
 /** A chain's command shims and isolated git configuration. */
 export interface WorkerPaths { bin: string; gitconfig: string }
 /**

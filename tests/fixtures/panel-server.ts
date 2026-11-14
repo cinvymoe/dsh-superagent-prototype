@@ -14,6 +14,7 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
   TicketRow, TicketStage,
   TriggerRow } from '../../src/client/api.ts'
 import { SETUP_FIELDS } from '../../src/deployment.ts'
+import { LIMITS } from '../../src/limits.ts'
 import { AgentsConfigSchema, EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
 import { agentCatalog, validateAgentPlugins } from '../../src/app/agent-tools.ts'
 import { UserError } from '../../src/core/index.ts'
@@ -137,7 +138,8 @@ export interface PanelServer {
   /** Requirements whose confirmed alignment already dispatched tickets, so their execution mode is read-only. */
   dispatchedIssues: Set<string>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
-    worktreeRoot?: string; cli?: string; bot?: string; missingChain?: string; createdAt: string; updatedAt: string }[]
+worktreeRoot?: string; prepare?: string; blockedCommands?: string[]; cli?: string; bot?: string; missingChain?: string;
+    createdAt: string; updatedAt: string }[]
   /** When set, the create-requirement route refuses with this JSON error (and creates nothing). */
   refuseIssueCreate?: { status: 400; error: string; code: string; values: Record<string, string> }
   /** When set, a project write naming this CLI is refused with the setup problem the host would report. */
@@ -172,6 +174,19 @@ export interface PanelServer {
   modelCatalogFailure?: string
 }
 export let server: PanelServer
+
+/**
+ * Mirror the host's blocked-command check: a name is a bare word, and the commands workers need cannot be blocked. The
+ * fixture keeps using the host's own `UserError`, so the panel's localized refusal path is covered by the same words.
+ */
+function blockedCommandsOf(names: string[] | undefined): { names?: string[]; error?: UserError } {
+  const unique = [...new Set((names ?? []).map(name => name.trim()).filter(Boolean))]
+  const invalid = unique.find(name => !/^[A-Za-z0-9._-]+$/.test(name) || name === '.' || name === '..')
+  if (invalid !== undefined) return { error: new UserError('projectBlockedCommand', { name: invalid }) }
+  const required = unique.find(name => ['gh', 'git', 'lark-cli'].includes(name))
+  if (required !== undefined) return { error: new UserError('projectBlockedWorkerCommand', { name: required }) }
+  return { names: unique.length ? unique : undefined }
+}
 
 function resolved() {
   const accounts = server.setup.accounts
@@ -455,14 +470,21 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
       return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
     }
+    const blocked = blockedCommandsOf(body.blockedCommands)
+    if (blocked.error) return refuse(400, blocked.error.message, { code: blocked.error.code, values: blocked.error.values })
+    if (body.prepare && body.prepare.trim().length > LIMITS.prepareCommand) {
+      return refuse(400, 'A project prepare command is too long', { code: 'projectPrepare', values: { max: String(LIMITS.prepareCommand) } })
+    }
     if (server.refuseProjectCli && body.cli === server.refuseProjectCli.cli) {
       const { detail, ...setup } = server.refuseProjectCli
       return refuse(400, detail, { setup: { place: 'github', ...setup } })
     }
     let id = 'p-fixture', index = 2
     while (server.localProjects.some(item => item.id === id)) id = `p-fixture-${index++}`
+    const prepare = body.prepare?.trim()
     const project = { id, name: body.name, chain: id, intakeRepository: body.intakeRepository, codeRepository: body.codeRepository,
-      ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}), ...(body.cli ? { cli: body.cli } : {}),
+      ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}), ...(prepare ? { prepare } : {}),
+      ...(blocked.names?.length ? { blockedCommands: blocked.names } : {}), ...(body.cli ? { cli: body.cli } : {}),
       createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
     server.localProjects = [project, ...server.localProjects]
     return { project }
@@ -474,12 +496,26 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
       return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
     }
+    const blocked = blockedCommandsOf(body.blockedCommands)
+    if (blocked.error) return refuse(400, blocked.error.message, { code: blocked.error.code, values: blocked.error.values })
+    if (body.prepare && body.prepare.trim().length > LIMITS.prepareCommand) {
+      return refuse(400, 'A project prepare command is too long', { code: 'projectPrepare', values: { max: String(LIMITS.prepareCommand) } })
+    }
     if (server.refuseProjectCli && body.cli === server.refuseProjectCli.cli) {
       const { detail, ...setup } = server.refuseProjectCli
       return refuse(400, detail, { setup: { place: 'github', ...setup } })
     }
     const next = { ...project, ...body, updatedAt: '2026-09-23T00:00:00Z' }
     if ('worktreeRoot' in body && !body.worktreeRoot) delete next.worktreeRoot
+    if ('prepare' in body) {
+      const prepare = body.prepare?.trim()
+      if (prepare) next.prepare = prepare
+      else delete next.prepare
+    }
+    if ('blockedCommands' in body) {
+      if (blocked.names?.length) next.blockedCommands = blocked.names
+      else delete next.blockedCommands
+    }
     server.localProjects = server.localProjects.map(item => item.id === params.id ? next : item)
     return { project: next }
   } },
