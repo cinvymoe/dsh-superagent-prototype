@@ -28,6 +28,7 @@ import { sourcesStatus, type SetupState } from './views/sources.ts'
 import { decisionList, search, threadDetail, threadList } from './views/threads.ts'
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import type { LocalIssues } from './local.ts'
+import type { Discussions } from './discussions.ts'
 import { QUESTION_CHARS, type LocalQuestions } from './local-questions.ts'
 import type { Projects } from './projects.ts'
 import type { Checkout } from './checkout.ts'
@@ -48,6 +49,7 @@ export interface HttpHost {
   readonly machine: Machine
   readonly masterId: string
   readonly local: LocalIssues
+  readonly discussions: Discussions
   readonly localQuestions: LocalQuestions
   readonly projects: Projects
   /** The checkout dsh-superagent runs from, read only. */
@@ -231,6 +233,36 @@ function routes(runtime: HttpHost): Routes {
         blockedCommands: z.array(z.string()).optional(), cli: z.string().trim().max(4096).optional() }).parse(await body())
       if (Object.keys(input).length === 0) throw new RouteError(400, 'No project field to update')
       return { project: runtime.projects.view(await runtime.projects.update(params.id, input)) }
+    },
+    // Discussions are their own records and Threads; a comment still becomes an ordinary human Trigger.
+    'GET local/discussions': ({ query }) => {
+      const project = typeof query?.project === 'string' && query.project ? query.project : undefined
+      return { discussions: runtime.discussions.list(project) }
+    },
+    'POST local/discussions': async ({ body }) => {
+      const input = z.object({ body: z.string().max(20_000), project: z.string().min(1), author: z.string().trim().max(80).optional() })
+        .parse(await body())
+      return { discussion: runtime.discussions.create(input) }
+    },
+    'GET local/discussions/:id': ({ params }) => {
+      const discussion = runtime.discussions.get(params.id)
+      if (!discussion) throw new RouteError(404, 'Local discussion not found')
+      const thread = threadDetail(views(runtime), runtime.discussions.thread(discussion.id), undefined, 200)
+      if (!thread) throw new RouteError(404, 'Local discussion thread not found')
+      const project = runtime.local.project(discussion.project)
+      return { discussion, project: project ? runtime.projects.view(project) : null, thread,
+        replies: runtime.store.receipts.thread('local', runtime.discussions.thread(discussion.id)) }
+    },
+    'POST local/discussions/:id/comments': async ({ params, body }) => {
+      const input = z.object({ text: z.string().trim().min(1).max(20_000) }).parse(await body())
+      const discussion = runtime.discussions.comment(params.id, input.text)
+      if (!discussion) throw new RouteError(404, 'Local discussion not found')
+      return { discussion }
+    },
+    'POST local/discussions/:id/close': ({ params }) => {
+      const discussion = runtime.discussions.close(params.id)
+      if (!discussion) throw new RouteError(404, 'Local discussion not found')
+      return { discussion }
     },
     // Every local route that returns a requirement returns its view, which adds the derived slicesFinished flag.
     'GET local/issues': ({ query }) => {

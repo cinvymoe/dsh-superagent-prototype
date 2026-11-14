@@ -34,6 +34,7 @@ import { registerHttp, type HttpHost } from './http.ts'
 import { Checkout } from './checkout.ts'
 import { Prepare } from './prepare.ts'
 import { LocalIssues } from './local.ts'
+import { Discussions } from './discussions.ts'
 import { LocalQuestions } from './local-questions.ts'
 import { Questions } from './questions.ts'
 import { Projects } from './projects.ts'
@@ -79,6 +80,7 @@ export class Runtime extends Service implements SourceHost {
   readonly engine: Engine
   readonly passes: Passes
   readonly local: LocalIssues
+  readonly discussions: Discussions
   readonly localQuestions: LocalQuestions
   readonly projects: Projects
   readonly checkout: Checkout
@@ -185,6 +187,7 @@ export class Runtime extends Service implements SourceHost {
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
       this.local = new LocalIssues({ store, stateDir: machine.stateDir, receive: trigger => this.passes.receive(trigger) })
+      this.discussions = new Discussions({ store, receive: trigger => this.passes.receive(trigger) })
       // Asking is answered in the background, so a request never waits for a forked Session; a stop leaves the question `asked`.
       this.localQuestions = new LocalQuestions({ store, local: this.local,
         answers: new Questions({ context: ctx, store, sessions, lifetime: this.lifetime }), lifetime: this.lifetime,
@@ -310,7 +313,7 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
-      localQuestions: this.localQuestions, projects: this.projects, checkout: this.checkout, prepare: this.prepare,
+      discussions: this.discussions, localQuestions: this.localQuestions, projects: this.projects, checkout: this.checkout, prepare: this.prepare,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
