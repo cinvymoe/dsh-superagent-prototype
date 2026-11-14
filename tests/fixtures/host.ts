@@ -110,7 +110,7 @@ export function subagentRuntime(agents: Map<string, FakeAgent>) {
     child.settled.resolve()
   }
   const service = {
-    waitForChildren: vi.fn(async (parent: { id: string }) => {
+    waitForTreeWork: vi.fn(async (parent: { id: string }) => {
       const live = [...children.values()].filter(child => child.parent === parent.id && child.live)
       await Promise.all(live.map(child => child.settled.promise))
       return live.length > 0
