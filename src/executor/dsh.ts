@@ -109,6 +109,8 @@ export interface ExecutorHost {
   deploymentForTicket?(ticket: Ticket): Deployment
   /** The explicit worktree root a local project configures for this ticket, when any; absent means the Executor's root. */
   worktreeRoot?(ticket: Ticket): string | undefined
+  /** The prepare command a local project configures for this ticket, when any; absent means the Executor's `prepare` setting. */
+  prepareCommand?(ticket: Ticket): string | undefined
   sourceLink(trigger: Trigger, signal?: AbortSignal): Promise<{ source_url?: string; source_url_read?: string }>
   /** Stored Trigger of the message `trigger` replies to, when it replies to one. */
   repliedTo(trigger: Trigger): Trigger | undefined
@@ -287,8 +289,9 @@ export class DshExecutor implements Executor {
     return { ...ticket, execution: ticketExecution(ticket, outcome, this.host.store.settings(), this.host.machine.stateDir, deployment, projectRoot) }
   }
   /**
-   * Runs the configured `executor.prepare` command for a new ticket workspace in the selected root with the ticket's
-   * execution environment variables, then verifies the directory as the worker sees it.
+   * Runs the ticket's prepare command — its local project's own, otherwise the `executor.prepare` setting — for a new
+   * ticket workspace in the selected root with the ticket's execution environment variables, then verifies the directory
+   * as the worker sees it.
    * An explicit root is validated first and is never created or replaced by the default root; the default root missing is
    * created as before. A failure throws `PrepareFailed`, which is not retried automatically; an empty directory a failed
    * prepare command left is removed, a non-empty one kept.
@@ -301,7 +304,9 @@ export class DshExecutor implements Executor {
     const root = explicitRoot ?? dirname(directory)
     if (explicitRoot) await verifyWorktreeRoot(explicitRoot)
     else await mkdir(root, { recursive: true })
-    const command = this.host.store.settings().executor.prepare.trim()
+    // A local project's own prepare command replaces the Executor's setting; a blank one or a ticket without one keeps it.
+    const project = this.host.prepareCommand?.(ticket)?.trim()
+    const command = project || this.host.store.settings().executor.prepare.trim()
     // The prepare command and the worker shell that follows it read the same project and chain shims and credential helper.
     const env = { ...(this.host.environmentForTicket?.(ticket) ?? this.host.workerEnvironment()), ...Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value])) }
     // Enforce a timeout so a hung prepare command (such as on a credential prompt) fails the ticket instead of holding a worker slot indefinitely.

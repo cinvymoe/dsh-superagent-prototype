@@ -157,6 +157,7 @@ export class Runtime extends Service implements SourceHost {
         workerEnvironment: () => setup.workerEnvironment, environmentForTicket: ticket => this.environmentForTicket(ticket),
         deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,
         worktreeRoot: ticket => this.ticketProject(ticket)?.worktreeRoot,
+        prepareCommand: ticket => this.ticketProject(ticket)?.prepare,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, deploymentFor: chain => setup.deploymentFor(chain), effects,
         settings: () => store.settings(), paused: () => this.paused(), threadContext: trigger => sources.threadContext(trigger),
