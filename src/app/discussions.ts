@@ -18,6 +18,7 @@ export interface DiscussionInput { body?: string; project: string; author?: stri
 /**
  * Owns the local discussion records, which live in their own KV family and never in a requirement's own record family.
  * Every discussion gets its own Thread (`local:d-…`); a comment still enters the Engine through a normal human Trigger.
+ * A discussion may create at most one requirement, which `LocalIssues` records here through `link`.
  */
 export class Discussions {
   constructor(private readonly host: DiscussionsHost) {}
@@ -58,6 +59,21 @@ export class Discussions {
       throw error
     }
     return discussion
+  }
+
+  /**
+   * Record the requirement this discussion created: the discussion keeps its text, state and timestamps, and only the one
+   * requirement it may create is written down. A second, different requirement is refused rather than overwriting the link.
+   */
+  link(id: string, issueId: string): LocalDiscussion | undefined {
+    const discussion = this.get(id)
+    if (!discussion) return undefined
+    if (discussion.issueId !== undefined && discussion.issueId !== issueId) {
+      throw new UserError('discussionLinked', { discussion: id, issue: discussion.issueId })
+    }
+    const linked: LocalDiscussion = { ...discussion, issueId }
+    this.host.store.set(KV.local.discussion(id), linked)
+    return linked
   }
 
   /** Append a human comment to the discussion's Thread; the record keeps its text and only its update time moves. */
