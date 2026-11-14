@@ -15,6 +15,10 @@ export function TicketLine({ ticket, question, onChanged, context }: {
   const after = async (request: Promise<unknown>) => { await request; await onChanged?.() }
   const note = question && ticket.note && { ...ticket.note, text: readableMarkers(t, ticket.note.text) }
   const answer = ticket.reply && ticket.stage === 'person' && ticket.action === 'answer' ? ticket.reply : undefined
+  // A local Ticket has no external URL; its answer surface is the requirement page that owns the thread.
+  const localIssue = answer?.source === 'local'
+    ? ticket.threads.map(thread => thread.key).find(key => key.startsWith('local:'))?.slice('local:'.length)
+    : undefined
   return <li className="dt-row dt-link dt-ticket" data-state={question ? status.dot : undefined}>
     <div className="dt-ticket-stage"><StageMark state={status.dot} icon={status.icon} label={status.label} /></div>
     <div className="dt-ticket-body">
@@ -29,8 +33,12 @@ export function TicketLine({ ticket, question, onChanged, context }: {
       </div>
       {/* Always render the actions container so every Ticket row keeps a uniform three-line height. */}
       <div className="dt-ticket-actions">{onChanged && <>
-        {answer && <ActionLink href={answer.url} icon="message">{t('answerIn', { source: valueLabel(t, 'source',
-          answer.source) })}</ActionLink>}
+        {answer && (localIssue
+          ? <button type="button" className="dt-btn dt-btn-outline dt-btn-sm" onClick={() => navigate({ page: 'requirements',
+            id: localIssue })}><span className="dt-btn-icon"><Icon name="message" size={14} /></span>{t('answerIn',
+            { source: valueLabel(t, 'source', answer.source) })}</button>
+          : <ActionLink href={answer.url} icon="message">{t('answerIn', { source: valueLabel(t, 'source', answer.source) })}
+            </ActionLink>)}
         {ticket.actions.retry && <ConfirmButton variant="outline" icon="refresh" label={t('retry')} title={t('retryTitle')}
           message={t('retryConfirm', { title: ticket.title })}
           onConfirm={() => after(call('POST tickets/:id/retry', { id: ticket.id }))} />}
