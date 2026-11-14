@@ -86,6 +86,8 @@ export const AgentPluginSchema = z.object({
   description: z.string().trim().max(LIMITS.pluginDescription).optional(),
   tools: z.array(z.string().trim().min(1).max(LIMITS.toolName)).default([]),
   roles: z.array(z.enum(AGENT_ROLES)).optional(),
+  /** Plugins a role enables together with this one: a save adds their transitive closure, so a dependency cannot be half on. */
+  requires: z.array(AgentPluginIdSchema).optional(),
 }).strict()
 export type AgentPlugin = z.infer<typeof AgentPluginSchema>
 /**
