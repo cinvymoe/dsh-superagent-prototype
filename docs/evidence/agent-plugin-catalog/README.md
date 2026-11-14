@@ -7,7 +7,8 @@ viewport, theme, locale and seeded state; only the built `dsh-superagent` differ
 
 - **Before**: S1 as merged, `d74d21bf` (per-role plugin switches; no custom plugin add/delete), in `main` at
   `6ed55d10`.
-- **After**: the S2 ticket commit `036ab096`, which is `main` `6ed55d10` plus the custom plugin catalog.
+- **After**: the S2 ticket branch: feature commit `0c3da4d6` (main `6ed55d10` plus the custom plugin catalog) and the
+  shared-prefix follow-up, rebuilt before capture. The PR body lists the exact head.
 - The final evidence commit may sit on a later head; the code under capture is the S2 commit named above, and the
   captures below are only added by this commit.
 
@@ -15,7 +16,7 @@ viewport, theme, locale and seeded state; only the built `dsh-superagent` differ
 
 ```sh
 git archive d74d21bf | tar -x -C /tmp/s2-before-src
-git archive 036ab096 | tar -x -C /tmp/s2-after-src
+git archive <S2 head> | tar -x -C /tmp/s2-after-src
 (cd /tmp/s2-before-src && pnpm build)
 (cd /tmp/s2-after-src && pnpm build)
 ```
