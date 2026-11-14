@@ -7,8 +7,9 @@ built `dsh-superagent` differs.
 ## Revisions
 
 - **Before**: `main` @ `c69e32da`, the slice-start HEAD, built from `git archive` into `/tmp/sliceA-before-src`.
-- **After**: this ticket branch, built in the ticket worktree. The code under capture is commit `fa2977fe` (the feature
-  commit); the later evidence commit only adds the captures below.
+- **After**: this ticket branch at merge commit `21cd097` (feature commit `fa2977fe` merged with `main` @ `7172f006`),
+  built in the ticket worktree. The later evidence commit only adds the captures below; its tree keeps the captured UI
+  code unchanged.
 
 ## Scenario
 
