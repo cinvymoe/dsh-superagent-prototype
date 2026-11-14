@@ -260,6 +260,47 @@ it('accepts an optional absolute worktree root over HTTP and refuses a relative 
   expect((legacyListed.body.projects as { id: string }[]).find(entry => entry.id === legacy.id)).not.toHaveProperty('worktreeRoot')
 })
 
+it('accepts a project prepare command and extra blocked commands over HTTP, and clears them when emptied', async () => {
+  const created = await h.api('POST', 'local/projects', { name: 'Configured', intakeRepository: 'acme/configured-issues',
+    codeRepository: 'acme/configured', prepare: '  npm ci  ', blockedCommands: ['rm', ' curl ', 'rm'] })
+  expect(created.status).toBe(200)
+  const project = created.body.project as { id: string; prepare?: string; blockedCommands?: string[] }
+  expect(project).toMatchObject({ prepare: 'npm ci', blockedCommands: ['rm', 'curl'] })
+  const listed = await h.api('GET', 'local/projects')
+  expect((listed.body.projects as { id: string; prepare?: string; blockedCommands?: string[] }[]).find(entry => entry.id === project.id))
+    .toMatchObject({ prepare: 'npm ci', blockedCommands: ['rm', 'curl'] })
+  // An update that names only the project keeps its environment; a blank prepare and an empty list clear the fields.
+  const renamed = await h.api('PUT', `local/projects/${project.id}`, { name: 'Configured renamed' })
+  expect(renamed.status).toBe(200)
+  expect(renamed.body.project).toMatchObject({ name: 'Configured renamed', prepare: 'npm ci', blockedCommands: ['rm', 'curl'] })
+  const cleared = await h.api('PUT', `local/projects/${project.id}`, { prepare: '   ', blockedCommands: [] })
+  expect(cleared.status).toBe(200)
+  expect(cleared.body.project).not.toHaveProperty('prepare')
+  expect(cleared.body.project).not.toHaveProperty('blockedCommands')
+  // A whitespace-only prepare stores no field; a non-empty list still does.
+  const plain = await h.api('POST', 'local/projects', { name: 'Plain env', intakeRepository: 'acme/plain-env-issues',
+    codeRepository: 'acme/plain-env', prepare: '   ', blockedCommands: ['rm'] })
+  expect(plain.status).toBe(200)
+  expect(plain.body.project).not.toHaveProperty('prepare')
+  expect(plain.body.project).toMatchObject({ blockedCommands: ['rm'] })
+  // The command-name rule is the Executor's own, and each refusal is a structured 400 the panel localizes.
+  for (const name of ['gh', 'git', 'lark-cli']) {
+    const refused = await h.api('POST', 'local/projects', { name: `Reserved ${name}`, intakeRepository: `acme/${name}-issues`,
+      codeRepository: `acme/${name}`, blockedCommands: [name] })
+    expect(refused.status).toBe(400)
+    expect(refused.body).toMatchObject({ code: 'projectBlockedWorkerCommand', values: { name } })
+  }
+  const invalid = await h.api('POST', 'local/projects', { name: 'Invalid command', intakeRepository: 'acme/invalid-command-issues',
+    codeRepository: 'acme/invalid-command', blockedCommands: ['bad name'] })
+  expect(invalid.status).toBe(400)
+  expect(invalid.body).toMatchObject({ code: 'projectBlockedCommand', values: { name: 'bad name' } })
+  // A relative root still reports its own refusal.
+  const relative = await h.api('POST', 'local/projects', { name: 'Relative env', intakeRepository: 'acme/relative-env-issues',
+    codeRepository: 'acme/relative-env', worktreeRoot: 'relative/root' })
+  expect(relative.status).toBe(400)
+  expect(relative.body).toMatchObject({ code: 'projectWorktreeRoot' })
+})
+
 /** A local project's worktree root replaces the Execution root for new tickets, and is validated before any worker Session starts. */
 describe('project worktree roots', () => {
   /** Every prepare command (`sh -c`) the executor spawned, in order. */

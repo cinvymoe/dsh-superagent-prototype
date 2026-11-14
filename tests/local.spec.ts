@@ -180,6 +180,32 @@ describe('the local issue board', () => {
     expect(code('  relative/root  ')).toBe('projectWorktreeRoot')
   })
 
+  it('stores an optional prepare command and extra blocked commands, treating blank values as unconfigured', () => {
+    const { issues } = setup()
+    const configured = issues.createProject({ name: 'Configured', repository: 'acme/widgets', prepare: '  npm ci  ',
+      blockedCommands: ['rm', ' curl ', 'rm'] })
+    expect(configured.prepare).toBe('npm ci')
+    expect(configured.blockedCommands).toEqual(['rm', 'curl'])
+    expect(issues.project(configured.id)).toMatchObject({ prepare: 'npm ci', blockedCommands: ['rm', 'curl'] })
+    // Omitted, empty and whitespace-only all mean unconfigured, and an empty list adds no field.
+    expect(issues.createProject({ name: 'Plain', repository: 'acme/widgets' })).not.toHaveProperty('prepare')
+    expect(issues.createProject({ name: 'Blank prepare', repository: 'acme/widgets', prepare: '   ', blockedCommands: [] }))
+      .not.toHaveProperty('prepare')
+    expect(issues.createProject({ name: 'Blank list', repository: 'acme/widgets', blockedCommands: [] })).not.toHaveProperty('blockedCommands')
+    let attempts = 0
+    const code = (fields: { prepare?: string; blockedCommands?: string[] }): unknown => {
+      try { issues.createProject({ name: `Bad ${++attempts}`, repository: 'acme/widgets', ...fields }) } catch (error) { return (error as { code?: unknown }).code }
+      return undefined
+    }
+    // The rule is the Executor's own: a path is not a command name, and the commands workers need cannot be blocked.
+    expect(code({ blockedCommands: ['gh'] })).toBe('projectBlockedWorkerCommand')
+    expect(code({ blockedCommands: ['git'] })).toBe('projectBlockedWorkerCommand')
+    expect(code({ blockedCommands: ['lark-cli'] })).toBe('projectBlockedWorkerCommand')
+    expect(code({ blockedCommands: ['rm/../x'] })).toBe('projectBlockedCommand')
+    expect(code({ blockedCommands: ['bad name'] })).toBe('projectBlockedCommand')
+    expect(code({ prepare: 'x'.repeat(4001) })).toBe('projectPrepare')
+  })
+
   it('stores every type of attached image under the requirement directory and names their absolute paths in the trigger', () => {
     const { issues, triggers, project, directory } = setup()
     const issue = issues.create({ title: 'Screenshots', body: 'Four shots', project: project.id, images: [

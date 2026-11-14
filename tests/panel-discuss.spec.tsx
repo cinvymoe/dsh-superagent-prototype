@@ -560,6 +560,10 @@ it('names the project worktree root field and hint in English as well', async ()
   await openCreate()
   expect(input(en['discuss.projectWorktreeRoot'])).toBeInstanceOf(HTMLInputElement)
   expect(text()).toContain(en['discuss.projectWorktreeRootHint'])
+  expect(area(en['discuss.projectPrepare'])).toBeInstanceOf(HTMLTextAreaElement)
+  expect(text()).toContain(en['discuss.projectPrepareHint'])
+  expect(input(en['discuss.projectBlockedCommands'])).toBeInstanceOf(HTMLInputElement)
+  expect(text()).toContain(en['discuss.projectBlockedCommandsHint'])
 })
 
 it('omits a whitespace-only worktree root from the payload', async () => {

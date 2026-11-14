@@ -4,6 +4,7 @@ import { Button, Icon } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import type { Route } from './route.ts'
 import { projectRepositories } from '../sources/local-format.ts'
+import { LIMITS } from '../limits.ts'
 import { errorText } from './text.ts'
 import { PageHead } from './widgets.tsx'
 
@@ -101,9 +102,10 @@ export function ProjectBar({ route }: { route: Route }) {
 }
 
 /**
- * Standalone project form shared by creation and editing: the project fields (including the bot CLI of a project that
- * owns a chain), the same validation hints, and the same submit path. Creating sends POST; editing sends PUT for the
- * project named by the route and pre-fills its values.
+ * Standalone project form shared by creation and editing: the project fields (the three execution-environment fields and,
+ * for a project that owns a chain, the bot CLI), the same validation hints, and the same submit path. Creating sends POST;
+ * editing sends PUT for the project named by the route and pre-fills its values. The environment fields are the project's
+ * own: an empty root or prepare command keeps the Execution setting, while blocking commands adds to the deployment list.
  * A refused save keeps the page and the typed values, so the person can correct one field instead of starting over.
  */
 export function ProjectFormPage({ edit }: { edit?: string }) {
@@ -115,6 +117,8 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
   const [intakeRepository, setIntakeRepository] = useState('')
   const [codeRepository, setCodeRepository] = useState('')
   const [worktreeRoot, setWorktreeRoot] = useState('')
+  const [prepare, setPrepare] = useState('')
+  const [blockedCommands, setBlockedCommands] = useState('')
   const [bot, setBot] = useState('')
   const [loaded, setLoaded] = useState(!editing)
   const [busy, setBusy] = useState(false)
@@ -125,23 +129,27 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
     setIntakeRepository(current.intakeRepository ?? current.codeRepository ?? current.repository ?? '')
     setCodeRepository(current.codeRepository ?? current.repository ?? '')
     setWorktreeRoot(current.worktreeRoot ?? '')
+    setPrepare(current.prepare ?? '')
+    setBlockedCommands((current.blockedCommands ?? []).join(' '))
     setBot(current.cli ?? '')
     setLoaded(true)
   }, [editing, loaded, current])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const cleanName = name.trim(), cleanIntake = intakeRepository.trim(), cleanCode = codeRepository.trim(), root = worktreeRoot.trim()
+    const cleanPrepare = prepare.trim(), blocked = blockedCommands.split(/[\s,]+/).filter(Boolean)
     const cleanBot = bot.trim()
     if (busy || !cleanName || !cleanIntake || !cleanCode) return
     setBusy(true)
     try {
-      // An empty root means "keep the Execution root" when creating and "clear the stored root" when editing, which the
-      // update route expresses by sending the empty string; creation omits the key instead.
+      // An empty root or prepare command means "keep the Execution setting" when creating and "clear the stored value" when
+      // editing, which the update route expresses by sending the empty value; creation omits the keys instead.
       const project = editing
         ? (await call('PUT local/projects/:id', { id: edit, body: { name: cleanName, intakeRepository: cleanIntake,
-          codeRepository: cleanCode, worktreeRoot: root, cli: cleanBot } })).project
+          codeRepository: cleanCode, worktreeRoot: root, prepare: cleanPrepare, blockedCommands: blocked, cli: cleanBot } })).project
         : (await call('POST local/projects', { body: { name: cleanName, intakeRepository: cleanIntake, codeRepository: cleanCode,
-          ...(root ? { worktreeRoot: root } : {}), ...(cleanBot ? { cli: cleanBot } : {}) } })).project
+          ...(root ? { worktreeRoot: root } : {}), ...(cleanPrepare ? { prepare: cleanPrepare } : {}),
+          ...(blocked.length ? { blockedCommands: blocked } : {}), ...(cleanBot ? { cli: cleanBot } : {}) } })).project
       await reloadProjects()
       setProject(project.id)
       // Creation opens the new project's requirement list; editing returns to the New requirement page that opened
@@ -175,6 +183,14 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
           aria-label={t('discuss.projectWorktreeRoot')} spellCheck={false}
           onChange={event => setWorktreeRoot(event.target.value)} />
         <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
+        <textarea className="dt-textarea dt-mono" rows={2} value={prepare} maxLength={LIMITS.prepareCommand} spellCheck={false}
+          placeholder={t('discuss.projectPrepare')} aria-label={t('discuss.projectPrepare')}
+          onChange={event => setPrepare(event.target.value)} />
+        <p className="dt-hint">{t('discuss.projectPrepareHint')}</p>
+        <input className="dt-text-input dt-mono" value={blockedCommands} maxLength={4096} spellCheck={false}
+          placeholder={t('discuss.projectBlockedCommands')} aria-label={t('discuss.projectBlockedCommands')}
+          onChange={event => setBlockedCommands(event.target.value)} />
+        <p className="dt-hint">{t('discuss.projectBlockedCommandsHint')}</p>
         {/* A project that owns no chain has nowhere to store a bot, so its edit form leaves the field out. */}
         {(!editing || !!current?.chain || current?.codeRepository !== undefined) && <>
           <input className="dt-text-input dt-mono" value={bot} maxLength={4096} placeholder={t('discuss.projectBot')}

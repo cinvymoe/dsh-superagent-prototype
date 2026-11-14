@@ -156,7 +156,7 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
     ...Object.fromEntries(['intake', 'widgets', 'other', 'rooted', 'plain', 'project'].map(name =>
       [`${PROJECT_BOT} api repos/acme/${name} --jq {name: .full_name, push: .permissions.push}`, `{"name":"acme/${name}","push":true}\n`])),
     // Repositories the management-route specs create projects with; each is readable and pushable.
-    ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative', 'demo', 'demo-issues', 'other-issues',
+    ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative', 'demo', 'demo-issues', 'other-issues', 'configured', 'configured-issues', 'plain-env', 'plain-env-issues',
       'protected', 'protected-issues', 'rooted-issues', 'plain-issues', 'omitted-issues', 'blank-issues', 'relative-issues', 'alpha-issues', 'beta-issues']
       .map(name => [`${AGENT} api repos/acme/${name} --jq {name: .full_name, push: .permissions.push}`, `{"name":"acme/${name}","push":true}\n`])),
     [`${BOT} auth status`]: JSON.stringify({ appId: 'cli_bot', brand: 'feishu', identities: { bot: { status: 'ready' } } }),

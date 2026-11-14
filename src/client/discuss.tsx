@@ -167,6 +167,9 @@ export function NewRequirementPage() {
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
+      {active?.prepare && <span className="dt-mono" title={active.prepare}>{t('discuss.projectPrepareSet')}</span>}
+      {!!active?.blockedCommands?.length && <span className="dt-mono">{t('discuss.projectBlockedCommandsValue',
+        { commands: active.blockedCommands.join(' ') })}</span>}
       {active && <Button variant="outline" size="sm" className="dt-project-edit" icon={<Icon name="settings" size={14} />}
         onClick={() => navigate({ page: 'requirements', edit: active.id })}>{t('discuss.editProject')}</Button>}
     </PageHead>
@@ -229,6 +232,9 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
+      {active?.prepare && <span className="dt-mono" title={active.prepare}>{t('discuss.projectPrepareSet')}</span>}
+      {!!active?.blockedCommands?.length && <span className="dt-mono">{t('discuss.projectBlockedCommandsValue',
+        { commands: active.blockedCommands.join(' ') })}</span>}
     </PageHead>
     <div className="dt-column">
       {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}

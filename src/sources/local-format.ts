@@ -20,6 +20,16 @@ export interface LocalProject {
   repository?: string
   /** Optional absolute root under which new tickets create their worktrees; absent keeps the Executor's root. */
   worktreeRoot?: string
+  /**
+   * Optional prepare command run once for this project's new ticket directories, with the chosen root as its working
+   * directory; absent keeps the Executor's `prepare` setting.
+   */
+  prepare?: string
+  /**
+   * Additional command names this project's worker Session may not call, on top of the Executor's own list; absent adds
+   * none. Only this project's Session fails such a call, so one project's list never changes another's.
+   */
+  blockedCommands?: string[]
   createdAt: string
   updatedAt: string
 }
