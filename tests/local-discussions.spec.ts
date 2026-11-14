@@ -19,12 +19,12 @@ describe('the discussion records', () => {
     directories.push(directory)
     const store = new Store(join(directory, 'orchestrator.sqlite'))
     const triggers: Trigger[] = []
-    const local = new LocalIssues({ store, stateDir: directory, receive: trigger => { triggers.push(trigger); return { kind: 'stored' } as never } })
     const receive = (trigger: Trigger) => { triggers.push(trigger); return { kind: 'stored' } as never }
     let tick = 0
     const discussions = new Discussions({ store, receive,
       // Each create moves the clock a second so the newest-first list order is unambiguous.
       now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)).toISOString() })
+    const local = new LocalIssues({ store, stateDir: directory, discussions, receive })
     const project = local.createProject({ name: 'Demo', repository: 'acme/widgets' })
     return { discussions, local, triggers, project, store }
   }
@@ -76,6 +76,53 @@ describe('the discussion records', () => {
     expect(triggers).toEqual([])
   })
 
+  it('creates a requirement from a discussion and links both records', () => {
+    const { discussions, local, triggers, project } = setup()
+    const discussion = discussions.create({ body: 'Discussion\n\nWith detail', project: project.id })
+    const issue = local.create({ body: 'Refined requirement', project: project.id, discussion: discussion.id })
+    expect(issue).toMatchObject({ body: 'Refined requirement', project: project.id, discussionId: discussion.id })
+    // The discussion keeps its own text and state, and names the one requirement it created.
+    expect(discussions.get(discussion.id)).toMatchObject({ body: 'Discussion\n\nWith detail', state: 'open', issueId: issue.id })
+    // The requirement gets its own Thread and first Trigger, exactly as a requirement submitted directly does.
+    expect(triggers).toHaveLength(2)
+    expect(triggers[1]).toMatchObject({ source: 'local', human: true, text: 'Refined requirement',
+      threads: [{ source: 'local', id: issue.id }], channel: { source: 'local', thread: `local:${issue.id}` },
+      meta: { project: project.id } })
+  })
+
+  it('refuses a second requirement from the same discussion and leaves both records as they were', () => {
+    const { discussions, local, triggers, project } = setup()
+    const discussion = discussions.create({ body: 'One discussion', project: project.id })
+    const issue = local.create({ title: 'The requirement', project: project.id, discussion: discussion.id })
+    const storedIssue = local.get(issue.id)
+    const storedDiscussion = discussions.get(discussion.id)
+    expect(() => local.create({ title: 'Another requirement', project: project.id, discussion: discussion.id }))
+      .toThrow('already created requirement')
+    expect(local.list()).toHaveLength(1)
+    expect(local.get(issue.id)).toEqual(storedIssue)
+    expect(discussions.get(discussion.id)).toEqual(storedDiscussion)
+    // A refused create delivers no Trigger either.
+    expect(triggers).toHaveLength(2)
+  })
+
+  it('refuses an unknown discussion or one in another project without writing either record', () => {
+    const { discussions, local, triggers, project } = setup()
+    const other = local.createProject({ name: 'Other', repository: 'acme/other' })
+    const discussion = discussions.create({ body: 'Another project', project: other.id })
+    expect(() => local.create({ body: 'A requirement', project: project.id, discussion: 'd-unknown' })).toThrow('Unknown local discussion')
+    expect(() => local.create({ body: 'A requirement', project: project.id, discussion: discussion.id })).toThrow("must stay in the discussion's project")
+    expect(local.list()).toEqual([])
+    expect(discussions.get(discussion.id)?.issueId).toBeUndefined()
+    expect(triggers).toHaveLength(1)
+  })
+
+  it('creates a requirement without a discussion exactly as before, with no source link', () => {
+    const { discussions, local, project } = setup()
+    const issue = local.create({ body: 'A plain requirement', project: project.id })
+    expect(issue).not.toHaveProperty('discussionId')
+    expect(discussions.list()).toEqual([])
+  })
+
   it('reads back a discussion by id with its own thread, project and replies', () => {
     const { discussions, project } = setup()
     const discussion = discussions.create({ body: 'Readable discussion', project: project.id })
@@ -118,6 +165,29 @@ describe('the discussion HTTP API', () => {
     const closed = await h.api('POST', `local/discussions/${discussion.id}/close`)
     expect(closed.status).toBe(200)
     expect(closed.body).toMatchObject({ discussion: { state: 'closed' } })
+  })
+
+  it('creates a requirement from a discussion over HTTP, enters the existing Eval, and refuses a second create', async () => {
+    const created = await h.api('POST', 'local/discussions', { body: 'A discussion to turn into work\n\nDetails', project: project.id })
+    const discussion = created.body.discussion as LocalDiscussion
+    const made = await h.api('POST', 'local/issues', { body: 'The requirement', project: project.id, discussion: discussion.id })
+    expect(made.status).toBe(200)
+    const issue = made.body.issue as { id: string; discussionId?: string }
+    expect(issue).toMatchObject({ body: 'The requirement', project: project.id, discussionId: discussion.id })
+    // Both records read back linked, through their own routes.
+    expect((await h.api('GET', `local/discussions/${discussion.id}`)).body).toMatchObject({ discussion: { issueId: issue.id } })
+    expect((await h.api('GET', `local/issues/${issue.id}`)).body).toMatchObject({ issue: { discussionId: discussion.id } })
+    // The requirement's own Thread carries its first human Trigger, which enters the existing Eval.
+    const triggers = h.runtime.store.read.threadTriggers(`local:${issue.id}`, 10)
+    expect(triggers.map(trigger => trigger.text)).toEqual(['The requirement'])
+    await h.runtime.idle()
+    expect(h.runtime.store.threads.get(`local:${issue.id}`)?.evaluating?.triggerIds).toContain(triggers[0]!.id)
+    // A second requirement from the same discussion is refused and both records stay as they were.
+    const again = await h.api('POST', 'local/issues', { body: 'Another requirement', project: project.id, discussion: discussion.id })
+    expect(again.status).toBe(400)
+    expect(again.body).toMatchObject({ code: 'discussionLinked' })
+    expect((await h.api('GET', `local/discussions/${discussion.id}`)).body).toMatchObject({ discussion: { issueId: issue.id } })
+    expect((await h.api('GET', `local/issues?project=${project.id}`)).body.issues).toHaveLength(1)
   })
 
   it('answers an unknown discussion with 404 and refuses empty text or an unknown project without a record', async () => {

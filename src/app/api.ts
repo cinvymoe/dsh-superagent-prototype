@@ -53,7 +53,7 @@ export interface Api {
   'POST local/discussions/:id/close': { response: { discussion: LocalDiscussion } }
   // Local requirement responses carry the HTTP view (`LocalIssueView`), whose `slicesFinished` is derived per read.
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }
-  'POST local/issues': { body: { title?: string; body?: string; project: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }
+  'POST local/issues': { body: { title?: string; body?: string; project: string; discussion?: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }
   'GET local/issues/:id': { response: { issue: LocalIssueView; project: LocalProjectView | null; thread: ThreadDetailView; replies: Receipt[] } }
   'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssueView } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssueView } }

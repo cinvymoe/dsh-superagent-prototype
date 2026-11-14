@@ -186,8 +186,9 @@ export class Runtime extends Service implements SourceHost {
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
-      this.local = new LocalIssues({ store, stateDir: machine.stateDir, receive: trigger => this.passes.receive(trigger) })
       this.discussions = new Discussions({ store, receive: trigger => this.passes.receive(trigger) })
+      this.local = new LocalIssues({ store, stateDir: machine.stateDir, discussions: this.discussions,
+        receive: trigger => this.passes.receive(trigger) })
       // Asking is answered in the background, so a request never waits for a forked Session; a stop leaves the question `asked`.
       this.localQuestions = new LocalQuestions({ store, local: this.local,
         answers: new Questions({ context: ctx, store, sessions, lifetime: this.lifetime }), lifetime: this.lifetime,

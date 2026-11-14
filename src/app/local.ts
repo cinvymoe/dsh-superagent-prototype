@@ -7,19 +7,27 @@ import { WORKER_COMMANDS, commandName } from '../infra/environment.ts'
 import { LIMITS } from '../limits.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
+import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalDiscussion, type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
 
 export interface LocalIssuesHost {
-  readonly store: Pick<Store, 'get' | 'set' | 'keys' | 'read' | 'tickets' | 'triggers' | 'threads'>
+  readonly store: Pick<Store, 'get' | 'set' | 'delete' | 'keys' | 'read' | 'tickets' | 'triggers' | 'threads'>
   /** Directory under which every requirement's images are stored, in `local-images/<issue id>/`. */
   readonly stateDir: string
+  /** The discussion records a requirement may be created from; `Discussions` provides `get` and `link`. */
+  readonly discussions: DiscussionLinks
   receive(trigger: Trigger): ReceiveResult
   now?(): string
 }
 
-export interface LocalIssueInput { title?: string; body?: string; author?: string; project: string; images?: LocalImageInput[] }
+/** The discussion side of creating a requirement: its record, and the one requirement it may record. */
+export interface DiscussionLinks {
+  get(id: string): LocalDiscussion | undefined
+  link(id: string, issueId: string): LocalDiscussion | undefined
+}
+
+export interface LocalIssueInput { title?: string; body?: string; author?: string; project: string; images?: LocalImageInput[]; discussion?: string }
 export interface LocalProjectInput { name: string; repository: string; worktreeRoot?: string; prepare?: string; blockedCommands?: string[] }
 export interface LocalProjectFields { name: string; repository?: string; intakeRepository?: string; codeRepository?: string; chain?: string; worktreeRoot?: string;
   prepare?: string; blockedCommands?: string[] }
@@ -216,6 +224,9 @@ export class LocalIssues {
   /** Create the issue and submit its original requirement as the first Trigger of its Thread. */
   create(input: LocalIssueInput): LocalIssue {
     if (!this.project(input.project)) throw new UserError('unknownProject')
+    // A requirement made from a discussion is checked before anything is written: the discussion must exist, must not have
+    // created one already, and keeps its own project, so a refused create leaves both records as they were.
+    const discussion = this.creationDiscussion(input)
     const description = (input.body ?? '').trim()
     // A title given by an older caller wins; a description-only submission names itself after its first non-empty line.
     const title = input.title?.trim() || requirementTitle(description)
@@ -226,18 +237,39 @@ export class LocalIssues {
     const images = storeRequirementImages(this.host.stateDir, id, input.images ?? [])
     const issue: LocalIssue = {
       id, title, body: description, author: input.author?.trim() || LOCAL_ACTOR,
-      project: input.project, ...(images.length ? { images } : {}), createdAt: at, updatedAt: at, state: 'open',
+      project: input.project, ...(discussion ? { discussionId: discussion.id } : {}), ...(images.length ? { images } : {}),
+      createdAt: at, updatedAt: at, state: 'open',
     }
     try { this.host.store.set(KV.local.issue(id), issue) }
     catch (error) {
       if (images.length) rmSync(requirementImagesDir(this.host.stateDir, id), { recursive: true, force: true })
       throw error
     }
+    if (discussion) {
+      try {
+        if (!this.host.discussions.link(discussion.id, id)) throw new UserError('unknownDiscussion', { discussion: discussion.id })
+      } catch (error) {
+        // Both records are written or neither is: a link refused here leaves no requirement behind.
+        this.host.store.delete(KV.local.issue(id))
+        if (images.length) rmSync(requirementImagesDir(this.host.stateDir, id), { recursive: true, force: true })
+        throw error
+      }
+    }
     // A derived title is already the description's first line, so the thread's original message is the description once,
     // without prefixing a copy of it; an explicit title keeps its separate heading. Images add their absolute paths.
     const text = !description ? title : input.title?.trim() ? `${title}\n\n${description}` : description
     this.host.receive(localTrigger({ issue, text: this.requirementText(issue, text), at, id: key('local-trigger', id, at) }))
     return issue
+  }
+
+  /** The discussion a requirement is being created from, refused when unknown, already used, or in another project. */
+  private creationDiscussion(input: LocalIssueInput): LocalDiscussion | undefined {
+    if (input.discussion === undefined) return undefined
+    const discussion = this.host.discussions.get(input.discussion)
+    if (!discussion) throw new UserError('unknownDiscussion', { discussion: input.discussion })
+    if (discussion.issueId !== undefined) throw new UserError('discussionLinked', { discussion: discussion.id, issue: discussion.issueId })
+    if (discussion.project !== input.project) throw new UserError('discussionProject', { project: discussion.project })
+    return discussion
   }
 
   /** The submitted text plus one absolute path per image, so a worker can read the image the person attached. */
