@@ -152,7 +152,8 @@ export async function startRuntime(seed?: (store: Store) => void) {
     [`${AGENT} api repos/acme/project --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/project","push":true}\n',
     [`${AGENT} api repos/acme/readonly --jq {name: .full_name, push: .permissions.push}`]: '{"name":"acme/readonly","push":false}\n',
     // Repositories the management-route specs create projects with; each is readable and pushable.
-    ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative']
+    ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative', 'demo', 'demo-issues', 'other-issues',
+      'protected', 'protected-issues', 'rooted-issues', 'plain-issues', 'omitted-issues', 'blank-issues', 'relative-issues', 'alpha-issues', 'beta-issues']
       .map(name => [`${AGENT} api repos/acme/${name} --jq {name: .full_name, push: .permissions.push}`, `{"name":"acme/${name}","push":true}\n`])),
     [`${BOT} auth status`]: JSON.stringify({ appId: 'cli_bot', brand: 'feishu', identities: { bot: { status: 'ready' } } }),
     [`${BOT} config strict-mode`]: 'strict-mode: bot (source: profile)',

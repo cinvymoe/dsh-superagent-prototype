@@ -216,7 +216,7 @@ it('creates projects over HTTP and keeps requirements scoped to them', async () 
 })
 
 it('accepts an optional absolute worktree root over HTTP and refuses a relative one', async () => {
-  const created = await h.api('POST', 'local/projects', { name: 'Rooted', intakeRepository: 'acme/intake', codeRepository: 'acme/rooted',
+  const created = await h.api('POST', 'local/projects', { name: 'Rooted', intakeRepository: 'acme/rooted-issues', codeRepository: 'acme/rooted',
     worktreeRoot: '/srv/worktrees' })
   expect(created.status).toBe(200)
   const project = created.body.project as { id: string; worktreeRoot?: string }
@@ -228,21 +228,21 @@ it('accepts an optional absolute worktree root over HTTP and refuses a relative 
   const detail = await h.api('GET', `local/issues/${(submitted.body.issue as { id: string }).id}`)
   expect(detail.body.project).toMatchObject({ id: project.id, worktreeRoot: '/srv/worktrees' })
   // A relative root is a structured refusal that explains the rule, and nothing is stored.
-  const relative = await h.api('POST', 'local/projects', { name: 'Relative', intakeRepository: 'acme/intake', codeRepository: 'acme/relative',
+  const relative = await h.api('POST', 'local/projects', { name: 'Relative', intakeRepository: 'acme/relative-issues', codeRepository: 'acme/relative',
     worktreeRoot: 'relative/root' })
   expect(relative.status).toBe(400)
   expect(relative.body).toMatchObject({ code: 'projectWorktreeRoot', error: expect.stringContaining('absolute path') })
   expect((await h.api('GET', 'local/projects')).body.projects).not.toContainEqual(expect.objectContaining({ name: 'Relative' }))
   // An empty string means unconfigured; a legacy record without the field still answers.
-  const plain = await h.api('POST', 'local/projects', { name: 'Plain', intakeRepository: 'acme/intake', codeRepository: 'acme/plain',
+  const plain = await h.api('POST', 'local/projects', { name: 'Plain', intakeRepository: 'acme/plain-issues', codeRepository: 'acme/plain',
     worktreeRoot: '' })
   expect(plain.status).toBe(200)
   expect(plain.body.project).not.toHaveProperty('worktreeRoot')
   // Omitted and whitespace-only mean unconfigured too: the route trims, and the retry alignment froze blank = no root.
-  const omitted = await h.api('POST', 'local/projects', { name: 'Omitted', intakeRepository: 'acme/intake', codeRepository: 'acme/omitted' })
+  const omitted = await h.api('POST', 'local/projects', { name: 'Omitted', intakeRepository: 'acme/omitted-issues', codeRepository: 'acme/omitted' })
   expect(omitted.status).toBe(200)
   expect(omitted.body.project).not.toHaveProperty('worktreeRoot')
-  const blank = await h.api('POST', 'local/projects', { name: 'Blank', intakeRepository: 'acme/intake', codeRepository: 'acme/blank',
+  const blank = await h.api('POST', 'local/projects', { name: 'Blank', intakeRepository: 'acme/blank-issues', codeRepository: 'acme/blank',
     worktreeRoot: '   ' })
   expect(blank.status).toBe(200)
   expect(blank.body.project).not.toHaveProperty('worktreeRoot')
@@ -567,23 +567,100 @@ describe('project repository chains', () => {
   })
 
   it('updates only the edited project\'s chain and leaves every other project\'s chain equal', async () => {
-    const a = await create('Alpha', 'acme/intake', 'acme/rooted')
-    const b = await create('Beta', 'acme/intake', 'acme/other')
+    const a = await create('Alpha', 'acme/alpha-issues', 'acme/rooted')
+    const b = await create('Beta', 'acme/beta-issues', 'acme/other')
     const rowOfB = { ...chains().find(row => row.id === b.id)! }
     const updated = await h.api('PUT', `local/projects/${a.id}`, { name: 'Alpha renamed', codeRepository: 'acme/project' })
     expect(updated.status).toBe(200)
-    expect(updated.body.project).toMatchObject({ id: a.id, name: 'Alpha renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
-    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project', cli: '' })
+    expect(updated.body.project).toMatchObject({ id: a.id, name: 'Alpha renamed', intakeRepository: 'acme/alpha-issues', codeRepository: 'acme/project' })
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/alpha-issues', codeRepository: 'acme/project', cli: '' })
     // The other project's row is deeply equal to its snapshot, with no new row appended.
     expect(chains().find(row => row.id === b.id)).toEqual(rowOfB)
     expect(chains().filter(row => row.id === b.id)).toHaveLength(1)
+    expect(chains().filter(row => row.id === a.id)).toHaveLength(1)
+    expect(chains()).toHaveLength(3)
     expect((await projects()).find(row => row.id === a.id))
-      .toMatchObject({ name: 'Alpha renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+      .toMatchObject({ name: 'Alpha renamed', intakeRepository: 'acme/alpha-issues', codeRepository: 'acme/project' })
     // A bad root on update is refused before either record changes.
     const refused = await h.api('PUT', `local/projects/${a.id}`, { worktreeRoot: 'relative/root' })
     expect(refused.status).toBe(400)
     expect(refused.body).toMatchObject({ code: 'projectWorktreeRoot' })
-    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project', cli: '' })
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/alpha-issues', codeRepository: 'acme/project', cli: '' })
+  })
+
+  it('refuses an intake repository another project or chain already receives from, without writing either', async () => {
+    const demo = await create('Demo chain', 'acme/demo-issues', 'acme/demo')
+    const other = await create('Other chain', 'acme/other-issues', 'acme/other')
+    const chainSnapshot = chains().map(chain => ({ ...chain }))
+    const projectSnapshot = (await projects()).map(row => ({ ...row }))
+    const attempts = [
+      { name: 'Duplicate project', intakeRepository: 'acme/demo-issues', codeRepository: 'acme/plain', code: 'projectIntakeTaken',
+        values: { repository: 'acme/demo-issues', project: 'Demo chain' } },
+      // GitHub repository names are case-insensitive, so a different spelling is occupied too.
+      { name: 'Duplicate case', intakeRepository: 'ACME/DEMO-ISSUES', codeRepository: 'acme/plain', code: 'projectIntakeTaken',
+        values: { repository: 'ACME/DEMO-ISSUES', project: 'Demo chain' } },
+      // The default chain has no project, so its refusal names the chain instead.
+      { name: 'Ownerless chain', intakeRepository: 'acme/widgets', codeRepository: 'acme/plain', code: 'chainIntakeTaken',
+        values: { repository: 'acme/widgets', chain: 'default' } },
+    ]
+    for (const { code, values, ...body } of attempts) {
+      const answer = await h.api('POST', 'local/projects', body)
+      expect(answer.status).toBe(400)
+      expect(answer.body).toMatchObject({ code, values })
+    }
+    // Moving another project's intake repository onto Demo's is refused too.
+    const moved = await h.api('PUT', `local/projects/${other.id}`, { intakeRepository: 'acme/demo-issues' })
+    expect(moved.status).toBe(400)
+    expect(moved.body).toMatchObject({ code: 'projectIntakeTaken', values: { repository: 'acme/demo-issues', project: 'Demo chain' } })
+    // Every refusal left both projects and the chain list exactly as they were.
+    expect((await projects()).map(row => ({ ...row }))).toEqual(projectSnapshot)
+    expect(chains()).toEqual(chainSnapshot)
+    // The owning project can still edit itself while keeping its own intake repository.
+    const kept = await h.api('PUT', `local/projects/${demo.id}`, { name: 'Demo renamed', intakeRepository: 'acme/demo-issues', codeRepository: 'acme/demo' })
+    expect(kept.status).toBe(200)
+    expect(chains().filter(row => row.intakeRepository === 'acme/demo-issues')).toHaveLength(1)
+  })
+
+  it('refuses deleting or renaming a chain a project uses, and the project keeps executing through it', async () => {
+    const protectedProject = await create('Protected chain', 'acme/protected-issues', 'acme/protected')
+    const block = h.runtime.settings.block('source:github') as { revision: number
+      value: { enabled: boolean; config: { chains: Chain[] } } }
+    const stored = structuredClone(block.value.config)
+    const save = (chains: Chain[]) => h.api('PUT', 'settings/source:github',
+      { value: { enabled: block.value.enabled, config: { ...block.value.config, chains } }, revision: block.revision })
+    // Deleting the row drops the chain id the project names.
+    const deleted = await save(block.value.config.chains.filter(chain => chain.id !== protectedProject.id))
+    expect(deleted.status).toBe(400)
+    expect(deleted.body).toMatchObject({ code: 'projectChainInUse', values: { chain: protectedProject.id, project: 'Protected chain' } })
+    // Renaming it changes the same id, which cuts the project off just as well.
+    const renamed = await save(block.value.config.chains.map(chain => chain.id === protectedProject.id ? { ...chain, id: 'renamed' } : chain))
+    expect(renamed.status).toBe(400)
+    expect(renamed.body).toMatchObject({ code: 'projectChainInUse', values: { chain: protectedProject.id, project: 'Protected chain' } })
+    // Neither refusal changed what is stored.
+    expect(h.runtime.store.settings().sources.github!.config).toEqual(stored)
+    // The project still executes through the chain it kept.
+    const issue = h.runtime.local.create({ title: 'Still chained', project: protectedProject.id })
+    const ticket = await accept(issue.id)
+    expect(ticket.execution).toMatchObject({ chain: protectedProject.id, repository: 'acme/protected', intakeRepository: 'acme/protected-issues' })
+  })
+
+  it('still edits chains no project uses, and refuses two chains receiving the same intake repository', async () => {
+    const block = h.runtime.settings.block('source:github') as { revision: number
+      value: { enabled: boolean; config: { chains: Chain[] } } }
+    // A chain no project owns stays editable from the Source card.
+    const edited = block.value.config.chains.map(chain => chain.id === 'default' ? { ...chain, intakeRepository: 'acme/other' } : chain)
+    const allowed = await h.api('PUT', 'settings/source:github',
+      { value: { enabled: block.value.enabled, config: { ...block.value.config, chains: edited } }, revision: block.revision })
+    expect(allowed.status).toBe(200)
+    const next = h.runtime.settings.block('source:github') as { revision: number
+      value: { enabled: boolean; config: { chains: Chain[] } } }
+    const duplicated = [...next.value.config.chains, { id: 'copy', intakeRepository: 'acme/other', codeRepository: 'acme/plain', cli: '' }]
+    const refused = await h.api('PUT', 'settings/source:github',
+      { value: { enabled: next.value.enabled, config: { ...next.value.config, chains: duplicated } }, revision: next.revision })
+    expect(refused.status).toBe(400)
+    expect(refused.body).toMatchObject({ code: 'chainIntakeTaken', values: { chain: 'default', repository: 'acme/other' } })
+    // The refused save stored nothing.
+    expect(h.runtime.store.settings().sources.github!.config).toEqual(next.value.config)
   })
 
   it('executes a project ticket through the project\'s own chain', async () => {
@@ -629,6 +706,16 @@ describe('project repository chains', () => {
     expect(ticket.execution?.chain).toBe('default')
     // Binding only writes project records: the stored chain configuration is unchanged.
     expect(h.runtime.store.settings().sources.github!.config).toEqual(chainsAfterBinding)
+    // Editing a legacy default-bound project updates that one default row; it never adds a second chain under the project id.
+    const rowsBeforeEdit = chains().map(row => ({ ...row }))
+    const edited = await h.api('PUT', 'local/projects/p-match', { codeRepository: 'acme/project' })
+    expect(edited.status).toBe(200)
+    expect((edited.body.project as { chain?: string }).chain).toBe('default')
+    expect(chains()).toHaveLength(rowsBeforeEdit.length)
+    expect(chains().find(row => row.id === 'default')).toEqual({ id: 'default', intakeRepository: 'acme/widgets', codeRepository: 'acme/project', cli: '' })
+    expect(chains().some(row => row.id === 'p-match')).toBe(false)
+    expect(h.runtime.local.project('p-match')).toMatchObject({ chain: 'default', repository: 'acme/widgets',
+      intakeRepository: 'acme/widgets', codeRepository: 'acme/project' })
   })
 })
 

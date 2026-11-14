@@ -119,6 +119,13 @@ describe('project edit documentation', () => {
     expect(panel).toContain('editing one project changes only that project\'s chain and leaves every other project\'s two repositories as they were')
     expect(panel).toContain('A refused save shows the localized reason and keeps the page and the typed values')
   })
+  it('states that an intake repository belongs to one chain and that a project chain cannot be dropped from the Source', () => {
+    const panel = prose('docs/005-panel.md'), architecture = prose('docs/007-architecture.md')
+    expect(panel).toContain('An intake repository belongs to one chain only')
+    expect(panel).toContain('Deleting or renaming a chain a project uses is refused with that project named')
+    expect(architecture).toContain('an intake repository may belong to only one chain')
+    expect(architecture).toContain('a chain a project uses cannot be deleted or renamed from the Source card')
+  })
   it('names the edit page in the route and project form module rows and the isolation test row', () => {
     const architecture = prose('docs/007-architecture.md')
     expect(architecture).toContain('the create page and the project edit page')
