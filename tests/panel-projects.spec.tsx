@@ -175,6 +175,25 @@ it('creates a project on its own page, cancels without a request, and returns to
   expect(server.requests.some(request => request.path === 'local/issues?project=p-fixture-2')).toBe(true)
 })
 
+it('keeps a refused project on its form with the localized reason', async () => {
+  at({ page: 'requirements' })
+  await mount()
+  await openCreate()
+  server.refuseProjectCreate = { status: 400, error: 'Intake repository acme/intake is already used by project Widgets',
+    code: 'projectIntakeTaken', values: { repository: 'acme/intake', project: 'Widgets' } }
+  await type(field(zh['discuss.projectName']), 'Duplicate')
+  await type(field(zh['discuss.projectIntakeRepository']), 'acme/intake')
+  await type(field(zh['discuss.projectCodeRepository']), 'acme/plain')
+  await click(zh['discuss.createProject'])
+  // A 400 arrives as a structured user error, so the panel shows the localized sentence naming the owning project.
+  expect(document.querySelector('.dt-toast')?.textContent)
+    .toBe(zh['userError.projectIntakeTaken'].replace('{repository}', 'acme/intake').replace('{project}', 'Widgets'))
+  // The creation page and its values stay, so the person can choose another intake repository.
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.newProject'])
+  expect(field(zh['discuss.projectIntakeRepository']).value).toBe('acme/intake')
+  expect(server.localProjects).toEqual([])
+})
+
 const putRequests = () => server.requests.filter(request => request.method === 'PUT' && request.path.startsWith('local/projects/'))
 /** The project form's inputs, found by their labels; editing pre-fills them from the stored project. */
 const editButton = () => {

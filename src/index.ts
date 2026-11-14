@@ -2,7 +2,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import { Runtime } from './app/runtime.ts'
-import { workerEnvironment, withoutDirectory, workerBin } from './infra/environment.ts'
 import { Config, machineOf, type DeploymentConfig } from './deployment.ts'
 
 export const name = 'dsh-superagent'
@@ -10,20 +9,16 @@ export const inject = ['agents', 'sessionController', 'sessionPersistence', 'wor
 export { Config }
 export async function apply(ctx: Context, config: DeploymentConfig): Promise<void> {
   const machine = machineOf(config)
-  const path = withoutDirectory(process.env.PATH ?? '', workerBin(machine.stateDir))
   // Worker Sessions run in the same process when dsh-superagent is hosted by the main Web UI, so their account-bound git and
-  // gh environment is provided to the worker shell instead of being applied to the host's process environment.
-  ctx.provide('dshSuperagentWorkerEnv', { environment: () => workerEnvironment(machine.stateDir, path) })
-  // The management panel provides its own settings UI, so disable DSH's auto-generated settings page.
-  ctx.inject(['settings'], child => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
-  // Volatile limits update in place without a restart; account changes restart dsh-superagent. DSH's settings service stops
-  // serving this entry while dsh-superagent restarts and rereads it only on a configuration write, so trigger `describe()`
-  // after restart to keep open configuration forms editable without a page reload.
-  // TODO: drop the read once DSH's settings service rereads an entry whose plugin becomes active again.
+  // gh environment is provided to the worker shell instead of being applied to the host's process environment. The provider
+  // takes the calling Session so each ticket's shell gets its chain's shims and credential helper.
   const restart = (): void => {
     ctx.fiber.restart().then(() => { ctx.get('settings')?.describe() }).catch((error: unknown) => { ctx.logger.error('dsh-superagent restart failed: %s', String(error)) })
   }
   const runtime = new Runtime(ctx, machine, restart)
+  ctx.provide('dshSuperagentWorkerEnv', { environment: (sessionId?: string) => runtime.sessionEnvironment(sessionId) })
+  // The management panel provides its own settings UI, so disable DSH's auto-generated settings page.
+  ctx.inject(['settings'], child => { child.effect(() => child.settings.configure({ auto: false }, ctx.fiber)) })
   ctx.effect(() => async () => { await runtime.stop() })
   await runtime.ready
   ctx.logger.info(runtime.configured() ? 'dsh-superagent ready; the Superagent sidebar entry opens the management panel' : `dsh-superagent is waiting for setup: ${runtime.setupProblem?.detail ?? ''}`)

@@ -156,7 +156,8 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
     ...Object.fromEntries(['intake', 'widgets', 'other', 'rooted', 'plain', 'project'].map(name =>
       [`${PROJECT_BOT} api repos/acme/${name} --jq {name: .full_name, push: .permissions.push}`, `{"name":"acme/${name}","push":true}\n`])),
     // Repositories the management-route specs create projects with; each is readable and pushable.
-    ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative']
+    ...Object.fromEntries(['other', 'rooted', 'plain', 'omitted', 'blank', 'spaced', 'legacy', 'relative', 'demo', 'demo-issues', 'other-issues',
+      'protected', 'protected-issues', 'rooted-issues', 'plain-issues', 'omitted-issues', 'blank-issues', 'relative-issues', 'alpha-issues', 'beta-issues']
       .map(name => [`${AGENT} api repos/acme/${name} --jq {name: .full_name, push: .permissions.push}`, `{"name":"acme/${name}","push":true}\n`])),
     [`${BOT} auth status`]: JSON.stringify({ appId: 'cli_bot', brand: 'feishu', identities: { bot: { status: 'ready' } } }),
     [`${BOT} config strict-mode`]: 'strict-mode: bot (source: profile)',
@@ -166,13 +167,20 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
   }
   /** A prepare command (`sh -c`) waits for this while it is set. */
   const hooks: { prepare?: Promise<void> } = {}
-  const subprocess = { spawn: vi.fn((spec: { argv: readonly string[] }) => {
+  const subprocess = { spawn: vi.fn((spec: { argv: readonly string[]; env?: Record<string, string> }) => {
     const argv = [...spec.argv]
     while (argv[0] === 'env' || /^[A-Z_]+=/.test(argv[0] ?? '')) argv.shift()
     const reader = (text: string) => ({ readFrom: () => ({ text, nextOffset: text.length, lossy: false }) })
     const exited = { exitCode: 0, signal: null }
     const done = argv[0] === 'sh' && hooks.prepare ? hooks.prepare.then(() => exited) : Promise.resolve(exited)
-    return { done, collected: { stdout: reader(answers[argv.join(' ')] ?? ''), stderr: reader('') } }
+    const key = argv.join(' ')
+    // Setup checks each chain's own git configuration, which the command names in GIT_CONFIG_GLOBAL; the file carries
+    // that chain's own CLI helper, so a second chain's wrapper is expected here too.
+    const gitconfig = spec.env?.GIT_CONFIG_GLOBAL
+    const helpers: Record<string, string> = { [workerGitConfig(directory)]: AGENT, [workerGitConfig(directory, 'beta')]: PROJECT_BOT }
+    const text = key === 'git config -z --show-origin --get-all credential.https://github.com.helper' && gitconfig
+      ? `file:${gitconfig}\0${credentialHelper(helpers[gitconfig] ?? AGENT)}\0` : answers[key] ?? ''
+    return { done, collected: { stdout: reader(text), stderr: reader('') } }
   }) }
   const agents = new Map<string, FakeAgent>()
   /** Each Session's next step, which takes the messages that wait for one. */

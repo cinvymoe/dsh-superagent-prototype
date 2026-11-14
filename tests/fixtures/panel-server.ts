@@ -142,6 +142,8 @@ export interface PanelServer {
   refuseIssueCreate?: { status: 400; error: string; code: string; values: Record<string, string> }
   /** When set, a project write naming this CLI is refused with the setup problem the host would report. */
   refuseProjectCli?: { cli: string; code: SetupCode; values: Record<string, string>; detail: string }
+  /** When set, the create-project route refuses with this JSON error (and creates nothing). */
+  refuseProjectCreate?: { status: 400; error: string; code: string; values: Record<string, string> }
   threads: ThreadRow[]
   threadPages: (key: string, query: { before?: string; around?: string }) => ThreadPageView | undefined
   person: TicketRow[]; search: Pick<ApiResponse<'GET search'>, 'items' | 'threads'>; history: HistoryView
@@ -437,6 +439,11 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'GET tickets/:id': { answer: ({ params }) => server.ticketDetails[params.id] ?? refuse(404, 'Ticket not found') },
   'GET local/projects': { answer: () => ({ projects: server.localProjects }) },
   'POST local/projects': { body: true, answer: ({ body }) => {
+    // The host refuses an intake repository another project receives from; mirror it so the panel's refusal path stays covered.
+    if (server.refuseProjectCreate) {
+      const { status, error, code, values } = server.refuseProjectCreate
+      return refuse(status, error, { code, values })
+    }
     // The host refuses a relative root with a structured user error; mirror it so the panel's refusal path stays covered.
     if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
       return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
