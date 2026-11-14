@@ -269,7 +269,7 @@ export class Sessions {
     const host = this.host
     const master = agent.id === host.masterId
     const ticket = master ? undefined : this.ticketOf(agent)
-    if (!master && !ticket) { this.limitSubagent(agent); return }
+    if (!master && !ticket) { await this.limitSubagent(agent); return }
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     // The role's mounted capabilities come from this Session's own scope: enabled ones are loaded now, and the tool refresh
@@ -309,6 +309,8 @@ export class Sessions {
       // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
       binding.disposers.push(...this.workOnly(agent, ticket!, binding))
     }
+    // The first turn must see the capabilities the role enables, not just the ones whose import happened to finish first.
+    await binding.capabilities?.settle()
   }
   /**
    * The main Session's tools: its required core tools plus the tools of the plugins the saved `agents` block enables for it.
@@ -448,7 +450,7 @@ export class Sessions {
    * permissions, gets the same work tools as the worker, and none once the worker's ticket ended. Any other agent is left as
    * it is.
    */
-  private limitSubagent(agent: Agent): void {
+  private async limitSubagent(agent: Agent): Promise<void> {
     let parent = agent.session.header.parentSession
     // Up the subagents' parents to the worker, which are loaded while their subagents run.
     for (let depth = 0; parent !== undefined && ticketOfSession(parent) === undefined && depth < 8; depth++) {
@@ -463,6 +465,7 @@ export class Sessions {
     this.bindings.set(agent, binding)
     binding.capabilities = new Capabilities(agent.ctx)
     binding.disposers.push(...this.workOnly(agent, ticket, binding))
+    await binding.capabilities.settle()
   }
   /** Register the skills of a prompt version in the agent's skill scope, in place of an earlier version's. */
   private bindSkills(binding: SessionBinding, version: PromptVersion): void {
