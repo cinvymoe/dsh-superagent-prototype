@@ -6,11 +6,11 @@ import { stopSubagents, untilQuiet } from '../src/executor/background.ts'
 import { jobRegistry } from './fixtures/host.ts'
 
 /** A context with DSH's job registry and subagents, and an idle worker agent with one live subagent, `child-1`. */
-function setup(waitForChildren: (agent: Agent) => Promise<boolean>, drainChildren: () => Promise<void> = async () => {}) {
+function setup(waitForTreeWork: (agent: Agent) => Promise<boolean>, drainChildren: () => Promise<void> = async () => {}) {
   const jobs = jobRegistry()
   const agent = { id: 'worker-t1', status: 'idle', whenIdle: async () => {}, inbox: { nextTurn: [], nextStep: [] }, cancel: vi.fn() } as unknown as
     Agent & { status: string; cancel: ReturnType<typeof vi.fn> }
-  const subagents = { waitForChildren: vi.fn(waitForChildren), listChildren: async () => [{ id: 'child-1' }], drainChildren: vi.fn(drainChildren) }
+  const subagents = { waitForTreeWork: vi.fn(waitForTreeWork), listChildren: async () => [{ id: 'child-1' }], drainChildren: vi.fn(drainChildren) }
   const services: Record<string, unknown> = { jobs: jobs.service, subagents }
   const ctx = { get: (name: string) => services[name], agents: { get: () => agent } } as unknown as Context
   return { ctx, agent, jobs, subagents }
@@ -59,7 +59,7 @@ it('joins a worker\'s subagents once for the looks that wait on them, as DSH can
     stop.abort()
     expect(await quiet).toBe(false)
   }
-  expect(subagents.waitForChildren).toHaveBeenCalledTimes(1)
+  expect(subagents.waitForTreeWork).toHaveBeenCalledTimes(1)
 })
 
 it('gives up a release of subagents that does not end within 10 seconds, and cancels the turn their ends woke', async () => {

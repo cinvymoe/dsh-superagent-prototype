@@ -15,7 +15,10 @@ interface Jobs {
 }
 /** What the Executor uses of DSH's subagents: joining a worker's subagents that work, its subagents, and releasing them. */
 interface Subagents {
-  waitForChildren(parent: Agent): Promise<boolean>
+  /** DSH 0.2.2+ name of the join. */
+  waitForTreeWork?(parent: Agent): Promise<boolean>
+  /** DSH 0.2.1 name of the join, kept for hosts that still expose it. */
+  waitForChildren?(parent: Agent): Promise<boolean>
   listChildren(parentSessionId: string): Promise<readonly { id: string }[]>
   drainChildren(parent: Agent, childIds: readonly string[]): Promise<void>
 }
@@ -49,7 +52,10 @@ const joins = new WeakMap<Agent, Promise<boolean>>()
 function childrenEnd(subagents: Subagents, agent: Agent): Promise<boolean> {
   let join = joins.get(agent)
   if (!join) {
-    join = subagents.waitForChildren(agent).finally(() => { joins.delete(agent) })
+    const wait = subagents.waitForTreeWork ?? subagents.waitForChildren
+    join = wait === undefined
+      ? Promise.resolve(false)
+      : wait.call(subagents, agent).finally(() => { joins.delete(agent) })
     joins.set(agent, join)
   }
   return join
