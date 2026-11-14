@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The New requirement and Requirements pages scoped to the current local project, and the standalone project creation page.
+// The Requirements page scoped to the current local project, its requirement dialog, and the standalone project page.
 import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
@@ -24,16 +24,22 @@ const input = (label: string): HTMLInputElement => {
   if (!match) throw new Error(`No input ${label}`)
   return match
 }
-/** The description textarea of the New requirement page. */
+/** The description textarea of the requirement dialog. */
 const area = (label: string): HTMLTextAreaElement => {
   const match = all('textarea').find(element => element.getAttribute('placeholder') === label || element.getAttribute('aria-label') === label) as HTMLTextAreaElement | undefined
   if (!match) throw new Error(`No textarea ${label}`)
   return match
 }
 const submitButton = (): HTMLButtonElement => {
-  const match = all('#dt-page button').find(button => button.textContent?.trim() === zh['discuss.submit'])
+  const match = all('button').find(button => button.textContent?.trim() === zh['discuss.submit'])
   if (!match) throw new Error('No submit button')
   return match as HTMLButtonElement
+}
+/** The New requirement button on the requirement list opens the requirement dialog rather than a separate page. */
+const openRequirement = async () => {
+  const button = all('button').find(item => item.textContent?.trim() === zh['discuss.new'])
+  if (!button) throw new Error('No New requirement button')
+  await click(button)
 }
 /** The top-level New project button of the project bar, which opens its own page. */
 const openCreate = async () => {
@@ -116,27 +122,32 @@ it('omits the worktree root from the payload when the field is left empty', asyn
   expect(request.body).not.toHaveProperty('worktreeRoot')
 })
 
-it('shows only the current project and one description field on New requirement', async () => {
+it('opens one description dialog from the requirement list and keeps the page head on the current project', async () => {
   server.localProjects = [PROJECT, { ...PROJECT, id: 'p-other', name: 'Other', repository: 'acme/other' }]
   server.localIssues = [localIssue('Existing requirement')]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Existing requirement'])
+  // The page head carries only the entry that opens the current project's edit form; the list carries the create button.
+  expect(all('.dt-page-head button').map(button => button.textContent?.trim())).toEqual([zh['discuss.editProject']])
+  expect(all('.dt-modal')).toHaveLength(0)
+  await openRequirement()
+  expect(document.querySelector('.dt-modal h2')?.textContent).toBe(zh['discuss.new'])
   expect(text()).toContain(zh['discuss.newSubtitle'])
   expect(text()).toContain('acme/widgets')
-  // The page has no title text input (only the hidden image file picker), no requirement list and no back button, in
-  // particular none labelled Overview; its head carries only the entry that opens the current project's edit form.
-  expect(all('#dt-page input').filter(element => (element as HTMLInputElement).type !== 'file')).toHaveLength(0)
-  expect(all('.dt-cards')).toHaveLength(0)
-  expect(all('.dt-page-head button').map(button => button.textContent?.trim())).toEqual([zh['discuss.editProject']])
-  expect(all('#dt-page button').some(button => button.textContent?.trim() === zh['tab.overview'])).toBe(false)
-  expect(text()).not.toContain('Existing requirement')
+  // The dialog has one description box and only the hidden image picker; there is no title input.
+  expect(all('.dt-modal input').filter(element => (element as HTMLInputElement).type !== 'file')).toHaveLength(0)
+  await click(all('.dt-modal button').find(button => button.textContent?.trim() === zh['cancel'])!)
+  expect(all('.dt-modal')).toHaveLength(0)
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Existing requirement'])
 })
 
 it('keeps submission disabled while the description is blank and submits the description alone', async () => {
   server.localProjects = [PROJECT]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
+  await openRequirement()
   expect(submitButton().disabled).toBe(true)
   await type(area(zh['discuss.descriptionPlaceholder']), '   ')
   expect(submitButton().disabled).toBe(true)
@@ -147,7 +158,8 @@ it('keeps submission disabled while the description is blank and submits the des
   const posted = server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')!
   expect(posted).toMatchObject({ method: 'POST', body: { body: description, project: 'p-fixture' } })
   expect(posted.body).not.toHaveProperty('title')
-  // The detail names the requirement after the description's first line and shows the text exactly once.
+  // The dialog closes as the detail opens, named after the description's first line, showing the text exactly once.
+  expect(all('.dt-modal')).toHaveLength(0)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Ship the widget')
   expect(text()).toContain('Details about the widget')
   expect(text().split('Details about the widget').length - 1).toBe(1)
@@ -662,7 +674,7 @@ it('shows the localized refusal when the worktree root is relative and stays on 
 
 /** Build an image file of the given name and content. The client trusts the declared type, so the bytes do not matter. */
 const imageFile = (name: string, content = 'x', type = 'image/png') => new File([content], name, { type })
-/** Choose files through the New requirement page's hidden picker, waiting until the FileReader results have rendered. */
+/** Choose files through the requirement dialog's hidden picker, waiting until the FileReader results have rendered. */
 async function selectImages(files: File[]) {
   const picker = input(zh['discuss.imagesChoose']) as HTMLInputElement
   Object.defineProperty(picker, 'files', { value: files, configurable: true })
@@ -676,8 +688,9 @@ async function selectImages(files: File[]) {
 
 it('selects several images with thumbnails and names, submits description and images together, and shows them in order', async () => {
   server.localProjects = [PROJECT]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
+  await openRequirement()
   const description = 'Ship the widget\n\nwith screenshots'
   await type(area(zh['discuss.descriptionPlaceholder']), description)
   expect(text()).toContain(zh['discuss.imagesHint'])
@@ -701,8 +714,9 @@ it('selects several images with thumbnails and names, submits description and im
 
 it('removes a chosen image before submitting, posting and rendering only the remaining one', async () => {
   server.localProjects = [PROJECT]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
+  await openRequirement()
   await type(area(zh['discuss.descriptionPlaceholder']), 'Only the second image')
   await selectImages([imageFile('one.png'), imageFile('two.png')])
   expect(all('.dt-image-choice')).toHaveLength(2)
@@ -719,8 +733,9 @@ it('removes a chosen image before submitting, posting and rendering only the rem
 
 it('refuses an unsupported type and an oversized file locally without submitting or showing a thumbnail', async () => {
   server.localProjects = [PROJECT]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
+  await openRequirement()
   await type(area(zh['discuss.descriptionPlaceholder']), 'Needs screenshots')
   await selectImages([new File(['x'], 'note.txt', { type: 'text/plain' })])
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['discuss.imagesRefuseType'].replace('{name}', 'note.txt'))
@@ -736,8 +751,9 @@ it('refuses an unsupported type and an oversized file locally without submitting
 it('keeps the description and chosen images and shows the localized error when the host refuses the create', async () => {
   server.localProjects = [PROJECT]
   server.refuseIssueCreate = { status: 400, error: 'refused', code: 'issueImageType', values: { name: 'bad.png' } }
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
+  await openRequirement()
   const description = 'Ship it with a bad image'
   await type(area(zh['discuss.descriptionPlaceholder']), description)
   await selectImages([imageFile('one.png'), imageFile('two.png')])
@@ -745,7 +761,8 @@ it('keeps the description and chosen images and shows the localized error when t
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.issueImageType'].replace('{name}', 'bad.png'))
   expect(area(zh['discuss.descriptionPlaceholder']).value).toBe(description)
   expect(all('.dt-image-choice')).toHaveLength(2)
-  // The refusal keeps the form on the New requirement page instead of opening a detail.
+  // The refusal keeps the dialog open over the requirement list instead of opening a detail.
+  expect(document.querySelector('.dt-modal')).not.toBeNull()
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
 })
 

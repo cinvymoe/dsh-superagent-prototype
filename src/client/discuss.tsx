@@ -1,18 +1,15 @@
-/** Requirement pages: submit a requirement, list the project's requirements, and review the Aligner's proposal. */
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { REQUIREMENT_IMAGES } from '../limits.ts'
+/** Requirement pages: list the project's requirements in a dialog-opened form, and review the Aligner's proposal. */
+import { useEffect, useState, type FormEvent } from 'react'
 import { alignmentRounds, currentAlignment, projectRepositories, requirementExecutionMode, type LocalAlignment, type LocalImage,
   type LocalIssue, type LocalIssueView } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
 import { Button, DisclosureRow, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
-import { SourceDiscussion, useDiscussionPrefill } from './discussions.tsx'
+import { SourceDiscussion } from './discussions.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
+import { RequirementDialog } from './requirement-dialog.tsx'
 import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
 import { MarkdownLite, PageHead, Section, SessionButton, When } from './widgets.tsx'
-
-/** One image chosen in the New requirement form: the FileReader data URL doubles as the thumbnail and the payload. */
-interface ChosenImage { name: string; mediaType: string; data: string; bytes: number; preview: string }
 
 /** Format a byte count with one decimal in B, KiB or MiB, for the image gallery's captions. */
 function formatBytes(bytes: number): string {
@@ -117,104 +114,6 @@ const executionLabel = (t: T, issue: LocalIssue) => t(requirementExecutionMode(i
 const executionTag = (t: T, issue: LocalIssue) =>
   <Tag tone={requirementExecutionMode(issue) === 'feature-exec' ? 'info' : 'neutral'}>{executionLabel(t, issue)}</Tag>
 
-/** New-requirement page: the current project's head and one description field; each submission becomes a Thread. */
-export function NewRequirementPage({ discussion: discussionId }: { discussion?: string } = {}) {
-  const { t, call, notify, navigate, project } = usePanel()
-  const { projects } = usePanelData()
-  const [description, setDescription] = useState('')
-  // A page opened from a discussion seeds its box once with that discussion's text, which stays fully editable.
-  const source = useDiscussionPrefill(discussionId, setDescription)
-  const active = projects.find(item => item.id === (source?.project ?? project)) ?? projects[0]
-  const [images, setImages] = useState<ChosenImage[]>([])
-  const [busy, setBusy] = useState(false)
-  const picker = useRef<HTMLInputElement>(null)
-  const choose = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = [...event.target.files ?? []]
-    // Clear the input so choosing the same file again still fires a change event.
-    event.target.value = ''
-    if (!files.length) return
-    const type = files.find(file => !(REQUIREMENT_IMAGES.mediaTypes as readonly string[]).includes(file.type))
-    const size = files.find(file => file.size > REQUIREMENT_IMAGES.bytes)
-    if (type) { notify(t('discuss.imagesRefuseType', { name: type.name })); return }
-    if (size) { notify(t('discuss.imagesRefuseSize', { name: size.name })); return }
-    if (images.length + files.length > REQUIREMENT_IMAGES.count) {
-      notify(t('discuss.imagesRefuseCount', { count: REQUIREMENT_IMAGES.count }))
-      return
-    }
-    const chosen = await Promise.all(files.map(file => new Promise<ChosenImage | undefined>(resolve => {
-      const reader = new FileReader()
-      reader.onload = () => resolve({ name: file.name, mediaType: file.type, data: String(reader.result), bytes: file.size,
-        preview: String(reader.result) })
-      reader.onerror = () => resolve(undefined)
-      reader.readAsDataURL(file)
-    })))
-    // A file that failed to read is left out; the others still join the selection.
-    setImages(current => [...current, ...chosen.filter((image): image is ChosenImage => image !== undefined)])
-  }
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const text = description.trim()
-    if (!text || busy || !active) return
-    setBusy(true)
-    try {
-      const { issue } = await call('POST local/issues', { body: { body: text, project: active.id,
-        ...(source ? { discussion: source.id } : {}),
-        ...(images.length ? { images: images.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}) } })
-      setDescription('')
-      setImages([])
-      navigate({ page: 'requirements', id: issue.id })
-    } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
-  }
-  return <>
-    <PageHead back={false} title={active ? active.name : t('discuss.new')}>
-      <span className="dt-hint">{t('discuss.newSubtitle')}</span>
-      {source && <span className="dt-hint">{t('discussion.prefill', { title: source.title })}</span>}
-      {source && <Button variant="outline" size="sm" icon={<Icon name="message" size={14} />}
-        onClick={() => navigate({ page: 'discussions', id: source.id })}>{t('discussion.openDiscussion')}</Button>}
-      {active && <span className="dt-mono">{projectRepositories(active)}</span>}
-      {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
-      {active?.missingChain && <span className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
-        { chain: active.missingChain })}</span>}
-      {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
-      {active?.prepare && <span className="dt-mono" title={active.prepare}>{t('discuss.projectPrepareSet')}</span>}
-      {!!active?.blockedCommands?.length && <span className="dt-mono">{t('discuss.projectBlockedCommandsValue',
-        { commands: active.blockedCommands.join(' ') })}</span>}
-      {active && <Button variant="outline" size="sm" className="dt-project-edit" icon={<Icon name="settings" size={14} />}
-        onClick={() => navigate({ page: 'requirements', edit: active.id })}>{t('discuss.editProject')}</Button>}
-    </PageHead>
-    <div className="dt-column">
-      {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
-      {active && <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
-        <div className="dt-card-head"><span className="dt-card-title">{t('discuss.new')}</span><Tag tone="neutral">{active.name}</Tag></div>
-        <textarea className="dt-textarea" value={description} maxLength={20000} rows={6}
-          placeholder={t('discuss.descriptionPlaceholder')} aria-label={t('discuss.descriptionPlaceholder')}
-          onChange={event => setDescription(event.target.value)} />
-        <p className="dt-hint">{t('discuss.descriptionHint')}</p>
-        <div className="dt-image-field">
-          <input ref={picker} type="file" className="dt-image-input" multiple
-            accept={REQUIREMENT_IMAGES.mediaTypes.join(',')} aria-label={t('discuss.imagesChoose')}
-            onChange={event => { void choose(event) }} />
-          <Button variant="outline" size="sm" icon={<Icon name="image" size={14} />} disabled={busy}
-            onClick={() => picker.current?.click()}>{t('discuss.imagesChoose')}</Button>
-          <p className="dt-hint">{t('discuss.imagesHint')}</p>
-          {images.length > 0 && <ul className="dt-image-choices">{images.map((image, index) => <li key={`${image.name}-${index}`}
-            className="dt-image-choice">
-            <img className="dt-image-thumb" src={image.preview} alt={image.name} />
-            <span className="dt-image-name" title={image.name}>{image.name}</span>
-            <Button variant="ghost" size="sm" icon={<Icon name="close" size={12} />}
-              aria-label={`${t('discuss.imagesRemove')} ${image.name}`}
-              onClick={() => setImages(current => current.filter((_, position) => position !== index))} />
-          </li>)}</ul>}
-        </div>
-        <div className="dt-actions">
-          <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
-            disabled={busy || !description.trim() || !active}>{t('discuss.submit')}</Button>
-        </div>
-      </form>}
-    </div>
-  </>
-}
-
 /** The processing bucket of one requirement: closed wins, then a confirmed open alignment, then everything else open. */
 const requirementBucket = (issue: LocalIssue): Exclude<RequirementFilter, 'all'> =>
   issue.state === 'closed' ? 'closed'
@@ -235,6 +134,9 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
     ? { page: 'requirements' } : { page: 'requirements', query: { filter: value } }, true)
   const open = (id: string) => filter === 'pending' ? navigate({ page: 'requirements', id })
     : navigate({ page: 'requirements', id, query: { filter } })
+  // Creating a requirement is a dialog over the list, so the list stays visible underneath and one project's form never
+  // becomes a whole page of its own.
+  const [creating, setCreating] = useState(false)
   return <>
     <PageHead back={false} title={active ? active.name : t('discuss.requirements')}>
       <span className="dt-hint">{t('discuss.listSubtitle')}</span>
@@ -246,6 +148,8 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
       {active?.prepare && <span className="dt-mono" title={active.prepare}>{t('discuss.projectPrepareSet')}</span>}
       {!!active?.blockedCommands?.length && <span className="dt-mono">{t('discuss.projectBlockedCommandsValue',
         { commands: active.blockedCommands.join(' ') })}</span>}
+      {active && <Button variant="outline" size="sm" className="dt-project-edit" icon={<Icon name="settings" size={14} />}
+        onClick={() => navigate({ page: 'requirements', edit: active.id })}>{t('discuss.editProject')}</Button>}
     </PageHead>
     <div className="dt-column">
       {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
@@ -255,7 +159,9 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
           {REQUIREMENT_FILTERS.map(value => <Pill key={value} active={filter === value}
             onClick={() => show(value)}>{t(`requirementFilter.${value}`)}</Pill>)}
         </div>
-        <Section title={t('discuss.requirements')} count={shown.length}>
+        <Section title={t('discuss.requirements')} count={shown.length}
+          action={<Button variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
+            onClick={() => setCreating(true)}>{t('discuss.new')}</Button>}>
           {data && issues.length === 0 && <p className="dt-hint">{t('discuss.empty')}</p>}
           {data && issues.length > 0 && shown.length === 0 && <p className="dt-hint">{t('discuss.emptyFilter')}</p>}
           <ul className="dt-list dt-cards">{shown.map(issue => {
@@ -278,6 +184,7 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
         </Section>
       </>}
     </div>
+    {creating && <RequirementDialog onClose={() => setCreating(false)} />}
   </>
 }
 

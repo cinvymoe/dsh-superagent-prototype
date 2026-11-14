@@ -55,10 +55,9 @@ export function ProjectBar({ route }: { route: Route }) {
   const select = useCallback((id: string) => {
     if (id === current) return
     setProject(id)
-    // A switch on one of the two requirement tabs keeps that tab; every other tab lands on the requirement list. These
-    // switches replace the entry so browsing projects does not grow the back stack.
-    if (route.page === 'newRequirement') navigate({ page: 'newRequirement' }, true)
-    else if (route.page === 'discussions') navigate({ page: 'discussions' }, true)
+    // A switch on the discussions or requirement list keeps that tab; every other tab lands on the requirement list.
+    // These switches replace the entry so browsing projects does not grow the back stack.
+    if (route.page === 'discussions') navigate({ page: 'discussions' }, true)
     else if (route.page === 'requirements' && route.id === undefined && !route.create) {
       // The requirement list keeps its processing-status filter across projects; the project form keeps its own landing.
       const filter = route.edit === undefined ? route.query?.filter ?? 'pending' : 'pending'
@@ -157,9 +156,9 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
           ...(blocked.length ? { blockedCommands: blocked } : {}), ...(cleanBot ? { cli: cleanBot } : {}) } })).project
       await reloadProjects()
       setProject(project.id)
-      // Creation opens the new project's requirement list; editing returns to the New requirement page that opened
-      // the form, so its page head keeps offering the edit entry for the project just saved.
-      navigate(editing ? { page: 'newRequirement' } : { page: 'requirements' }, true)
+      // Creation and editing both return to the requirement list, whose head keeps offering the edit entry for the
+      // project just saved.
+      navigate({ page: 'requirements' }, true)
     } catch (failure) {
       notify(errorText(failure))
     } finally {
@@ -172,8 +171,8 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
     <div className="dt-column"><p className="dt-hint">{t('loading')}</p></div>
   </>
   return <>
-    <PageHead title={title} back={{ label: editing ? t('discuss.new') : t('discuss.requirements'),
-      onClick: () => navigate(editing ? { page: 'newRequirement' } : { page: 'requirements' }, true) }} />
+    <PageHead title={title} back={{ label: t('discuss.requirements'),
+      onClick: () => navigate({ page: 'requirements' }, true) }} />
     <div className="dt-column">
       {editing && current?.missingChain && <p className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
         { chain: current.missingChain })}</p>}
@@ -208,7 +207,7 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
           <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim() || !intakeRepository.trim() || !codeRepository.trim()}>
             {editing ? t('discuss.saveProject') : t('discuss.createProject')}</Button>
           <Button type="button" variant="ghost" size="sm"
-            onClick={() => navigate(editing ? { page: 'newRequirement' } : { page: 'requirements' }, true)}>{t('cancel')}</Button>
+            onClick={() => navigate({ page: 'requirements' }, true)}>{t('cancel')}</Button>
         </div>
       </form>
     </div>

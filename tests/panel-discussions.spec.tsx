@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// The Discussions tab: the current project's discussions, starting one from the list, and reading one before creating
-// its requirement. A requirement made from a discussion links back to it.
+// The Discussions tab: the current project's discussions, starting one from a dialog on the list, and reading one in
+// two columns before sending its result to a requirement. A requirement made from a discussion links back to it.
 import { expect, it } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, all, click, type, text, at, tab } from './fixtures/panel.tsx'
@@ -11,14 +11,14 @@ usePanel()
 const PROJECT = { id: 'p-fixture', name: 'Widgets', chain: 'p-fixture', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets',
   createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
 const OTHER = { ...PROJECT, id: 'p-other', name: 'Other', intakeRepository: 'acme/intake', codeRepository: 'acme/other' }
-/** The description box of the discussions list and of the New requirement page. */
+/** The description box of the discussion and requirement dialogs. Dialogs render in a portal outside the page. */
 const area = (label: string): HTMLTextAreaElement => {
   const match = all('textarea').find(element => element.getAttribute('placeholder') === label || element.getAttribute('aria-label') === label)
   if (!match) throw new Error(`No textarea ${label}`)
   return match as HTMLTextAreaElement
 }
 const button = (label: string): HTMLButtonElement => {
-  const match = all('#dt-page button').find(element => element.textContent?.trim() === label)
+  const match = all('button').find(element => element.textContent?.trim() === label)
   if (!match) throw new Error(`No button ${label}`)
   return match as HTMLButtonElement
 }
@@ -27,7 +27,7 @@ const messages = (): (string | null)[] => all('.dt-timeline .dt-md').map(node =>
 /** Whether `first` renders before `second` in the document. */
 const precedes = (first: Element, second: Element) => !!(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
 
-it('puts Discussions between Overview and New requirement and lists only the current project newest first', async () => {
+it('puts Discussions between Overview and Requirements and lists only the current project newest first', async () => {
   server.localProjects = [PROJECT, OTHER]
   server.localDiscussions = [
     { ...localDiscussion('Newer talk', 'Newer body', PROJECT.id, 'd-newer'), createdAt: '2026-09-24T00:00:00Z', issueId: 'q-1' },
@@ -36,7 +36,7 @@ it('puts Discussions between Overview and New requirement and lists only the cur
   ]
   at({ page: 'discussions' })
   await mount()
-  expect(all('.dt-tabs [role="tab"]').map(item => item.textContent)).toEqual(['概览', '讨论', '新建需求', '需求列表', '来源', '触发', '评估',
+  expect(all('.dt-tabs [role="tab"]').map(item => item.textContent)).toEqual(['概览', '讨论', '需求列表', '来源', '触发', '评估',
     '执行', '设置'])
   expect(tab(zh['tab.discussions']).getAttribute('aria-selected')).toBe('true')
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
@@ -51,20 +51,26 @@ it('puts Discussions between Overview and New requirement and lists only the cur
   expect(metas[0]).toContain('9月24日')
   expect(metas[1]).toContain(zh['discussion.closed'])
   expect(metas[1]).toContain(zh['discussion.unlinked'])
+  // The list starts a discussion from a dialog, not from a box embedded in the page.
+  expect(all('.dt-modal')).toHaveLength(0)
+  expect(all('textarea')).toHaveLength(0)
   expect(server.requests.some(request => request.path === 'local/discussions?project=p-fixture')).toBe(true)
 })
 
-it('starts a discussion from the list and opens it', async () => {
+it('starts a discussion from a dialog on the list and opens it', async () => {
   server.localProjects = [PROJECT]
   at({ page: 'discussions' })
   await mount()
   expect(text()).toContain(zh['discussion.empty'])
+  await click(button(zh['discussion.new']))
+  expect(document.querySelector('.dt-modal h2')?.textContent).toBe(zh['discussion.new'])
   expect(button(zh['discussion.create']).disabled).toBe(true)
   await type(area(zh['discussion.newPlaceholder']), 'Try a different layout\n\nWith a second paragraph')
   await click(button(zh['discussion.create']))
   const posted = server.requests.find(request => request.path === 'local/discussions' && request.method === 'POST')!
   expect(posted.body).toEqual({ body: 'Try a different layout\n\nWith a second paragraph', project: 'p-fixture' })
-  // The new discussion opens on its own page, with the body once.
+  // The dialog closes as the new discussion opens on its own page, with the body once.
+  expect(all('.dt-modal')).toHaveLength(0)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Try a different layout')
   expect(text()).toContain('With a second paragraph')
   expect((JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown }).route)
@@ -95,7 +101,7 @@ it('reads one discussion with its messages newest first, the follow-up box above
   expect((area(zh['discussion.commentPlaceholder']) as HTMLTextAreaElement).value).toBe('')
 })
 
-it('closes the discussion from its detail and hides the action afterwards', async () => {
+it('closes the discussion from its result panel and hides the action afterwards', async () => {
   server.localProjects = [PROJECT]
   server.localDiscussions = [localDiscussion('Close me', 'Body', PROJECT.id, 'd-close')]
   at({ page: 'discussions', id: 'd-close' })
@@ -103,10 +109,10 @@ it('closes the discussion from its detail and hides the action afterwards', asyn
   await click(button(zh['discussion.close']))
   expect(server.requests.some(request => request.path === 'local/discussions/d-close/close' && request.method === 'POST')).toBe(true)
   expect(text()).toContain(zh['discussion.closed'])
-  expect(all('#dt-page button').some(item => item.textContent?.trim() === zh['discussion.close'])).toBe(false)
+  expect(all('button').some(item => item.textContent?.trim() === zh['discussion.close'])).toBe(false)
 })
 
-it('prefills New requirement from a discussion and creates its requirement, which links back to the discussion', async () => {
+it('sends a discussion result to a requirement dialog and creates it, linked back to the discussion', async () => {
   server.localProjects = [PROJECT]
   server.localDiscussions = [{ ...localDiscussion('Design the layout', 'Design the layout\n\nDetails from the discussion', PROJECT.id,
     'd-design'), issueId: 'q-created' }]
@@ -114,25 +120,28 @@ it('prefills New requirement from a discussion and creates its requirement, whic
     discussionId: 'd-design' }]
   at({ page: 'discussions', id: 'd-design' })
   await mount()
-  // The detail has no Create Issue once a requirement exists; Open requirement is the way on.
-  expect(all('#dt-page button').some(item => item.textContent?.trim() === zh['discussion.createIssue'])).toBe(false)
+  // The result panel offers the requirement it already made, never a second send.
+  expect(all('button').some(item => item.textContent?.trim() === zh['discussion.sendIssue'])).toBe(false)
   await click(button(zh['discussion.openIssue']))
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Design the layout')
   expect((JSON.parse(sessionStorage.getItem('dsh-superagent/route') ?? '{}') as { route?: unknown }).route)
     .toEqual({ page: 'requirements', id: 'q-created' })
 
-  // A discussion that has no requirement yet prefills the New requirement form.
+  // A discussion that has no requirement yet sends its result into the requirement dialog.
   server.localDiscussions = [localDiscussion('Prefill talk', 'Prefill body\n\nMore text', PROJECT.id, 'd-prefill')]
-  at({ page: 'newRequirement', discussion: 'd-prefill' })
+  at({ page: 'discussions', id: 'd-prefill' })
   await mount()
+  await click(button(zh['discussion.sendIssue']))
+  expect(document.querySelector('.dt-modal h2')?.textContent).toBe(zh['discuss.new'])
   expect(text()).toContain(zh['discussion.prefill'].replace('{title}', 'Prefill talk'))
   expect(area(zh['discuss.descriptionPlaceholder']).value).toBe('Prefill body\n\nMore text')
   await click(button(zh['discuss.submit']))
   const posted = server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')!
   expect(posted.body).toMatchObject({ body: 'Prefill body\n\nMore text', project: 'p-fixture', discussion: 'd-prefill' })
-  // Submitting lands on the requirement detail, which names the source discussion and can jump back to it.
+  // Submitting closes the dialog and lands on the requirement detail, which names the source discussion.
+  expect(all('.dt-modal')).toHaveLength(0)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Prefill body')
-  const back = all('#dt-page button').find(item => item.textContent?.trim() === zh['discussion.source'].replace('{title}', 'Prefill talk'))
+  const back = all('button').find(item => item.textContent?.trim() === zh['discussion.source'].replace('{title}', 'Prefill talk'))
   expect(back).toBeDefined()
   await click(back!)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Prefill talk')
@@ -159,7 +168,7 @@ it('shows the discussion pages in English as well', async () => {
   server.localDiscussions = [localDiscussion('English talk', 'English body', PROJECT.id, 'd-english')]
   at({ page: 'discussions' })
   await mount(en)
-  expect(all('.dt-tabs [role="tab"]').slice(0, 3).map(item => item.textContent)).toEqual(['Overview', 'Discussions', 'New requirement'])
+  expect(all('.dt-tabs [role="tab"]').slice(0, 3).map(item => item.textContent)).toEqual(['Overview', 'Discussions', 'Requirements'])
   expect(tab(en['tab.discussions']).getAttribute('aria-selected')).toBe('true')
   expect(text()).toContain(en['discussion.listSubtitle'])
   expect(text()).toContain(en['discussion.new'])
@@ -167,7 +176,7 @@ it('shows the discussion pages in English as well', async () => {
   await click(all('.dt-cards .dt-row-title button')[0]!)
   expect(text()).toContain(en['discussion.detail'])
   expect(text()).toContain(en['discussion.messages'])
-  expect(all('#dt-page button').some(item => item.textContent?.trim() === en['discussion.createIssue'])).toBe(true)
+  expect(all('button').some(item => item.textContent?.trim() === en['discussion.sendIssue'])).toBe(true)
 })
 
 it('still shows a message written before answers were recorded', async () => {

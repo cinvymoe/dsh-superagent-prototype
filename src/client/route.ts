@@ -4,7 +4,7 @@ import type { SetupPlace } from '../setup.ts'
 import { DECISION_FILTERS, type DecisionFilter } from './api.ts'
 import type { T } from './text.ts'
 
-export const TABS = ['overview', 'discussions', 'newRequirement', 'requirements', 'source', 'trigger', 'eval', 'execution', 'settings'] as const
+export const TABS = ['overview', 'discussions', 'requirements', 'source', 'trigger', 'eval', 'execution', 'settings'] as const
 export type Tab = typeof TABS[number]
 export const REQUIREMENT_FILTERS = ['pending', 'confirmed', 'closed', 'all'] as const
 export type RequirementFilter = typeof REQUIREMENT_FILTERS[number]
@@ -13,8 +13,6 @@ export type SettingsGroup = typeof SETTINGS_GROUPS[number]
 export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undefined }
   | { page: 'discussions'; id?: undefined; query?: undefined }
   | { page: 'discussions'; id: string; query?: undefined }
-  // A New requirement page opened from a discussion carries that discussion, so its text prefills the form.
-  | { page: 'newRequirement'; discussion?: string; id?: undefined; query?: undefined }
   | { page: 'requirements'; id?: undefined; create?: true; edit?: undefined; query?: { filter?: RequirementFilter } }
   | { page: 'requirements'; id?: undefined; create?: undefined; edit: string; query?: undefined }
   | { page: 'requirements'; id: string; create?: undefined; edit?: undefined; query?: { filter?: RequirementFilter } }
@@ -43,16 +41,17 @@ function compact<Q extends object>(query: Q): Q | undefined {
 }
 /** Validate and normalize a stored route, dropping unrecognized query filters or removed tabs (such as the legacy `policy` tab). */
 export function parseRoute(value: unknown): Route | undefined {
-  const { page, id, query, create, edit, discussion } = (value ?? {}) as { page?: unknown; id?: unknown; create?: unknown;
-    edit?: unknown; discussion?: unknown; query?: Record<string, unknown> }
+  const { page, id, query, create, edit } = (value ?? {}) as { page?: unknown; id?: unknown; create?: unknown;
+    edit?: unknown; query?: Record<string, unknown> }
   const text = (name: string) => typeof query?.[name] === 'string' ? query[name] as string : undefined
   const record = typeof id === 'string' && id ? id : undefined
   switch (page) {
     case 'overview': case 'source': return { page }
-    // A discussion can prefill the New requirement page; without one the page is the plain blank form.
-    case 'newRequirement': return typeof discussion === 'string' && discussion ? { page, discussion } : { page }
     case 'discussions': return record ? { page, id: record } : { page }
-    // The legacy Discuss tab stays readable: its detail, create page and list map onto the requirement pages.
+    // The legacy New requirement tab is gone: its saved routes land on the requirement list, where creation now opens in
+    // a dialog, so its id, create flag and discussion prefill no longer name a page.
+    case 'newRequirement': return { page: 'requirements' }
+    // The legacy Discuss tab stays readable: its list, detail and project edit pages are the requirement pages.
     case 'requirements': case 'discuss': {
       // Pending is the default bucket and canonical: it is never written into a saved route.
       const chosen = pick(REQUIREMENT_FILTERS, query?.filter)

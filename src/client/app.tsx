@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import type { SearchView } from './api.ts'
 import { Button, Dot, Icon, Input, Modal, SegmentedTabs } from './controls.tsx'
 import type { DeploymentForm } from './deployment.tsx'
-import { NewRequirementPage, RequirementDetail, RequirementList } from './discuss.tsx'
+import { RequirementDetail, RequirementList } from './discuss.tsx'
 import { DiscussionDetail, DiscussionList } from './discussions.tsx'
 import { EvalStatus } from './eval.tsx'
 import { ExecutionStatus } from './execution.tsx'
@@ -151,7 +151,6 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
     switch (route.page) {
       case 'overview': return <OverviewPage />
       case 'discussions': return route.id !== undefined ? <DiscussionDetail key={route.id} id={route.id} /> : <DiscussionList />
-      case 'newRequirement': return <NewRequirementPage discussion={route.discussion} />
       case 'requirements': return route.id !== undefined
         ? <RequirementDetail key={route.id} id={route.id} filter={route.query?.filter ?? 'pending'} />
         : route.edit ? <ProjectFormPage key={route.edit} edit={route.edit} />
@@ -190,13 +189,12 @@ export function App({ t, openSession, deploymentForm }: AppProps) {
   const navigate = useCallback((route: Route, replace = false) => move(current => ({ route,
     stack: replace ? current.stack : [...current.stack, current.route].slice(-20) })), [move])
   const back = useCallback(() => move(current => ({ route: current.stack.at(-1) ?? HOME, stack: current.stack.slice(0, -1) })), [move])
-  // Each page tab opens its own fresh route; Overview and New requirement carry no record, the others carry no query.
+  // Each page tab opens its own fresh route; every page tab starts with no record and no query.
   const openTab = useCallback((tab: Tab) => move(current => ({ stack: [], route: (() => {
     switch (tab) {
       case 'settings': return settingsRoute(lastSettingsGroup(current))
       case 'overview': return { page: 'overview' as const }
       case 'discussions': return { page: 'discussions' as const }
-      case 'newRequirement': return { page: 'newRequirement' as const }
       case 'requirements': return { page: 'requirements' as const }
       case 'source': return { page: 'source' as const }
       case 'trigger': return { page: 'trigger' as const }

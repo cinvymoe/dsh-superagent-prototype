@@ -1,10 +1,14 @@
-/** The discussion pages of the current project: start a discussion, list them, and read one before creating a requirement. */
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+/**
+ * The discussion pages of the current project: list discussions and open one, where its exchange reads on the left and
+ * its result panel on the right can send that result to a requirement.
+ */
+import { useState, type FormEvent } from 'react'
 import type { Receipt } from '../app/store.ts'
 import { projectRepositories, type LocalAnswer, type LocalDiscussion } from '../sources/local-format.ts'
 import { usePoll } from './api.ts'
-import { Button, Icon, Tag } from './controls.tsx'
+import { Button, Icon, Modal, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
+import { RequirementDialog } from './requirement-dialog.tsx'
 import { errorText, type T } from './text.ts'
 import { MarkdownLite, PageHead, Section, When } from './widgets.tsx'
 
@@ -15,6 +19,14 @@ const stateTag = (t: T, discussion: LocalDiscussion) => discussion.state === 'cl
 /** Whether the discussion already created its one requirement, as the list row and the detail both say. */
 const linkTag = (t: T, discussion: LocalDiscussion) => discussion.issueId
   ? <Tag tone="info">{t('discussion.linked')}</Tag> : <Tag tone="neutral">{t('discussion.unlinked')}</Tag>
+
+/** The state of the newest answer, so the result panel says whether a conclusion is still on its way. */
+function answerTag(t: T, answer: LocalAnswer | undefined) {
+  if (!answer) return null
+  return answer.state === 'answered' ? <Tag tone="success">{t('discussion.answered')}</Tag>
+    : answer.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
+    : <Tag tone="neutral">{answer.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>
+}
 
 /** One message of a discussion with its answer, a reply an older discussion already recorded, or a message recorded before answers were. */
 type Exchange = { at: string; kind: 'answer'; answer: LocalAnswer } | { at: string; kind: 'reply'; reply: Receipt }
@@ -34,17 +46,13 @@ function exchange(discussion: LocalDiscussion, replies: Receipt[], triggers: { i
   ].sort((a, b) => b.at.localeCompare(a.at))
 }
 
-/** The discussion list of the current project, newest first, with the box that starts a new discussion. */
-export function DiscussionList() {
+/** The dialog that starts a discussion: one message, posted on the current project's own discussion thread. */
+function NewDiscussionDialog({ onClose }: { onClose: () => void }) {
   const { t, call, notify, navigate, project } = usePanel()
   const { projects } = usePanelData()
   const active = projects.find(item => item.id === project) ?? projects[0]
-  const { data, error, reload } = usePoll(async () => active
-    ? call('GET local/discussions', { query: { project: active.id } })
-    : { discussions: [] }, [call, active?.id])
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
-  const discussions = data?.discussions ?? []
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const text = body.trim()
@@ -52,11 +60,36 @@ export function DiscussionList() {
     setBusy(true)
     try {
       const { discussion } = await call('POST local/discussions', { body: { body: text, project: active.id } })
-      setBody('')
-      await reload()
+      onClose()
       navigate({ page: 'discussions', id: discussion.id })
     } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
   }
+  return <Modal className="dt-discussion-modal" open onClose={onClose} title={t('discussion.new')} closeLabel={t('close')}
+    description={t('discussion.newHint')}>
+    {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
+    {active && <form className="dt-form" onSubmit={event => { void submit(event) }}>
+      <textarea className="dt-textarea" value={body} maxLength={20000} rows={5}
+        placeholder={t('discussion.newPlaceholder')} aria-label={t('discussion.newPlaceholder')}
+        onChange={event => setBody(event.target.value)} />
+      <div className="dt-actions">
+        <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
+          disabled={busy || !body.trim() || !active}>{t('discussion.create')}</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onClose}>{t('cancel')}</Button>
+      </div>
+    </form>}
+  </Modal>
+}
+
+/** The discussion list of the current project, newest first, with the button that starts a discussion in a dialog. */
+export function DiscussionList() {
+  const { t, call, navigate, project } = usePanel()
+  const { projects } = usePanelData()
+  const active = projects.find(item => item.id === project) ?? projects[0]
+  const { data, error } = usePoll(async () => active
+    ? call('GET local/discussions', { query: { project: active.id } })
+    : { discussions: [] }, [call, active?.id])
+  const [creating, setCreating] = useState(false)
+  const discussions = data?.discussions ?? []
   return <>
     <PageHead back={false} title={active ? active.name : t('discussion.title')}>
       <span className="dt-hint">{t('discussion.listSubtitle')}</span>
@@ -65,16 +98,9 @@ export function DiscussionList() {
     <div className="dt-column">
       {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
       {error && <p className="dt-error" role="alert">{error.message}</p>}
-      {active && <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
-        <div className="dt-card-head"><span className="dt-card-title">{t('discussion.new')}</span><Tag tone="neutral">{active.name}</Tag></div>
-        <textarea className="dt-textarea" value={body} maxLength={20000} rows={3}
-          placeholder={t('discussion.newPlaceholder')} aria-label={t('discussion.newPlaceholder')}
-          onChange={event => setBody(event.target.value)} />
-        <p className="dt-hint">{t('discussion.newHint')}</p>
-        <div className="dt-actions"><Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
-          disabled={busy || !body.trim()}>{t('discussion.create')}</Button></div>
-      </form>}
-      {active && <Section title={t('discussion.title')} count={discussions.length}>
+      {active && <Section title={t('discussion.title')} count={discussions.length}
+        action={<Button variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
+          onClick={() => setCreating(true)}>{t('discussion.new')}</Button>}>
         {data && discussions.length === 0 && <p className="dt-hint">{t('discussion.empty')}</p>}
         <ul className="dt-list dt-cards">{discussions.map(discussion => <li key={discussion.id} className="dt-row">
           <Icon name="message" size={14} />
@@ -86,18 +112,21 @@ export function DiscussionList() {
         </li>)}</ul>
       </Section>}
     </div>
+    {creating && <NewDiscussionDialog onClose={() => setCreating(false)} />}
   </>
 }
 
 /**
- * One discussion: its body, its message timeline newest first with the follow-up box above it, and the actions that
- * create its requirement, open that requirement, or close the discussion.
+ * One discussion, two columns: the exchange on the left (its body, then the message timeline with the follow-up box above
+ * it), and the result panel on the right, which carries the newest conclusion into a requirement, opens the one already
+ * made from it, or closes the discussion.
  */
 export function DiscussionDetail({ id }: { id: string }) {
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/discussions/:id', { id }), [id])
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
+  const [creating, setCreating] = useState(false)
   const discussion = data?.discussion
   const act = async (work: () => Promise<unknown>) => {
     if (busy) return
@@ -118,80 +147,84 @@ export function DiscussionDetail({ id }: { id: string }) {
   const shown = exchange(discussion, data.replies, data.thread?.timeline ?? [])
   // The newest answered message is the discussion's current conclusion; older ones stay in the timeline below.
   const result = shown.find(item => item.kind === 'answer' && item.answer.state === 'answered')
+  const latest = [...(discussion.answers ?? [])].sort((a, b) => a.at.localeCompare(b.at)).at(-1)
   return <>
     <PageHead title={discussion.title} back={{ label: t('discussion.back'), onClick: () => navigate({ page: 'discussions' }, true) }}>
       <span className="dt-hint">{t('discussion.detail')}</span>{stateTag(t, discussion)}{linkTag(t, discussion)}
     </PageHead>
-    <div className="dt-column dt-form">
-      <section className="dt-card">
-        <div className="dt-card-head"><span className="dt-card-title">{t('discussion.body')}</span></div>
-        <div className="dt-row-meta"><span>{t('discuss.author')}：{discussion.author}</span><When at={discussion.createdAt} />
-          <span className="dt-mono">{discussion.id}</span>
-          {data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}</span>}</div>
-        <MarkdownLite text={discussion.body} />
-        {discussion.issueId && <div className="dt-actions">
-          <Button variant="outline" size="sm" icon={<Icon name="inbox" size={14} />}
-            onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
-        </div>}
-      </section>
+    <div className="dt-discussion">
+      <div className="dt-discussion-main">
+        <section className="dt-card">
+          <div className="dt-card-head"><span className="dt-card-title">{t('discussion.body')}</span></div>
+          <div className="dt-row-meta"><span>{t('discuss.author')}：{discussion.author}</span><When at={discussion.createdAt} />
+            <span className="dt-mono">{discussion.id}</span>
+            {data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}</span>}</div>
+          <MarkdownLite text={discussion.body} />
+        </section>
 
-      {result?.kind === 'answer' && result.answer.answer !== undefined && <section className="dt-card">
-        <div className="dt-card-head"><span className="dt-card-title">{t('discussion.result')}</span>
-          <Tag tone="success">{t('discuss.agent')}</Tag></div>
-        <div className="dt-result"><MarkdownLite text={result.answer.answer} /></div>
-        <p className="dt-hint">{t('discussion.resultHint')}</p>
-      </section>}
-
-      <Section title={t('discussion.messages')} count={shown.length}>
-        {/* The box sits above the list, so a submitted message appears first, directly under it. */}
-        <form className="dt-form dt-timeline-form" onSubmit={event => { void submit(event) }}>
-          <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
-            placeholder={t('discussion.commentPlaceholder')} aria-label={t('discussion.commentPlaceholder')}
-            onChange={event => setComment(event.target.value)} />
-          <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
-            disabled={busy || !comment.trim()}>{t('discussion.comment')}</Button></div>
-        </form>
-        <p className="dt-hint">{t('discussion.eachMessage')}</p>
-        {shown.length === 0 && <p className="dt-hint">{t('discussion.unanswered')}</p>}
-        <ul className="dt-list dt-timeline">{shown.map((item, index) => item.kind === 'trigger'
-          ? <li key={`trigger-${index}`} className="dt-row dt-event">
-            <div className="dt-row-main">
-              <div className="dt-row-meta">{t('discuss.person')}<When at={item.at} /><Tag tone="neutral">{t('discussion.unanswered')}</Tag></div>
-              <MarkdownLite text={item.text} />
-            </div>
-          </li>
-          : item.kind === 'reply'
-          ? <li key={`reply-${index}`} className="dt-row dt-event">
-            <div className="dt-row-main">
-              <div className="dt-row-meta">{t('discuss.agent')}<When at={item.at} /><Tag tone="info">{t('discuss.agent')}</Tag></div>
-              <MarkdownLite text={item.reply.text} />
-            </div>
-          </li>
-          : <li key={item.answer.id} className="dt-row dt-event">
-            <div className="dt-row-main">
-              <div className="dt-row-meta">{t('discuss.person')}<When at={item.answer.at} />
-                {item.answer.state === 'answered' ? <Tag tone="success">{t('discuss.agent')}</Tag>
-                  : item.answer.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
-                  : <Tag tone="neutral">{item.answer.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>}</div>
-              <MarkdownLite text={item.answer.text} />
-              {item.answer.answer !== undefined && <div className="dt-answer">
-                <MarkdownLite text={item.answer.answer} /></div>}
-              {item.answer.state === 'failed' && <div className="dt-actions">
-                <p className="dt-hint">{item.answer.failure?.message}</p>
-                <Button variant="ghost" size="sm" disabled={busy}
-                  onClick={() => { void retry(item.answer.id) }}>{t('discussion.retry')}</Button></div>}
-            </div>
-          </li>)}</ul>
-      </Section>
-
-      <div className="dt-actions">
-        {discussion.issueId === undefined && <Button variant="primary" size="sm" disabled={busy}
-          icon={<Icon name="plus" size={14} />} onClick={() => navigate({ page: 'newRequirement', discussion: discussion.id })}>
-          {t('discussion.createIssue')}</Button>}
-        {discussion.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
-          onClick={() => { void act(() => call('POST local/discussions/:id/close', { id })) }}>{t('discussion.close')}</Button>}
+        <Section title={t('discussion.messages')} count={shown.length}>
+          {/* The box sits above the list, so a submitted message appears first, directly under it. */}
+          <form className="dt-form dt-timeline-form" onSubmit={event => { void submit(event) }}>
+            <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
+              placeholder={t('discussion.commentPlaceholder')} aria-label={t('discussion.commentPlaceholder')}
+              onChange={event => setComment(event.target.value)} />
+            <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
+              disabled={busy || !comment.trim()}>{t('discussion.comment')}</Button></div>
+          </form>
+          <p className="dt-hint">{t('discussion.eachMessage')}</p>
+          {shown.length === 0 && <p className="dt-hint">{t('discussion.unanswered')}</p>}
+          <ul className="dt-list dt-timeline">{shown.map((item, index) => item.kind === 'trigger'
+            ? <li key={`trigger-${index}`} className="dt-row dt-event">
+              <div className="dt-row-main">
+                <div className="dt-row-meta">{t('discuss.person')}<When at={item.at} /><Tag tone="neutral">{t('discussion.unanswered')}</Tag></div>
+                <MarkdownLite text={item.text} />
+              </div>
+            </li>
+            : item.kind === 'reply'
+            ? <li key={`reply-${index}`} className="dt-row dt-event">
+              <div className="dt-row-main">
+                <div className="dt-row-meta">{t('discuss.agent')}<When at={item.at} /><Tag tone="info">{t('discuss.agent')}</Tag></div>
+                <MarkdownLite text={item.reply.text} />
+              </div>
+            </li>
+            : <li key={item.answer.id} className="dt-row dt-event">
+              <div className="dt-row-main">
+                <div className="dt-row-meta">{t('discuss.person')}<When at={item.answer.at} />
+                  {item.answer.state === 'answered' ? <Tag tone="success">{t('discuss.agent')}</Tag>
+                    : item.answer.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
+                    : <Tag tone="neutral">{item.answer.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>}</div>
+                <MarkdownLite text={item.answer.text} />
+                {item.answer.answer !== undefined && <div className="dt-answer">
+                  <MarkdownLite text={item.answer.answer} /></div>}
+                {item.answer.state === 'failed' && <div className="dt-actions">
+                  <p className="dt-hint">{item.answer.failure?.message}</p>
+                  <Button variant="ghost" size="sm" disabled={busy}
+                    onClick={() => { void retry(item.answer.id) }}>{t('discussion.retry')}</Button></div>}
+              </div>
+            </li>)}</ul>
+        </Section>
       </div>
+
+      <aside className="dt-discussion-side">
+        <section className="dt-card dt-result-panel">
+          <div className="dt-card-head"><span className="dt-card-title">{t('discussion.result')}</span>{answerTag(t, latest)}</div>
+          {result?.kind === 'answer' && result.answer.answer !== undefined
+            ? <div className="dt-result"><MarkdownLite text={result.answer.answer} /></div>
+            : <p className="dt-hint">{latest ? t('discussion.resultPending') : t('discussion.resultEmpty')}</p>}
+          <p className="dt-hint">{t('discussion.resultHint')}</p>
+          <div className="dt-actions dt-result-actions">
+            {discussion.issueId
+              ? <Button variant="primary" size="sm" icon={<Icon name="inbox" size={14} />}
+                onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
+              : <Button variant="primary" size="sm" disabled={busy}
+                icon={<Icon name="plus" size={14} />} onClick={() => setCreating(true)}>{t('discussion.sendIssue')}</Button>}
+            {discussion.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
+              onClick={() => { void act(() => call('POST local/discussions/:id/close', { id })) }}>{t('discussion.close')}</Button>}
+          </div>
+        </section>
+      </aside>
     </div>
+    {creating && <RequirementDialog discussion={discussion.id} onClose={() => setCreating(false)} />}
   </>
 }
 
@@ -208,23 +241,4 @@ export function SourceDiscussion({ id }: { id: string }) {
     onClick={() => navigate({ page: 'discussions', id: discussion.id })}>
     {t('discussion.source', { title: discussion.title })}
   </Button>
-}
-
-/** Prefill the New requirement form from a discussion once, without overwriting anything a person has typed. */
-export function useDiscussionPrefill(id: string | undefined, fill: (text: string) => void): LocalDiscussion | undefined {
-  const { call, t } = usePanel()
-  const { data } = usePoll(async () => id ? call('GET local/discussions/:id', { id }) : undefined, [call, id])
-  const filled = useRef<string>()
-  const discussion = data?.discussion
-  useEffect(() => {
-    if (!discussion || filled.current === discussion.id) return
-    filled.current = discussion.id
-    // The latest answered message becomes the description's conclusion when the discussion has one.
-    const answer = (discussion.answers ?? []).filter(item => item.state === 'answered').sort((a, b) => a.at.localeCompare(b.at)).at(-1)
-    const text = answer?.answer ? `${discussion.body}\n\n---\n\n## ${t('discussion.result')}\n\n${answer.answer}` : discussion.body
-    fill(text.slice(0, 20000))
-    // `fill` only clears or seeds the form's own draft; re-running it for the same discussion would overwrite typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discussion])
-  return discussion
 }

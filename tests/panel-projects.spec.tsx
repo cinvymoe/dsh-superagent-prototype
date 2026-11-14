@@ -2,7 +2,7 @@
 // The project bar above the page tabs: tab switching, the overflow More menu and standalone project creation.
 import { expect, it } from 'vitest'
 import { zh } from '../src/client/locales.ts'
-import { usePanel, mount, all, click, type, text, at, tab } from './fixtures/panel.tsx'
+import { usePanel, mount, all, click, type, text, at, find, tab } from './fixtures/panel.tsx'
 import { localIssue, server } from './fixtures/panel-server.ts'
 
 usePanel()
@@ -44,7 +44,7 @@ it('keeps the requirement list when switching projects there and refetches it', 
   expect(projectTabs.map(item => item.textContent)).toEqual(['Widgets', 'Other'])
   expect(projectTabs.map(item => item.getAttribute('aria-selected'))).toEqual(['true', 'false'])
   // The page tablist is separate and selects Requirements.
-  expect(document.querySelector('.dt-tabs')?.querySelectorAll('[role="tab"]')).toHaveLength(9)
+  expect(document.querySelector('.dt-tabs')?.querySelectorAll('[role="tab"]')).toHaveLength(8)
   expect(selectedPageTab()).toBe(zh['tab.requirements'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
   expect(text()).toContain('acme/intake → acme/widgets')
@@ -66,20 +66,21 @@ it('keeps the requirement list when switching projects there and refetches it', 
     .toEqual({ page: 'requirements', query: { filter: 'confirmed' } })
 })
 
-it('keeps the New requirement tab when switching projects there and targets the new project', async () => {
+it('opens the requirement dialog for the project the requirement list is showing', async () => {
   server.localProjects = [WIDGETS, OTHER]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
-  expect(selectedPageTab()).toBe(zh['tab.newRequirement'])
+  expect(selectedPageTab()).toBe(zh['tab.requirements'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
-  expect(document.querySelector('.dt-card-head .dt-tag')?.textContent).toBe('Widgets')
   await click(tab('Other'))
-  expect(selectedPageTab()).toBe(zh['tab.newRequirement'])
+  expect(selectedPageTab()).toBe(zh['tab.requirements'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Other')
   expect(text()).toContain('acme/other')
-  expect(document.querySelector('.dt-card-head .dt-tag')?.textContent).toBe('Other')
+  // The dialog names the project it will add the requirement to, and submits to that project.
+  await click(find(zh['discuss.new']))
+  expect(document.querySelector('.dt-modal .dt-tag')?.textContent).toBe('Other')
   await type(description(), 'Other target')
-  await click(zh['discuss.submit'])
+  await click(find(zh['discuss.submit']))
   expect(server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')?.body)
     .toEqual({ body: 'Other target', project: 'p-other' })
   expect(text()).toContain('项目：Other · acme/intake → acme/other')
@@ -264,12 +265,12 @@ const values = () => [zh['discuss.projectName'], zh['discuss.projectIntakeReposi
   zh['discuss.projectWorktreeRoot'], zh['discuss.projectPrepare'], zh['discuss.projectBlockedCommands'],
   zh['discuss.projectBot']].map(label => field(label).value)
 
-it('edits one project from the New requirement page head and leaves the other project\'s repositories alone', async () => {
+it('edits one project from the requirement list page head and leaves the other project\'s repositories alone', async () => {
   server.localProjects = [WIDGETS, OTHER]
   server.localIssues = [issue('q-widgets', 'p-widgets', 'Widgets requirement'), issue('q-other', 'p-other', 'Other requirement')]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
-  // The New requirement page head shows the current project's two repositories and offers its edit entry.
+  // The requirement list page head shows the current project's two repositories and offers its edit entry.
   expect(text()).toContain('acme/intake → acme/widgets')
   expect(text()).toContain('/srv/worktrees')
   await click(editButton())
@@ -310,7 +311,7 @@ it('edits one project from the New requirement page head and leaves the other pr
 
 it('pre-fills and clears the project execution environment when editing', async () => {
   server.localProjects = [{ ...WIDGETS, prepare: 'npm ci', blockedCommands: ['rm', 'curl'] }, OTHER]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
   await click(editButton())
   expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', 'npm ci', 'rm curl', ''])
@@ -328,7 +329,7 @@ it('pre-fills and clears the project execution environment when editing', async 
 
 it('keeps the edit page and its values when the update is refused, then clears an emptied worktree root', async () => {
   server.localProjects = [{ ...WIDGETS }, OTHER]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
   await click(editButton())
   await type(field(zh['discuss.projectName']), 'Widgets kept')
@@ -351,7 +352,7 @@ it('keeps the edit page and its values when the update is refused, then clears a
 
 it('leaves the edit page without a request from Cancel or Back', async () => {
   server.localProjects = [WIDGETS, OTHER]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
   await click(editButton())
   await type(field(zh['discuss.projectName']), 'Discarded')
@@ -368,9 +369,9 @@ it('leaves the edit page without a request from Cancel or Back', async () => {
 it('shows each project\'s own bot account in the page head and the More menu, switching with the project', async () => {
   server.localProjects = [{ ...WIDGETS, cli: '/bot/gh-widgets', bot: 'widgets-bot[bot]' },
     { ...OTHER, cli: '/bot/gh-other', bot: 'other-bot[bot]' }]
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
-  // The New requirement page head names the current project's bot beside its repositories.
+  // The requirement list page head names the current project's bot beside its repositories.
   expect(text()).toContain(zh['discuss.projectBotAccount'].replace('{account}', 'widgets-bot[bot]'))
   expect(text()).not.toContain('other-bot[bot]')
   const strip = document.querySelector<HTMLElement>('.dt-project-strip')!
@@ -401,7 +402,7 @@ it('keeps the edit page and typed values when the host refuses an unusable bot C
   server.localProjects = [{ ...WIDGETS, cli: '/bot/gh-widgets', bot: 'widgets-bot[bot]' }, OTHER]
   server.refuseProjectCli = { cli: '/bad/gh', code: 'agentCliMissing',
     values: { chain: 'p-widgets', cli: '/bad/gh', output: '/bad/gh is not an executable file' }, detail: 'The bot CLI was not found.' }
-  at({ page: 'newRequirement' })
+  at({ page: 'requirements' })
   await mount()
   await click(editButton())
   await type(field(zh['discuss.projectBot']), '/bad/gh')

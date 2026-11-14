@@ -63,8 +63,10 @@ it('reads each page a tab remembered with the parameters it takes, and leaves ou
     .toEqual({ page: 'settings', query: { group: 'source', source: 'feishu' } })
   expect([parseRoute('overview'), parseRoute(null)]).toEqual([undefined, undefined])
 })
-it('reads the requirement pages and maps a saved Discuss route onto them', () => {
-  expect(parseRoute({ page: 'newRequirement', id: 'q1', create: true })).toEqual({ page: 'newRequirement' })
+it('reads the requirement pages and maps the saved requirement-form routes onto them', () => {
+  // The separate New requirement page is gone; its saved routes land on the requirement list, where the dialog lives.
+  expect(parseRoute({ page: 'newRequirement', id: 'q1', create: true })).toEqual({ page: 'requirements' })
+  expect(parseRoute({ page: 'newRequirement', discussion: 'd-1' })).toEqual({ page: 'requirements' })
   expect(parseRoute({ page: 'requirements' })).toEqual({ page: 'requirements' })
   expect(parseRoute({ page: 'requirements', create: true })).toEqual({ page: 'requirements', create: true })
   expect(parseRoute({ page: 'requirements', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })

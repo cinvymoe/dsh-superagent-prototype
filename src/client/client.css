@@ -142,6 +142,18 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-result { padding: 12px 14px; border-radius: 12px; background: var(--dsw-alias-bg-layer-2); }
 .dt-card-head .dt-row-main { flex: 1 1 0; min-width: 64px; }
 .dt-card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A discussion reads as two columns: its exchange on the left, its result panel sticky on the right. */
+.dt-discussion { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; max-width: 1200px; margin: 0 auto; padding-bottom: 48px; }
+.dt-discussion-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.dt-discussion-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dt-result-panel { gap: 10px; }
+.dt-result-actions { flex-direction: column; align-items: stretch; }
+.dt-result-actions .dt-btn { width: 100%; }
+.dt-requirement-modal, .dt-discussion-modal { width: min(560px, 100%); }
+@media (max-width: 900px) {
+  .dt-discussion { grid-template-columns: minmax(0, 1fr); }
+  .dt-discussion-side { position: static; order: -1; }
+}
 /* Alignment rounds: the current round reads as the card's body, earlier rounds as one collapsed disclosure row each. */
 .dt-round { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .dt-rounds-history { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 0.5px solid var(--dsw-alias-border-l3); }

@@ -58,7 +58,7 @@ export abstract class EnginePart {
   /**
    * Queue a Trigger on its primary Thread for the next Eval, unless it waits there already or an Eval holds it. A local
    * discussion Thread never reaches Eval: its messages stay ordinary Triggers for the discussion timeline, are answered by
-   * that discussion's Answerer, and only a person's Create Issue action starts a requirement on its own Thread.
+   * that discussion's Answerer, and only a person's Send to issue action starts a requirement on its own Thread.
    */
   protected queueForEval(trigger: Trigger): boolean {
     const primary = this.thread(trigger.threads[0]!)

@@ -95,7 +95,7 @@ describe('worktree root documentation', () => {
   })
   it('names the Discuss project fields and the Execution root in the panel document', () => {
     const panel = prose('docs/005-panel.md')
-    expect(panel).toContain('an optional absolute `worktreeRoot` (empty keeps the Execution ticket directory root)')
+    expect(panel).toContain('**Worktree root** is an optional absolute directory root for the project\'s Tickets; empty keeps the Execution ticket directory root')
     expect(panel).toContain('**Project name** labels the project')
     expect(panel).toContain('**Code repository** is the `owner/name` repository')
     expect(panel).toContain('the Ticket directory root (`executor.directory`; empty uses `<stateDir>/work`)')
@@ -161,12 +161,12 @@ describe('project execution environment documentation', () => {
 describe('project edit documentation', () => {
   it('states that the same form edits the current project, pre-filled, and that Cancel or Back writes nothing', () => {
     const panel = prose('docs/005-panel.md')
-    expect(panel).toContain('**Edit project** on the New requirement page head opens the same form for the current project with its fields already filled in')
+    expect(panel).toContain('**Edit project** on the requirement list page head opens the same form for the current project with its fields already filled in')
     expect(panel).toContain('Cancel or Back on either page writes nothing')
   })
   it('states that saving reloads and returns, an edit changes only that project, and a refusal keeps the page', () => {
     const panel = prose('docs/005-panel.md')
-    expect(panel).toContain('Saving the form reloads the projects, makes the saved project current and returns to its requirements — the requirement list after creating and the New requirement page after editing')
+    expect(panel).toContain('Saving the form reloads the projects, makes the saved project current and returns to its requirements — the requirement list after both creating and editing —')
     expect(panel).toContain('editing one project changes only that project\'s chain and leaves every other project\'s two repositories as they were')
     expect(panel).toContain('A refused save shows the localized reason and keeps the page and the typed values')
   })
@@ -179,7 +179,7 @@ describe('project edit documentation', () => {
   })
   it('names the edit page in the route and project form module rows and the isolation test row', () => {
     const architecture = prose('docs/007-architecture.md')
-    expect(architecture).toContain('the create page and the project edit page')
+    expect(architecture).toContain('the project edit page and the create route')
     expect(architecture).toContain('the standalone form that creates a project or edits the current one')
     expect(architecture).toContain('editing one project without changing another project\'s repositories')
   })
@@ -273,9 +273,9 @@ describe('discussion documentation', () => {
   })
   it('describes the Discussions tab and the requirement link in the panel document', () => {
     const panel = prose('docs/005-panel.md')
-    expect(panel).toContain('**Overview**, **Discussions**, **New requirement**')
+    expect(panel).toContain('**Overview**, **Discussions**, **Requirements**')
     expect(panel).toContain('The **Discussions** page lists the current project\'s discussions newest first')
-    expect(panel).toContain('**Create Issue** turns a discussion into a requirement')
+    expect(panel).toContain('**Send to issue** in the result panel turns a discussion into a requirement')
     expect(panel).toContain('A discussion creates at most one requirement')
     expect(panel).toContain('A requirement made from a discussion shows that source discussion in its detail and links back to it')
   })
@@ -284,7 +284,7 @@ describe('discussion documentation', () => {
     expect(architecture).toContain('`Answers`')
     expect(architecture).toContain('`composeDiscuss`')
     expect(architecture).toContain('A discussion\'s Answerer Session answers only')
-    expect(architecture).toContain('The Discussions tab between Overview and New requirement')
+    expect(architecture).toContain('The Discussions tab between Overview and Requirements')
     expect(architecture).toContain('`prompts/discuss.md`')
   })
   it('leaves no document saying a discussion is the requirement record', () => {
