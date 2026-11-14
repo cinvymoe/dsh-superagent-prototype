@@ -112,7 +112,7 @@ function AddPluginDialog({ catalog, taken, onAdd, onClose }: {
       <Button variant="primary" onClick={submit}>{t('agentPluginAddConfirm')}</Button></>}>
     <div className="dt-form">
       <label className="dt-field"><span className="dt-field-head">{t('agentPluginName')}</span>
-        <Input value={name} aria-label={t('agentPluginName')}
+        <Input value={name} maxLength={100} aria-label={t('agentPluginName')}
           onChange={event => { setName(event.target.value); setError(undefined) }} /></label>
       <div className="dt-subhead" data-plugin-roles><span className="dt-field-head">{t('agentPluginRoles')}</span></div>
       {ALL_ROLES.map(role => <div className="dt-switch-row" key={role} data-plugin-role={role}>
@@ -158,10 +158,14 @@ export function AgentsSettings() {
   // The saved catalog plus the draft's own plugins, so a plugin added or deleted here reacts before it is saved.
   const definitions = new Map(agents.plugins.map(plugin => [plugin.id, plugin]))
   for (const plugin of value.plugins) if (!definitions.has(plugin.id)) definitions.set(plugin.id, draftPlugin(plugin, agents.availableTools))
+  // A plugin removed from the draft disappears from the role cards at once, while the built-ins and the draft's own
+  // definitions are the only ids a save may name.
+  const activeIds = new Set([...agents.plugins.filter(plugin => plugin.builtIn).map(plugin => plugin.id),
+    ...value.plugins.map(plugin => plugin.id)])
   const applicable = (role: AgentRole) => {
     const saved = agents.roles.find(entry => entry.role === role)?.plugins ?? []
     const drafted = value.plugins.filter(plugin => (plugin.roles ?? ALL_ROLES).includes(role)).map(plugin => plugin.id)
-    return [...new Set([...saved, ...drafted])].filter(id => definitions.has(id))
+    return [...new Set([...saved, ...drafted])].filter(id => definitions.has(id) && activeIds.has(id))
   }
   const taken = new Set([...definitions.keys(), ...value.plugins.map(plugin => plugin.id)])
   // Keep the enabled ids in the catalog's order, so a save's diff is stable whatever order a person toggles in.
