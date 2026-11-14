@@ -255,3 +255,39 @@ describe('local checkout flow documentation', () => {
     expect(architecture).toContain('A rebuilt checkout takes effect only when the process that loaded it restarts')
   })
 })
+
+describe('discussion documentation', () => {
+  it('states in the domain document that a discussion is its own record and names it in the glossary', () => {
+    const domain = prose('docs/001-domain.md')
+    expect(domain).toContain('A discussion is not a requirement record')
+    expect(domain).toContain('it creates at most one requirement, which a person does explicitly and which links the two records')
+    expect(domain).toContain('| Discussion | 讨论 |')
+  })
+  it('states the discuss Ticket mode and its answering session in the execution document', () => {
+    const execution = prose('docs/003-execution.md')
+    expect(execution).toContain('A Ticket\'s `mode` says how its worker works')
+    expect(execution).toContain('a discussion Thread (`local:d-…`) gives `discuss`')
+    expect(execution).toContain('A discussion session answers on its discussion\'s Thread and is not the work')
+    expect(execution).toContain('reads the discussion guide instead of the alignment guide')
+    expect(execution).toContain('receives no `orchestrator_align`')
+  })
+  it('describes the Discussions tab and the requirement link in the panel document', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('**Overview**, **Discussions**, **New requirement**')
+    expect(panel).toContain('The **Discussions** page lists the current project\'s discussions newest first')
+    expect(panel).toContain('**Create Issue** turns a discussion into a requirement')
+    expect(panel).toContain('A discussion creates at most one requirement')
+    expect(panel).toContain('A requirement made from a discussion shows that source discussion in its detail and links back to it')
+  })
+  it('names the discussion modules, prompts and test rows in the architecture document', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('`localTicketMode`')
+    expect(architecture).toContain('`composeDiscuss`')
+    expect(architecture).toContain('A discuss Ticket (`mode: \'discuss\'`) answers only')
+    expect(architecture).toContain('The Discussions tab between Overview and New requirement')
+    expect(architecture).toContain('`prompts/discuss.md`')
+  })
+  it('leaves no document saying a discussion is the requirement record', () => {
+    expect(documents.filter(path => /讨论记录就是需求记录|discussion record is (?:the )?requirement record/i.test(prose(path)))).toEqual([])
+  })
+})

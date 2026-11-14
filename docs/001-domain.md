@@ -38,6 +38,8 @@ Source, Thread, Eval, Mandate and Subscription form the core domain; the rest su
 
 A person is not a domain concept. A Trigger carries its actor's identifier as the Source gives it. An allowed list is a Source's part of the Policy, in that Source's identities. That one person has accounts on several Sources is prompt text that the agents read when they need it.
 
+A local project's panel keeps two kinds of work record, each on its own Thread. A requirement (`q-…`) is a submitted piece of work; a discussion (`d-…`) is a conversation before any work is authorized. A discussion is not a requirement record: it keeps only its own text and messages, and it creates at most one requirement, which a person does explicitly and which links the two records. A discussion's message is an ordinary human Trigger and enters Eval, whose accept gives its Ticket `mode: 'discuss'`; a requirement's gives `mode: 'align'`.
+
 The Executor, with its Sessions and directories, is outside the domain and connects through Assignments.
 
 Aggregates: a Source holds its read position. A Thread holds its Subscriptions, its running Eval, which runs serially and merges Triggers that arrive meanwhile into the next batch, and its Decision history. A Ticket holds its Assignments, Channels and Inputs, and refers to Decisions by id.
@@ -92,6 +94,7 @@ A reference list of the terms this and the later documents use, with their Chine
 | Decision | 决定 | The result of Eval |
 | Mandate | 授权 | What an accept grants: strength, scope and the Policy version it relied on |
 | Ticket | 工单 | A unit of authorized work |
+| Discussion | 讨论 | A local project's conversation on its own Thread, before any requirement exists; it creates at most one requirement, by an explicit action |
 | Assignment | 派工 | The binding of a Ticket to one Executor instance |
 | Subscription | 订阅 | The relation between a Ticket and a Thread |
 | Fan-out | 扇出 | Delivering Triggers of a subscribed Thread to a Ticket as context |
