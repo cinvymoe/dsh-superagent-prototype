@@ -1,7 +1,7 @@
 /** GitHub source kind definition, notification and repository polling loops, and Cordis plugin entry. */
 import type { Context } from '@deepseek-ai/cordis'
 import { key, type Thread } from '../core/index.ts'
-import { sameName } from '../infra/text.ts'
+import { sameGithubLogin, sameName } from '../infra/text.ts'
 import { GithubConfigSchema, githubChains, normalizeGithubConfig, type Deployment, type GithubChain, type GithubConfig } from '../deployment.ts'
 import { CliError, validItems, type Tally } from '../infra/commands.ts'
 import { ciCounts, ciFact, ciFailures, ciSummary, githubThreadContext, pullChecks } from './github-read.ts'
@@ -34,19 +34,21 @@ function scopeOf(meta: Record<string, unknown>): Scope | undefined {
 export const githubKind: SourceKind<GithubConfig> = {
   kind: SOURCE,
   title: { zh: 'GitHub', en: 'GitHub' },
-  description: { zh: '智能体的 GitHub 账号；每条链路从一个 Issue 仓库接收通知，在对应的执行仓库执行代码并接收 PR 讨论与 CI 状态。所有链路共用本卡的账号与 CLI。', en: 'The agent\'s GitHub account; each chain receives notifications from its intake repository and executes code, PR discussion, and CI in its code repository. All chains share this card\'s account and CLI.' },
+  description: { zh: '智能体的 GitHub 账号；每条链路从一个 Issue 仓库接收通知，在对应的执行仓库执行代码并接收 PR 讨论与 CI 状态。每条链路可以指定自己的 CLI 与账号，未指定时沿用本卡的 CLI。', en: 'The agent\'s GitHub account; each chain receives notifications from its intake repository and executes code, PR discussion, and CI in its code repository. Each chain may name its own CLI and account, and falls back to this card\'s CLI when it does not.' },
   schema: GithubConfigSchema,
   normalizeConfig: normalizeGithubConfig,
   fields: [
     { key: 'chains', type: 'rows', label: { zh: '仓库链路（一个 Issue 仓库 → 一个执行仓库）', en: 'Repository chains (one intake repository → one code repository)' },
-      hint: { zh: '至少配置一条链路。每行一个链路：id 用 lowercase-kebab-case，id 与执行代码的仓库必填，接收 Issue 的仓库留空即使用同一个执行仓库。每个链路独立轮询、独立执行，所有链路共用本卡的 GitHub CLI 与账号。', en: 'Configure at least one chain. One row per chain: id is lowercase-kebab-case, id and code repository are required, and an empty intake repository uses the same code repository. Each chain polls and executes independently; every chain shares this card\'s GitHub CLI and account.' },
+      hint: { zh: '至少配置一条链路。每行一个链路：id 用 lowercase-kebab-case，id 与执行代码的仓库必填，接收 Issue 的仓库留空即使用同一个执行仓库；该链路的 GitHub CLI 留空时用本卡的 CLI。每个链路独立轮询、独立执行，启动时按链路校验 CLI、账号与仓库权限。', en: 'Configure at least one chain. One row per chain: id is lowercase-kebab-case, id and code repository are required, an empty intake repository uses the same code repository, and an empty chain CLI uses this card\'s CLI. Each chain polls and executes independently; setup checks every chain\'s CLI, account, and repository access.' },
       columns: [
         { key: 'id', type: 'text', label: { zh: '链路 ID', en: 'Chain id' }, pattern: '[a-z][a-z0-9-]*' },
         { key: 'intakeRepository', type: 'text', label: { zh: '接收 Issue 的仓库', en: 'Intake repository' }, pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+', optional: true },
         { key: 'codeRepository', type: 'text', label: { zh: '执行代码的仓库', en: 'Code repository' }, pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+' },
+        { key: 'cli', type: 'text', label: { zh: '该链路的 GitHub CLI', en: 'GitHub CLI of this chain' }, optional: true },
       ] },
-    { key: 'cli', type: 'text', label: { zh: '智能体的 GitHub CLI', en: 'Agent GitHub CLI' },
-      hint: { zh: '命令名或绝对路径，通常是用 GH_CONFIG_DIR 登录智能体账号的 gh 包装脚本。智能体以它登录的账号行事，执行器以 gh 调用它。保存时检查它登录的账号能否推送到仓库，然后重启 dsh-superagent。', en: 'A command name or absolute path, usually a gh wrapper signed in to the agent account through GH_CONFIG_DIR. The agent acts as the account it is signed in to, and the Executor calls it as gh. Saving checks that this account can push to the repository, then restarts dsh-superagent.' } },
+    { key: 'cli', type: 'text', label: { zh: '默认的 GitHub CLI', en: 'Default GitHub CLI' },
+      hint: { zh: '命令名或绝对路径，通常是用 GH_CONFIG_DIR 登录智能体账号的 gh 包装脚本。链路没有指定自己的 CLI 时使用它。智能体以它登录的账号行事，执行器以 gh 调用它。保存时检查每条链路的账号能否推送到仓库，然后重启 dsh-superagent。', en: 'A command name or absolute path, usually a gh wrapper signed in to the agent account through GH_CONFIG_DIR. A chain without its own CLI uses it. The agent acts as the account it is signed in to, and the Executor calls it as gh. Saving checks that each chain\'s account can push to its repositories, then restarts dsh-superagent.' } },
+    { key: 'accounts', type: 'fact', label: { zh: '每条链路的账号', en: 'Account of each chain' } },
     { key: 'pollSeconds', type: 'number', advanced: true, min: 60, max: 3600, label: { zh: '轮询间隔 / 秒', en: 'Polling interval / seconds' }, hint: { zh: 'GitHub 要求更长间隔时以 GitHub 为准。', en: 'A longer interval requested by GitHub wins.' } },
     { key: 'failuresBeforeError', type: 'number', advanced: true, min: 1, max: 20, label: { zh: '连续失败几次后报告异常', en: 'Failed polls before reporting an error' }, hint: { zh: '单次网络中断会在下一次轮询时自动重试，不必报告。', en: 'A single network interruption is retried on the next poll and need not be reported.' } },
     { key: 'observeIssues', type: 'switch', label: { zh: '接收仓库里的新 Issue', en: 'Receive new Issues in the repository' },
@@ -112,10 +114,15 @@ export const githubKind: SourceKind<GithubConfig> = {
   },
   facts: (deployment): Record<string, Localized | string> => {
     if (!deployment) return {}
-    const chains = deployment.chains ? Object.values(deployment.chains) : [{ chain: 'default', repository: deployment.repository, intakeRepository: deployment.intakeRepository }]
+    const chains = deployment.chains ? Object.values(deployment.chains) : [{ ...deployment, chain: 'default' }]
+    const accounts = chains.map(item => `${item.chain ?? 'default'}: @${item.github.login}`)
+    const logins = [...new Set(chains.map(item => item.github.login))]
     return {
-      cli: { zh: `当前账号 @${deployment.github.login}`, en: `Current account @${deployment.github.login}` },
-      chains: { zh: chains.map(item => `${item.chain ?? 'default'}: ${item.intakeRepository} → ${item.repository}`).join('；'), en: chains.map(item => `${item.chain ?? 'default'}: ${item.intakeRepository} → ${item.repository}`).join('; ') },
+      cli: logins.length > 1
+        ? { zh: `每条链路使用各自的账号：${logins.map(login => `@${login}`).join('、')}`, en: `Each chain uses its own account: ${logins.map(login => `@${login}`).join(', ')}` }
+        : { zh: `当前账号 @${logins[0]}`, en: `Current account @${logins[0]}` },
+      accounts: { zh: accounts.join('；'), en: accounts.join('; ') },
+      chains: { zh: chains.map(item => `${item.chain ?? 'default'}: ${item.intakeRepository} → ${item.repository} (@${item.github.login})`).join('；'), en: chains.map(item => `${item.chain ?? 'default'}: ${item.intakeRepository} → ${item.repository} (@${item.github.login})`).join('; ') },
     }
   },
 }
@@ -250,7 +257,7 @@ async function readStream(ctx: SourceContext, round: Round, id: string, stateId:
   for (const item of items) {
     // Stopping mid-stream aborts before advancing the cursor so unread items are retried.
     if (stopped(ctx, round)) throw new Error('The GitHub Source stopped during the poll')
-    if (sameName(item.user.login, login)) continue
+    if (sameGithubLogin(item.user.login, login)) continue
     if (id === 'issues') {
       const issue = IssueSchema.safeParse(item)
       const pr = issue.success && !!issue.data.pull_request
@@ -312,7 +319,7 @@ export async function pollRound(ctx: SourceContext, configOrSignal?: GithubConfi
   const legacy = configOrSignal === undefined || configOrSignal instanceof AbortSignal
   const config = legacy ? ctx.config<GithubConfig>(SOURCE) ?? GithubConfigSchema.parse({}) : configOrSignal
   // A caller that builds one deployment by hand (the single-argument overload) has no chain row to select; its deployment is the default chain.
-  const selected = chain ?? githubChains(config)[0] ?? { id: 'default', intakeRepository: '', codeRepository: '' }
+  const selected = chain ?? githubChains(config)[0] ?? { id: 'default', intakeRepository: '', codeRepository: '', cli: '' }
   const target = deployment ?? ctx.deploymentFor?.(selected.id) ?? ctx.deployment
   const abort = legacy ? configOrSignal as AbortSignal | undefined : signal
   const round = newRound(abort)
@@ -394,7 +401,7 @@ async function readNotified(ctx: SourceContext, round: Round, number: number, it
       // An Issue opened by someone other than the agent since the cursor brings its body so a mention in it reaches the gate.
       // A mention added by a later edit to the body is not read: only the author can be the actor of the body.
       const { login } = deployment.github
-      const opened = Date.parse(issue.created_at) >= Date.parse(since) && !sameName(issue.user.login, login)
+      const opened = Date.parse(issue.created_at) >= Date.parse(since) && !sameGithubLogin(issue.user.login, login)
       if (opened) await ctx.receive(issueTrigger(issue, login, thread))
       await intakeComments(ctx, { number, isPr: false, threadId: thread, url: issue.html_url }, since, round, repository, deployment)
       nameThread(ctx, thread, number, issue.title)
@@ -404,7 +411,7 @@ async function readNotified(ctx: SourceContext, round: Round, number: number, it
     const pr = await pull(ctx, round, number, deployment, repository)
     // Emit a PR description trigger for PRs opened since the cursor; its ID is the same as the one produced by the repository PR stream.
     const { login } = deployment.github
-    if (pr.created_at && Date.parse(pr.created_at) >= Date.parse(since) && !sameName(pr.user.login, login)) {
+    if (pr.created_at && Date.parse(pr.created_at) >= Date.parse(since) && !sameGithubLogin(pr.user.login, login)) {
       const opened = { number, title: pr.title ?? '', body: pr.body, user: pr.user, created_at: pr.created_at, html_url: pr.html_url }
       await ctx.receive(pullTrigger(opened, login, thread))
     }
@@ -437,7 +444,7 @@ async function intakeComments(ctx: SourceContext, ref: PullRef, since: string, r
       if (stopped(ctx, round)) throw new Error('The GitHub Source stopped during the poll')
       const timestamp = Date.parse(comment.updated_at ?? comment.submitted_at ?? comment.created_at ?? '')
       if (!Number.isFinite(timestamp) || timestamp < Date.parse(since)) continue
-      if (sameName(comment.user.login, login)) continue
+      if (sameGithubLogin(comment.user.login, login)) continue
       // A review decision without a body still reaches the ticket: a worker may be waiting for that approval.
       const trigger = commentTrigger(comment, ref, kind, login)
       if (trigger.text) await ctx.receive(trigger)

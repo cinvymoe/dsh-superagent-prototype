@@ -46,7 +46,7 @@ const REPOSITORY = /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?$/
 /** A repository the Source requires: `owner/name`, never blank. */
 const REQUIRED_REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const CHAIN = /^[a-z][a-z0-9-]*$/
-/** One independent intake repository -> code repository chain. The Source-level `cli` is shared by every chain. */
+/** One independent intake repository -> code repository chain, with an optional CLI of its own. */
 export const GithubChainSchema = z.object({
   /** Stable chain id in lowercase kebab-case; it identifies threads and tickets that come from this chain. */
   id: z.string().trim().regex(CHAIN, 'lowercase kebab-case'),
@@ -54,6 +54,8 @@ export const GithubChainSchema = z.object({
   intakeRepository: z.string().trim().regex(REPOSITORY, 'owner/name').default(''),
   /** Repository workers check out, push branches to, and open pull requests in. */
   codeRepository: z.string().trim().regex(REQUIRED_REPOSITORY, 'owner/name'),
+  /** GitHub CLI and account of this chain; blank uses the Source-level `cli`. */
+  cli: z.string().trim().default(''),
 }).strict().transform(chain => ({ ...chain, intakeRepository: chain.intakeRepository || chain.codeRepository }))
 export type GithubChain = z.infer<typeof GithubChainSchema>
 export const GithubConfigSchema = z.object({
@@ -136,35 +138,51 @@ function parsed<T>(schema: z.ZodType<T>, text: string): T | undefined {
   const result = schema.safeParse(value)
   return result.success ? result.data : undefined
 }
-/** Verify the agent's GitHub CLI identity, push access to every code repository, and read access to every intake repository. */
+/** Verify each chain's GitHub CLI identity, its push access to the code repository, and read access to the intake repository. */
 export async function resolveDeployment(machine: Machine, github: unknown, probe: Probe, path = process.env.PATH ?? ''): Promise<Deployment> {
   const { stateDir } = machine
   const config = GithubConfigSchema.parse(normalizeGithubConfig(github ?? {}))
   const chains = githubChains(config)
   if (!chains.length) throw new SetupError('repositoryUnset')
-  if (!config.cli) throw new SetupError('agentCliUnset')
-  let cli: string
-  try { cli = executable(config.cli, path, workerBin(stateDir)) } catch (error) { throw new SetupError('agentCliMissing', { output: reason(error) }) }
-  const text = await probe([cli, 'api', 'user']).catch((error: unknown) => { throw new SetupError('agentCliSignedOut', { output: reason(error) }) })
-  const agent = parsed(GithubUser, text)
-  if (!agent) throw new SetupError('agentCliNoAccount')
-  const lookup = async (chain: string, remote: string, requirePush: boolean): Promise<string> => {
+  // One CLI may serve several chains; probe its account once and share the result, as the Source's account did before chains could differ.
+  const identities = new Map<string, { cli: string; id: number; login: string }>()
+  const identity = async (name: string, chain: string): Promise<{ cli: string; id: number; login: string }> => {
+    if (!name) throw new SetupError('agentCliUnset', { chain })
+    const cached = identities.get(name)
+    if (cached) return cached
+    let cli: string
+    try { cli = executable(name, path, workerBin(stateDir)) } catch (error) {
+      throw new SetupError('agentCliMissing', { chain, cli: name, output: reason(error) })
+    }
+    const text = await probe([cli, 'api', 'user']).catch((error: unknown) => {
+      throw new SetupError('agentCliSignedOut', { chain, cli: name, output: reason(error) })
+    })
+    const agent = parsed(GithubUser, text)
+    if (!agent) throw new SetupError('agentCliNoAccount', { chain, cli: name })
+    const resolved = { cli, id: agent.id, login: agent.login }
+    identities.set(name, resolved)
+    return resolved
+  }
+  const lookup = async (agent: { cli: string; login: string }, cli: string, chain: string, remote: string, requirePush: boolean): Promise<string> => {
     // Use the canonical repository name returned by GitHub so renamed repositories match incoming notifications.
-    const access = parsed(RepositoryAccess, await probe([cli, 'api', `repos/${remote}`, '--jq', '{name: .full_name, push: .permissions.push}']).catch((error: unknown) => {
-      throw new SetupError('repositoryUnreadable', { account: agent.login, repository: remote, chain, output: reason(error) })
+    const access = parsed(RepositoryAccess, await probe([agent.cli, 'api', `repos/${remote}`, '--jq', '{name: .full_name, push: .permissions.push}']).catch((error: unknown) => {
+      throw new SetupError('repositoryUnreadable', { account: agent.login, repository: remote, chain, cli, output: reason(error) })
     }))
-    if (!access) throw new SetupError('repositoryUnreported', { repository: remote, chain })
-    if (requirePush && access.push !== true) throw new SetupError('repositoryReadOnly', { account: agent.login, repository: access.name, chain })
+    if (!access) throw new SetupError('repositoryUnreported', { repository: remote, chain, cli })
+    if (requirePush && access.push !== true) throw new SetupError('repositoryReadOnly', { account: agent.login, repository: access.name, chain, cli })
     return access.name
   }
   const targets: Record<string, DeploymentTarget> = {}
   for (const chain of chains) {
     if (Object.hasOwn(targets, chain.id)) throw new SetupError('chainDuplicate', { chain: chain.id })
+    const name = chain.cli || config.cli
+    const agent = await identity(name, chain.id)
     const { code: codeRemote, intake: intakeRemote } = githubRepositories(chain)
     if (!codeRemote) throw new SetupError('repositoryUnset', { chain: chain.id })
-    const repository = await lookup(chain.id, codeRemote, true)
-    const intakeRepository = intakeRemote === codeRemote ? repository : await lookup(chain.id, intakeRemote, false)
-    targets[chain.id] = { ...machine, chain: chain.id, repository, intakeRepository, github: { cli, login: agent.login, noreply: `${agent.id}+${agent.login}@users.noreply.github.com` } }
+    const repository = await lookup(agent, name, chain.id, codeRemote, true)
+    const intakeRepository = intakeRemote === codeRemote ? repository : await lookup(agent, name, chain.id, intakeRemote, false)
+    targets[chain.id] = { ...machine, chain: chain.id, repository, intakeRepository,
+      github: { cli: agent.cli, login: agent.login, noreply: `${agent.id}+${agent.login}@users.noreply.github.com` } }
   }
   const first = targets[chains[0]!.id]!
   return { ...first, chains: targets }

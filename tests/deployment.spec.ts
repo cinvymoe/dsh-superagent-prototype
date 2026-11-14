@@ -71,17 +71,17 @@ describe('setup', () => {
       expect(resolveDeployment(machine(), github, probe, path)).rejects.toEqual(setupError(place, code, values))
     const chain = (codeRepository = 'acme/widgets') => ({ chains: [{ id: 'default', codeRepository }], cli: 'gh' })
     await needs('github', 'repositoryUnset', {}, { cli: 'gh' })
-    await needs('github', 'agentCliUnset', {}, { chains: [{ id: 'default', codeRepository: 'acme/widgets' }] })
-    await needs('github', 'agentCliMissing', { output: `${join(dir, 'missing')} is not an executable file` }, { ...chain(), cli: join(dir, 'missing') })
-    await needs('github', 'agentCliMissing', { output: 'bin/gh must be a command name or an absolute path' }, { ...chain(), cli: 'bin/gh' })
-    await needs('github', 'agentCliSignedOut', {}, { ...chain(), cli: program(join(dir, 'bin', 'gh-broken'), 'exit 1') })
-    await needs('github', 'repositoryReadOnly', { account: 'Agent-Bot', repository: 'acme/widgets' }, { ...chain(), cli: gh(join(dir, 'bin', 'gh-reader'), 'Agent-Bot', false) })
+    await needs('github', 'agentCliUnset', { chain: 'default' }, { chains: [{ id: 'default', codeRepository: 'acme/widgets' }] })
+    await needs('github', 'agentCliMissing', { chain: 'default', cli: join(dir, 'missing'), output: `${join(dir, 'missing')} is not an executable file` }, { ...chain(), cli: join(dir, 'missing') })
+    await needs('github', 'agentCliMissing', { chain: 'default', cli: 'bin/gh', output: 'bin/gh must be a command name or an absolute path' }, { ...chain(), cli: 'bin/gh' })
+    await needs('github', 'agentCliSignedOut', { chain: 'default', cli: join(dir, 'bin', 'gh-broken') }, { ...chain(), cli: program(join(dir, 'bin', 'gh-broken'), 'exit 1') })
+    await needs('github', 'repositoryReadOnly', { account: 'Agent-Bot', repository: 'acme/widgets', chain: 'default', cli: join(dir, 'bin', 'gh-reader') }, { ...chain(), cli: gh(join(dir, 'bin', 'gh-reader'), 'Agent-Bot', false) })
     // Signed in, but the account cannot read the repository, or the CLI names no account.
     const unreadable = program(join(dir, 'bin', 'gh-outsider'),
       `case "$*" in\n  "api user") echo '{"login":"Agent-Bot","id":7}' ;;\n  *) echo 'HTTP 404' >&2; exit 1 ;;\nesac`)
     const output = expect.stringContaining('HTTP 404') as unknown
-    await needs('github', 'repositoryUnreadable', { account: 'Agent-Bot', repository: 'acme/widgets', output }, { ...chain(), cli: unreadable })
-    await needs('github', 'agentCliNoAccount', {}, { ...chain(), cli: program(join(dir, 'bin', 'gh-anonymous'), `echo '{}'`) })
+    await needs('github', 'repositoryUnreadable', { account: 'Agent-Bot', repository: 'acme/widgets', chain: 'default', cli: join(dir, 'bin', 'gh-outsider'), output }, { ...chain(), cli: unreadable })
+    await needs('github', 'agentCliNoAccount', { chain: 'default', cli: join(dir, 'bin', 'gh-anonymous') }, { ...chain(), cli: program(join(dir, 'bin', 'gh-anonymous'), `echo '{}'`) })
     expect(() => executable('nothing-here', join(dir, 'bin'))).toThrow('nothing-here is not an executable file on PATH')
   })
   it('resolves separate intake and code repositories, defaulting a blank intake repository to the code repository', async () => {
@@ -117,6 +117,42 @@ describe('setup', () => {
     await expect(resolveDeployment(machine(), { chains: [], cli: 'gh' }, probe, path)).rejects.toEqual(setupError('github', 'repositoryUnset'))
     await expect(resolveDeployment(machine(), { chains: [], repository: 'acme/widgets', cli: 'gh' }, probe, path))
       .rejects.toEqual(setupError('github', 'repositoryUnset'))
+  })
+  it('resolves each chain with its own CLI and account, falling back to the Source CLI', async () => {
+    const alpha = gh(join(dir, 'bin', 'gh-alpha'), 'Alpha-Bot')
+    const beta = gh(join(dir, 'bin', 'gh-beta'), 'Beta-Bot')
+    const deployment = await resolveDeployment(machine(), { cli: 'gh', chains: [
+      { id: 'alpha', codeRepository: 'acme/widgets', cli: 'gh-alpha' },
+      { id: 'beta', codeRepository: 'acme/widgets', cli: 'gh-beta' },
+      { id: 'shared', codeRepository: 'acme/widgets' },
+    ] }, probe, path)
+    expect(deployment.chains).toMatchObject({
+      alpha: { github: { cli: alpha, login: 'Alpha-Bot' } },
+      beta: { github: { cli: beta, login: 'Beta-Bot' } },
+      shared: { github: { cli: join(dir, 'bin', 'gh'), login: 'Agent-Bot' } },
+    })
+    expect(deployment.chains!.alpha!.github.login).not.toBe(deployment.chains!.beta!.github.login)
+    // The Source CLI may be empty when every chain names its own CLI.
+    const independent = await resolveDeployment(machine(), { cli: '', chains: [
+      { id: 'alpha', codeRepository: 'acme/widgets', cli: 'gh-alpha' },
+      { id: 'beta', codeRepository: 'acme/widgets', cli: 'gh-beta' },
+    ] }, probe, path)
+    expect(independent.chains!.alpha!.github.login).toBe('Alpha-Bot')
+    expect(independent.chains!.beta!.github.login).toBe('Beta-Bot')
+  })
+  it('names the chain and CLI whose startup check fails', async () => {
+    const chains = [{ id: 'alpha', codeRepository: 'acme/widgets' }, { id: 'beta', codeRepository: 'acme/widgets', cli: 'gh-broken' }]
+    await expect(resolveDeployment(machine(), { cli: 'gh', chains }, probe, path))
+      .rejects.toEqual(setupError('github', 'agentCliMissing', { chain: 'beta', cli: 'gh-broken', output: expect.stringContaining('not an executable file') }))
+    await expect(resolveDeployment(machine(), { cli: '', chains: [{ id: 'alpha', codeRepository: 'acme/widgets' }] }, probe, path))
+      .rejects.toEqual(setupError('github', 'agentCliUnset', { chain: 'alpha' }))
+    program(join(dir, 'bin', 'gh-out'), 'exit 1')
+    await expect(resolveDeployment(machine(), { cli: 'gh', chains: [
+      { id: 'alpha', codeRepository: 'acme/widgets' }, { id: 'beta', codeRepository: 'acme/widgets', cli: 'gh-out' },
+    ] }, probe, path)).rejects.toEqual(setupError('github', 'agentCliSignedOut', { chain: 'beta', cli: 'gh-out' }))
+    await expect(resolveDeployment(machine(), { cli: 'gh', chains: [
+      { id: 'alpha', codeRepository: 'acme/widgets' }, { id: 'beta', codeRepository: 'acme/widgets', cli: gh(join(dir, 'bin', 'gh-reader'), 'Beta-Bot', false) },
+    ] }, probe, path)).rejects.toEqual(setupError('github', 'repositoryReadOnly', { chain: 'beta', cli: join(dir, 'bin', 'gh-reader'), account: 'Beta-Bot', repository: 'acme/widgets' }))
   })
   it('normalizes a stored legacy single-chain configuration into one default chain and rejects incomplete chains', () => {
     expect(normalizeGithubConfig({ repository: 'acme/widgets', intakeRepository: 'acme/intake', codeRepository: 'acme/code', cli: 'gh' }))

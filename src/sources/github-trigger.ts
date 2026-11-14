@@ -1,7 +1,7 @@
 /** Normalizes GitHub issues, pull requests, comments, reviews, and CI transitions into domain Triggers. */
 import { z } from 'zod'
 import { key, type ChannelRef, type Trigger } from '../core/index.ts'
-import { escapeRegExp, sameName } from '../infra/text.ts'
+import { escapeRegExp, sameGithubLogin, sameName } from '../infra/text.ts'
 
 export const SOURCE = 'github'
 /**
@@ -79,7 +79,7 @@ function commentText(comment: GithubComment, kind: 'conversation' | 'inline' | '
 export const mentions = (text: string, login: string): boolean =>
   new RegExp(`(?:^|[^a-zA-Z0-9_@])@${escapeRegExp(login)}(?![a-zA-Z0-9_-])`, 'i').test(text)
 const author = (user: { login: string; type?: string }, agent: string) =>
-  ({ actor: { source: SOURCE, id: user.login }, human: isHumanLogin(user) && !sameName(user.login, agent) })
+  ({ actor: { source: SOURCE, id: user.login }, human: isHumanLogin(user) && !sameGithubLogin(user.login, agent) })
 /** Builds a trigger for a comment or review; text is empty for a bodyless comment or a `COMMENTED` review without a body. */
 export function commentTrigger(comment: GithubComment, ref: PullRef, kind: 'conversation' | 'inline' | 'review', agent: string): Trigger {
   const at = comment.updated_at ?? comment.submitted_at ?? comment.created_at ?? new Date().toISOString()

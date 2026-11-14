@@ -2,8 +2,9 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { UserError } from '../src/core/index.ts'
 import { Commands } from '../src/infra/commands.ts'
-import { Setup } from '../src/app/setup.ts'
+import { setupChanged, Setup } from '../src/app/setup.ts'
 import { SettingsConflict } from '../src/app/settings.ts'
+import { SettingsSchema } from '../src/policy.ts'
 import { startRuntime, type Host } from './fixtures/host.ts'
 
 let h: Host | undefined
@@ -39,6 +40,14 @@ it('refuses a save of a block that another save changed during its model or acco
   accounts.resolve()
   await expect(moved).rejects.toThrow(SettingsConflict)
   expect(store.settings().sources.github!.config).toMatchObject({ cli: value.config.cli, pollSeconds: 90 })
+})
+
+it('restarts setup when a chain\'s own CLI changes, even with no default CLI', () => {
+  const settings = (chainCli: string) => SettingsSchema.parse({ sources: { github: { enabled: true,
+    config: { cli: '', chains: [{ id: 'alpha', codeRepository: 'acme/widgets', cli: chainCli }] } } } })
+  expect(setupChanged(settings(''), settings('gh-alpha'))).toBe(true)
+  expect(setupChanged(settings('gh-alpha'), settings('gh-beta'))).toBe(true)
+  expect(setupChanged(settings('gh-alpha'), settings('gh-alpha'))).toBe(false)
 })
 
 it('refuses a Policy sync that a Policy save outran, reports it on sync:feishu, and keeps the save', async () => {

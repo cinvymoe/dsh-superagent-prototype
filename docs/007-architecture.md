@@ -311,7 +311,7 @@ The requirement view also documents its derived state: the requirement state tag
 | Path | Responsibility |
 | --- | --- |
 | `src/index.ts` | The main plugin entry: reads the machine settings, starts the Runtime, and gives it the restart that a save of a Source's account uses |
-| `src/deployment.ts` | The plugin `Config` and `Machine`; `resolveDeployment` and `resolveFeishuBot` read the repository and the accounts from the Source settings, each CLI run as Executor shells run it; `SETUP_FIELDS` lists the Source fields setup reads. The code names no person, account or organization |
+| `src/deployment.ts` | The plugin `Config` and `Machine`; `resolveDeployment` resolves each chain's own CLI and account (falling back to the Source-level CLI), proves push and read access per chain, and `resolveFeishuBot` reads the bot, each CLI run as Executor shells run it; `SETUP_FIELDS` lists the Source fields setup reads. The code names no person, account or organization |
 | `src/setup.ts` | Setup problems: `SetupError`, with a code, the place that fixes it and the English text the log, the main Session and the panel share |
 | `src/policy.ts` | The Policy: the settings schemas by block, the Policy version, the gate and Mandate revalidation |
 | `src/agent-model.ts` | `roleModel`, the one implementation of a role's effective model (its `agents` override, else `eval.model`, `executor.model`, or the executor's effective model for an aligner), kept pure and free of runtime imports so the panel bundles it |
@@ -393,7 +393,7 @@ The requirement view also documents its derived state: the requirement state tag
 | `src/sources/registry.ts` | `SourceRegistry` |
 | `src/sources/host.ts` | `SourceHost`, `SourceContext`, `Health`, `health` and the fixed health texts |
 | `src/sources/poll.ts` | What GitHub and Feishu polling share: `POLL_HORIZON_MS`, `polled`, `cursorAt`, and `pollThreads`, which keeps a failure on its Thread as `pollError` |
-| `src/sources/github.ts` | The GitHub kind and plugin entry, exported as `./github-watch`: a poll round of notifications, the pull requests of open Tickets with their CI, and subscribed Threads |
+| `src/sources/github.ts` | The GitHub kind and plugin entry, exported as `./github-watch`: a poll round of notifications, the pull requests of open Tickets with their CI, subscribed Threads, and per-chain facts and CLI fields; it treats an App bot's `login[bot]` as the same account as `login` so its own comments are never new input |
 | `src/sources/github-trigger.ts` | GitHub comments, reviews, Issue bodies and CI changes as Triggers, and GitHub addresses |
 | `src/sources/github-pull.ts` | The pull request rules: which pull requests a Ticket follows (`claimPull`, `observePull`), the closes it reports to the Engine, `pullReplyChannels`, which selects the pull request channels that receive a copy of a result reply, `pullDescriptionNotices`, which copies a PR description's problem, change, and verification sections to the Ticket's source GitHub conversation, and `pullEndNotices`, the terminal notice of a Ticket that ended merged or closed to its IM Channels, its pull request, and its source GitHub conversation |
 | `src/sources/github-channel.ts` | The GitHub Channel: comments and review thread replies, `sent` or `gone` |
@@ -447,7 +447,7 @@ The requirement view also documents its derived state: the requirement state tag
 | `tests/panel-projects.spec.tsx` | The project bar: project switching that keeps the requirement tab or lands on the requirement list, the overflow More menu, project creation with the two repositories that opens the new project's requirement list, and editing one project without changing another project's repositories from the New requirement page head — a refused update keeps the page and its values, an emptied worktree root clears it, and Cancel or Back writes nothing |
 | `tests/policy.spec.ts` | Source scope, the gate, the admission table, Mandate revalidation, the Policy version, settings migrations and assessment outcomes |
 | `tests/registry.spec.ts` | `SourceRegistry`: instances, validation, Policy parts, Channels and Thread context |
-| `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, the pull request rules, health |
+| `tests/sources.spec.ts` | The Feishu and GitHub Sources on a `SourceContext`: translation, polls and read positions, own App-bot comments, per-chain facts, the pull request rules, health |
 | `tests/commands.spec.ts` | CLI calls as the deployment's accounts, the Channels' answers, and repository-scoped GitHub calls |
 | `tests/feishu-read.spec.ts`, `tests/github-read.spec.ts` | Feishu and GitHub reads |
 | `tests/admission-context.spec.ts`, `tests/feishu-image.spec.ts` | The Thread window of assessments, and Feishu image reads |
@@ -480,7 +480,7 @@ The requirement view also documents its derived state: the requirement state tag
 | `tests/execution-strategy.spec.ts` | The execution-strategy seam: resolving a pinned strategy for a legacy, native, feature-exec, unknown-version and service-less host, the worker's tool set and pre-run guard, the execution tools a configured executor keeps, and the native and feature-exec handoffs |
 | `tests/cards.spec.ts` | The rules the built-in text must state, file by file |
 | `tests/model-surface.spec.ts` | Everything models read: tools, prompts, skills and inputs, checked against the tool schemas, the execution environment and the glossary, within a size budget per role |
-| `tests/deployment.spec.ts`, `tests/environment.spec.ts`, `tests/index.spec.ts` | The plugin configuration and setup, the agent's process environment, the plugin entry |
+| `tests/deployment.spec.ts`, `tests/environment.spec.ts`, `tests/index.spec.ts` | The plugin configuration and setup, including per-chain CLIs and accounts and the chain/CLI named by each setup failure, the agent's process environment, the plugin entry |
 | `tests/service-script.spec.ts` | The service actions `start`, `stop`, `restart`, `status`, `prepare` and `activate`, against fake `ps`, `tmux`, `dsh` and `pnpm`, in a temporary git checkout with a bare remote the tests commit ahead |
 | `tests/client.spec.tsx`, `tests/navigation.spec.ts`, `tests/controls.spec.tsx` | The client plugin's registration and polling, Session navigation and route memory, the local controls, and the panel's imports, which have no cycle |
 | `tests/panel-overview.spec.tsx`, `panel-source.spec.tsx`, `panel-trigger.spec.tsx`, `panel-eval.spec.tsx`, `panel-execution.spec.tsx` | Each page of the panel, against a fake management API answered by route |

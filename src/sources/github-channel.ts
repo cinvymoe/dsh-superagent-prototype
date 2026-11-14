@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import type { OutboundMessage } from '../core/index.ts'
 import { CliError } from '../infra/commands.ts'
-import { sameName } from '../infra/text.ts'
+import { sameGithubLogin } from '../infra/text.ts'
 import type { SourceContext } from './host.ts'
 import type { ChannelLink, ChannelLinks } from './kind.ts'
 import { githubAddress, githubPage, githubRepository, threadChain } from './github-trigger.ts'
@@ -37,7 +37,7 @@ export async function sendGithub(host: Pick<SourceContext, 'commands'>, message:
     }
     const path = rootId === undefined ? `issues/${number}/comments` : `pulls/${number}/comments`
     const marker = `<!-- dsh-superagent:${message.id} -->`
-    const mine = (comment: z.infer<typeof CommentSchema>) => sameName(comment.user?.login ?? '', github.login)
+    const mine = (comment: z.infer<typeof CommentSchema>) => sameGithubLogin(comment.user?.login ?? '', github.login)
       && (rootId === undefined || comment.in_reply_to_id === rootId) && (comment.body ?? '').includes(marker)
     if ((await scoped.pages(CommentSchema, path)).some(mine)) return 'sent'
     const target = rootId === undefined ? path : `${path}/${rootId}/replies`

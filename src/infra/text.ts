@@ -17,4 +17,10 @@ export function checkedImText(text: string): string {
 export const fill = (template: string, values: Record<string, string>): string => template.replace(/\{(\w+)\}/g, (_, name: string) => values[name] ?? '')
 /** Case-insensitive comparison for GitHub logins and repository names. */
 export const sameName = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase()
+/**
+ * Compares GitHub logins, treating an App bot's `[bot]` suffix as part of the same account. A GitHub App may write as
+ * `name[bot]` while the configured CLI reports `name`, so both forms name the agent itself.
+ */
+export const sameGithubLogin = (a: string, b: string): boolean =>
+  sameName(a.replace(/\[bot\]$/i, ''), b.replace(/\[bot\]$/i, ''))
 export const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
