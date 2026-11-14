@@ -56,7 +56,7 @@ Worker subagents, including nested ones, use DeepSeek Harness's `standard` prese
 
 ### Preparing a Ticket directory
 
-Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` and the chosen root as its working directory. It has ten minutes to finish. The command creates the checkout; it does not choose the root. A local project's own `prepare` command replaces the Execution setting for its Tickets. A Ticket whose project sets none, or which has no local project such as a GitHub or Feishu one, uses the Execution command. Without a prepare command, the worker starts in an empty directory.
+Before the first Assignment, if the Ticket directory does not exist, the prepare command runs once with `sh` and the chosen root as its working directory. It has ten minutes to finish. The command creates the checkout; it does not choose the root. A local project's own `prepare` command replaces the Execution setting for its Tickets: the project's `prepare` > `executor.prepare`. A Ticket whose project sets none, or which has no local project such as a GitHub or Feishu one, uses the Execution command. Without a prepare command, the worker starts in an empty directory.
 
 An explicitly configured root (a project's `worktreeRoot` or a non-empty `executor.directory`) is checked before anything is created: it must exist, be a directory and accept a write. A missing, non-directory or read-only root fails the Ticket with the absolute path and the reason; the launch never creates that root, never creates the Ticket directory under the default root, and never falls back. Fix the root, then retry the Ticket or write on its Thread: preparation runs again. The default `<stateDir>/work` is different: it is still created when missing.
 
@@ -79,7 +79,7 @@ The prepare command and Executor instructions receive the same execution variabl
 | Variable | Registered by | Value |
 | --- | --- | --- |
 | `DSH_SUPERAGENT_DIR`, `DSH_SUPERAGENT_NAME`, `DSH_SUPERAGENT_TICKET` | Executor | The Ticket's directory, short name and id |
-| `DSH_SUPERAGENT_BLOCKED_COMMANDS` | Executor | Commands the Executor may not run |
+| `DSH_SUPERAGENT_BLOCKED_COMMANDS` | Executor | The deployment's blocked commands plus the Ticket's project's own, deduplicated |
 | `DSH_SUPERAGENT_GITHUB_REPOSITORY` | GitHub | The code repository Tickets execute against, `owner/name` |
 | `DSH_SUPERAGENT_GITHUB_INTAKE_REPOSITORY` | GitHub | The intake repository that receives Issues, `owner/name` |
 | `DSH_SUPERAGENT_GITHUB_ACCOUNT`, `DSH_SUPERAGENT_GITHUB_COMMIT_EMAIL` | GitHub | The agent account and its commit email |
@@ -88,7 +88,7 @@ The prepare command and Executor instructions receive the same execution variabl
 
 For a multi-chain GitHub Source, `DSH_SUPERAGENT_GITHUB_REPOSITORY` and `DSH_SUPERAGENT_GITHUB_INTAKE_REPOSITORY` name the chain the Ticket originates from. Ticket-specific values come from its directory and originating Trigger. Other values come from the current deployment settings. Only the panel can change execution environment settings; text sent to the main Session cannot change the configured shell command.
 
-Workers reach GitHub through the agent account's `gh` and Feishu through the bot's `lark-cli`. Blocked commands fail when invoked by name.
+Workers reach GitHub through the agent account's `gh` and Feishu through the bot's `lark-cli`. Blocked commands fail when invoked by name. Blocking is additive: the deployment's `executor.blockedCommands` apply to every Ticket, and a local project's own `blockedCommands` add to that list for its Tickets, so a Ticket's effective list is their union, deduplicated. A project's extra commands are written to a project-only shim directory ahead of its chain's shims, so they apply only to its own Tickets while another project still runs those commands. `gh`, `git` and `lark-cli` can never be blocked. An empty list blocks none. `DSH_SUPERAGENT_BLOCKED_COMMANDS` carries the effective union.
 
 These wrappers and directories establish defaults, not a security boundary. A worker can still execute a program by absolute path.
 
