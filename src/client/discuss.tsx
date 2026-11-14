@@ -166,6 +166,8 @@ export function NewRequirementPage() {
       <span className="dt-hint">{t('discuss.newSubtitle')}</span>
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
+      {active?.missingChain && <span className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
+        { chain: active.missingChain })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
       {active && <Button variant="outline" size="sm" className="dt-project-edit" icon={<Icon name="settings" size={14} />}
         onClick={() => navigate({ page: 'requirements', edit: active.id })}>{t('discuss.editProject')}</Button>}
@@ -228,6 +230,8 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
       <span className="dt-hint">{t('discuss.listSubtitle')}</span>
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
+      {active?.missingChain && <span className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
+        { chain: active.missingChain })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
     </PageHead>
     <div className="dt-column">

@@ -1,0 +1,20 @@
+== requirements head ==
+superagent
+审阅对齐结果，确认或打回。
+cinvymoe/dsh-superagent-prototype → cinvymoe/dsh-superagent-prototype
+== project strip ==
+superagent
+rust_crane
+== overview problems ==
+系统问题
+2
+没有人能发起工作：各来源上的名单都为空，任何请求都不会成为工单
+去添加
+GitHub 来源异常
+
+连续 3 次轮询失败，最近一次：Error: GitHub returned no HTTP headers
+
+来源会在每次轮询时自动重试。持续出现时检查网络和该来源的登录状态。
+== edit form head ==
+新建需求
+编辑项目
