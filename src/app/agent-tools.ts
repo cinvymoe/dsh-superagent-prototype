@@ -3,7 +3,10 @@
  * tools an enabled plugin adds, the catalog `GET settings` offers, and the checks a save of the `agents` settings block runs.
  */
 import { UserError } from '../core/index.ts'
-import { AGENT_ROLES, type AgentPlugin, type AgentRole, type AgentsConfig } from '../policy.ts'
+import { AGENT_ROLES, COMPRESSION_TOOLS, type AgentPlugin, type AgentRole, type AgentsConfig } from '../policy.ts'
+
+/** Re-exported for callers of the catalog: the compression tools belong to a stored plugin now. */
+export { COMPRESSION_TOOLS }
 
 /** The agent presets Executor Sessions and the main Session are created with, which the bundle's patch defines. */
 export const WORKER_PRESET = 'dsh-superagent-worker', ROUTER_PRESET = 'dsh-superagent-router'
@@ -17,11 +20,6 @@ export const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep'
   'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
 /** The DSH tools the main Session works with, in catalog order: skills, files, the shell and its jobs, and images. */
 export const MAIN_TOOLS = ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill']
-/**
- * billion-context's ACP compression tools, which the main Session gets from the `billion-context` plugin whenever the host
- * provides it; a host without the plugin leaves them out, and enabling or disabling the plugin is the only switch.
- */
-export const COMPRESSION_TOOLS = ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image']
 /**
  * The tools a role cannot turn off: they are not part of any plugin, appear in its read-only required row, and stay in the
  * allow list whenever the host provides them. `skill` is required on the main Session but comes from the `skills` plugin on a
@@ -53,9 +51,9 @@ export interface BuiltinPlugin extends AgentPlugin {
   mount?: MountedPluginSpec
 }
 /**
- * The built-in plugin groups, whose defaults reproduce the per-tool catalog they replace: `image` and `billion-context` on
- * the main Session, and `image`, `web`, `skills`, `todo` and `subagents` on a worker. They stay code-owned: a save cannot add,
- * remove or edit them, only enable or disable one for a role it applies to.
+ * The built-in plugin groups, whose defaults reproduce the per-tool catalog they replace. They stay code-owned: a save
+ * cannot add, remove or edit them, only enable or disable one for a role it applies to. billion-context is not one of them:
+ * `policy.ts` seeds it as an ordinary stored plugin so the panel can edit or remove it.
  */
 export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
   { id: 'image', name: 'Image', description: 'Read an image file from the workspace.', tools: ['read_image'], roles: [...AGENT_ROLES],
@@ -67,8 +65,6 @@ export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
     providedBy: 'preset' },
   { id: 'subagents', name: 'Subagents', description: 'Start and message other agents.', roles: ['aligner', 'executor'],
     tools: ['subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent'], providedBy: 'preset' },
-  { id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
-    tools: [...COMPRESSION_TOOLS], roles: ['main'], providedBy: 'host' },
   // Standard-mode plugins no superagent preset registers: a role enables one and its Session mounts it, so an unenabled
   // capability has no tool and no prompt section at all. `ask-user` blocks on the main Session because a person is waiting
   // there, and times out on a worker, which must keep working while the answer is pending.

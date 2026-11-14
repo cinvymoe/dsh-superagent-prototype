@@ -100,6 +100,21 @@ export const DEFAULT_ENABLED_PLUGINS: Readonly<Record<AgentRole, readonly string
   aligner: ['image', 'web', 'skills', 'todo', 'subagents'],
   executor: ['image', 'web', 'skills', 'todo', 'subagents'],
 }
+/**
+ * billion-context's ACP compression tools. They are registered by the host's `billion-context` plugin, so a role that
+ * enables the plugin gets them whenever this profile has it; the definition below is an ordinary stored plugin, which the
+ * panel can edit or remove like any other.
+ */
+export const COMPRESSION_TOOLS = ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image']
+/**
+ * Plugins every configuration starts with, seeded as stored definitions rather than code-owned built-ins: the panel can edit
+ * or remove them, and a save persists them with the rest of the `agents` block. A profile without the host plugin simply
+ * reports them as unavailable and a role that enables one gets no tool from it.
+ */
+export const DEFAULT_AGENT_PLUGINS: readonly AgentPlugin[] = [
+  { id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
+    tools: [...COMPRESSION_TOOLS], roles: ['main'] },
+]
 /** One role's overrides: its model when set (null inherits the role's default model) and the plugins it enables. */
 const agentRoleConfig = (role: AgentRole) => z.object({
   model: RoleModelSchema.nullable().default(null),
@@ -109,13 +124,23 @@ const agentRoleConfig = (role: AgentRole) => z.object({
  * The three roles and the shared plugin catalog. Reading stays lenient about a stored plugin's tools, which the host may
  * no longer register; a save checks the whole block against the built-in catalog and the role scopes.
  */
-export const AgentsConfigSchema = z.object({
-  plugins: z.array(AgentPluginSchema).default([]),
+const agentsConfig = z.object({
+  plugins: z.array(AgentPluginSchema).default(() => DEFAULT_AGENT_PLUGINS.map(plugin => ({ ...plugin, tools: [...plugin.tools] }))),
   main: agentRoleConfig('main').default(() => agentRoleConfig('main').parse({})),
   aligner: agentRoleConfig('aligner').default(() => agentRoleConfig('aligner').parse({})),
   executor: agentRoleConfig('executor').default(() => agentRoleConfig('executor').parse({})),
 }).strict()
-export type AgentsConfig = z.infer<typeof AgentsConfigSchema>
+/**
+ * A role may name a seeded plugin the stored list lost (a configuration saved before the plugin became stored, or a stored
+ * list edited elsewhere); reading restores the definition so an enabled id never names nothing. A save persists it.
+ */
+const seed = (agents: AgentsConfig): AgentsConfig => {
+  const missing = DEFAULT_AGENT_PLUGINS.filter(plugin => !agents.plugins.some(stored => stored.id === plugin.id)
+    && AGENT_ROLES.some(role => agents[role].enabledPlugins.includes(plugin.id)))
+  return missing.length === 0 ? agents : { ...agents, plugins: [...agents.plugins, ...missing.map(plugin => ({ ...plugin, tools: [...plugin.tools] }))] }
+}
+export const AgentsConfigSchema = agentsConfig.transform(seed)
+export type AgentsConfig = z.infer<typeof agentsConfig>
 
 export const AllowedSchema = z.object({ id: z.string().trim().min(1).max(200), name: z.string().trim().max(100).optional() }).strict()
 const Weak = z.enum(['inferred', 'ignore'])

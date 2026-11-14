@@ -3,7 +3,7 @@
  * with plugin validation, the per-role history diff, and the read tolerance for names the catalog or host no longer has.
  */
 import { afterEach, expect, it, vi } from 'vitest'
-import { AGENT_ROLES, AgentsConfigSchema, DEFAULT_ENABLED_PLUGINS, SettingsSchema, type AgentRole, type AgentsConfig } from '../src/policy.ts'
+import { AGENT_ROLES, AgentsConfigSchema, DEFAULT_AGENT_PLUGINS, DEFAULT_ENABLED_PLUGINS, SettingsSchema, type AgentRole, type AgentsConfig } from '../src/policy.ts'
 import { AGENT_TOOLS, BUILTIN_PLUGINS, COMPRESSION_TOOLS, FORBIDDEN_ADDED_TOOLS, MAIN_TOOLS, REQUIRED_TOOLS, WORK_TOOLS, agentCatalog,
   capabilityMounts, closeAgentPlugins, closeAgentsPlugins, pluginSuggestions, roleTools, validateAgentPlugins } from '../src/app/agent-tools.ts'
 import { roleModel } from '../src/app/role-models.ts'
@@ -26,7 +26,7 @@ type HistoryBody = { items: { block: string; changes: { code: string; items?: st
 
 it('catalogs each Agent role and the built-in plugin groups that reproduce the previous tool surface', () => {
   expect([...AGENT_ROLES]).toEqual(['main', 'aligner', 'executor'])
-  expect(BUILTIN_PLUGINS.map(plugin => plugin.id)).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'billion-context',
+  expect(BUILTIN_PLUGINS.map(plugin => plugin.id)).toEqual(['image', 'web', 'skills', 'todo', 'subagents',
     'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   expect(AGENT_TOOLS.main.preset).toBe('dsh-superagent-router')
   expect(AGENT_TOOLS.aligner.preset).toBe('dsh-superagent-worker')
@@ -42,7 +42,21 @@ it('catalogs each Agent role and the built-in plugin groups that reproduce the p
   expect(emptyAgents.main.enabledPlugins).toEqual(['image', 'billion-context'])
   expect(emptyAgents.aligner.enabledPlugins).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
   expect(emptyAgents.executor.enabledPlugins).toEqual(DEFAULT_ENABLED_PLUGINS.executor)
-  expect(emptyAgents.plugins).toEqual([])
+  // billion-context is a stored definition now, so a fresh block seeds it and the panel may edit or remove it.
+  expect(emptyAgents.plugins).toEqual(DEFAULT_AGENT_PLUGINS.map(plugin => ({ ...plugin, tools: [...plugin.tools] })))
+})
+
+it('seeds billion-context as an editable stored plugin that only the main role can enable', () => {
+  const seeded = emptyAgents.plugins.find(plugin => plugin.id === 'billion-context')!
+  expect(seeded).toMatchObject({ roles: ['main'], tools: COMPRESSION_TOOLS })
+  // The catalog marks it stored rather than code-owned, still reports the host's six compression tools for it, and offers it
+  // to the main role alone.
+  const catalog = agentCatalog(emptyAgents, [...MAIN_TOOLS, ...COMPRESSION_TOOLS].map(name => ({ name, description: '' })))
+  expect(catalog.plugins.find(plugin => plugin.id === 'billion-context')).toMatchObject({ builtIn: false, provided: true, missingTools: [] })
+  expect(catalog.roles.find(role => role.role === 'executor')!.plugins).not.toContain('billion-context')
+  // A config that never enables it keeps no definition, so a person may delete it and it stays deleted.
+  const without = closeAgentsPlugins(settingsOf({ ...emptyAgents, plugins: [], main: { ...emptyAgents.main, enabledPlugins: ['image'] } }))
+  expect(without.plugins).toEqual([])
 })
 
 it('reproduces the old tool set of every role exactly from the default plugin list', () => {
@@ -54,7 +68,7 @@ it('reproduces the old tool set of every role exactly from the default plugin li
   expect(roleTools('executor', emptyAgents)).toEqual(WORK_TOOLS)
   // The built-in groups together account for every optional tool; nothing was lost in the move from per-tool switches.
   // The runtime-mounted capabilities add tools these presets never register, so they stay out of that accounting.
-  expect(new Set(BUILTIN_PLUGINS.filter(plugin => plugin.providedBy !== 'mount').flatMap(plugin => plugin.tools)))
+  expect(new Set([...BUILTIN_PLUGINS.filter(plugin => plugin.providedBy !== 'mount'), ...emptyAgents.plugins].flatMap(plugin => plugin.tools)))
     .toEqual(new Set([...WORK_TOOLS.filter(name => !REQUIRED_TOOLS.executor.includes(name)), ...COMPRESSION_TOOLS]))
 })
 
@@ -179,24 +193,23 @@ it('returns the agents block with its revision, the shared plugin catalog and ea
   expect(settings.blocks.agents).toEqual({ revision: 0, value: emptyAgents })
   expect(settings.agents.roles.map(entry => entry.role)).toEqual(['main', 'aligner', 'executor'])
   expect(settings.agents.roles[0]).toMatchObject({ preset: 'dsh-superagent-router', required: REQUIRED_TOOLS.main,
-    plugins: ['image', 'billion-context', 'ask-user', 'present', 'web-fetch', 'fork-subagent'],
+    plugins: ['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
     enabledPlugins: ['image', 'billion-context'] })
   expect(settings.agents.roles[2]).toMatchObject({ required: REQUIRED_TOOLS.executor,
     plugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'] })
   // The shared catalog marks the built-in groups and the tools this host does not register.
   expect(settings.agents.plugins.map(plugin => [plugin.id, plugin.builtIn, plugin.provided]))
     .toEqual([['image', true, true], ['web', true, true], ['skills', true, true], ['todo', true, true],
-      ['subagents', true, true], ['billion-context', true, false], ['ask-user', true, true], ['present', true, true],
-      ['web-fetch', true, true], ['fork-subagent', true, true]])
+      ['subagents', true, true], ['ask-user', true, true], ['present', true, true],
+      ['web-fetch', true, true], ['fork-subagent', true, true], ['billion-context', false, false]])
   // The bundle's presets register their own groups and the runtime mounts the capability groups, so only a host plugin's
   // missing tools are reported.
   expect(settings.agents.plugins[1]!.missingTools).toEqual([])
-  expect(settings.agents.plugins[5]!.missingTools).toEqual(COMPRESSION_TOOLS)
-  expect(settings.agents.plugins[6]!.missingTools).toEqual([])
+  expect(settings.agents.plugins[9]!.missingTools).toEqual(COMPRESSION_TOOLS)
   // A capability group is offered to every role but is not enabled until someone switches it on, and it never enters the
   // tool allow list: the Session mounts it instead.
   expect(settings.agents.roles.map(entry => entry.plugins)).toEqual([
-    ['image', 'billion-context', 'ask-user', 'present', 'web-fetch', 'fork-subagent'],
+    ['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
     ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'],
     ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent']])
   expect(settings.agents.ungroupedTools).toEqual([])
@@ -266,7 +279,7 @@ it('saves a valid plugin value, increments the block revision and diffs plugin e
   const { store } = h.runtime
   const extra = { id: 'extra', name: 'Extra tools', tools: ['plugin_lint'] }
   const value = settingsOf({ ...emptyAgents, plugins: [extra],
-    main: { model, enabledPlugins: ['image', 'billion-context', 'extra'] } })
+    main: { model, enabledPlugins: ['image', 'extra', 'billion-context'] } })
   const saved = await h.api('PUT', 'settings/agents', { value, revision: 0 })
   expect(saved.status).toBe(200)
   expect(saved.body).toMatchObject({ saved: true, revision: 1, policy_changed: false, restarting: false })

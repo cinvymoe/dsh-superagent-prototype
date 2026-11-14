@@ -255,7 +255,9 @@ describe('settings migration', () => {
       policy: { rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
       eval: { mode: 'auto', timeoutSeconds: 90, model: { provider: 'p', model: 'm' } },
       executor: { model: null, maxWorkers: 5, directory: '', prepare: '', blockedCommands: [] },
-      agents: { plugins: [], main: { model: null, enabledPlugins: ['image', 'billion-context'] },
+      agents: { plugins: [{ id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
+        tools: ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image'], roles: ['main'] }],
+        main: { model: null, enabledPlugins: ['image', 'billion-context'] },
         aligner: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] },
         executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } },
     })
@@ -489,7 +491,9 @@ describe('bots and events without a sender', () => {
 })
 
 describe('agent settings', () => {
-  const empty = { plugins: [], main: { model: null, enabledPlugins: ['image', 'billion-context'] },
+  const empty = { plugins: [{ id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
+    tools: ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image'], roles: ['main'] }],
+    main: { model: null, enabledPlugins: ['image', 'billion-context'] },
     aligner: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] },
     executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }
   it('parses an empty agents block for the three roles, and defaults one that settings saved before it existed lack', () => {
@@ -512,7 +516,9 @@ describe('agent settings', () => {
     const migrated = SettingsSchema.parse(migrateSettings({ agents: old }))
     expect(migrated.agents.main.enabledPlugins).toEqual(['billion-context', 'imported-main'])
     expect(migrated.agents.main.enabledPlugins).not.toContain('image')
-    expect(migrated.agents.plugins).toEqual([{ id: 'imported-main', name: 'Imported main tools', tools: ['compress'], roles: ['main'] }])
+    expect(migrated.agents.plugins).toEqual([{ id: 'imported-main', name: 'Imported main tools', tools: ['compress'], roles: ['main'] },
+      { id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
+        tools: ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image'], roles: ['main'] }])
     // One disabled tool turns the whole built-in group off, which can only narrow the set.
     expect(migrated.agents.executor.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents'])
     expect(migrated.agents).not.toHaveProperty('disabledTools')

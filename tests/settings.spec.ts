@@ -126,7 +126,7 @@ it('refuses an agents save outside the panel, saves a changed one once and recor
   const added = { ...moved, plugins: [{ id: 'extra', name: 'Extra tools', tools: ['plugin_lint'] }],
     executor: { ...moved.executor, enabledPlugins: [...moved.executor.enabledPlugins, 'extra'] } }
   await settings.save('agents', added, store.blockRevision('agents'), 'panel')
-  expect(store.settings().agents.plugins.map(plugin => plugin.id)).toEqual(['extra'])
+  expect(store.settings().agents.plugins.map(plugin => plugin.id)).toEqual(['extra', 'billion-context'])
   expect(store.settings().agents.executor.enabledPlugins).toContain('extra')
   expect(store.blockRevision('agents')).toBe(2)
   // The same value again is a no-op save: no new block revision and no new settings revision.

@@ -65,7 +65,7 @@ it('lists the three roles with required tools and plugin switches, and says suba
   expect(zh.agentsIntroShort).toContain('插件')
   expect(zh.agentsIntroShort).toContain('子代理')
   // A role offers only its applicable plugins, and every switch that is not a required tool belongs to a plugin row.
-  expect(pluginIds('main')).toEqual(['image', 'billion-context', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
+  expect(pluginIds('main')).toEqual(['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'])
   expect(pluginIds('aligner')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   expect(pluginIds('executor')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   for (const role of ['main', 'aligner', 'executor']) {
@@ -273,7 +273,8 @@ it('lists an Agents save with its role, model and plugin change lines', async ()
 
 it('adds a custom plugin from an MCP suggestion, enables it and keeps it after a reload', async () => {
   await open()
-  expect(text()).toContain(zh.agentCustomPluginsNone)
+  // billion-context is a stored definition now, so it is the one custom plugin a fresh block already has.
+  expect(document.querySelector('[data-custom-plugin="billion-context"]')).not.toBeNull()
   await click(find(zh.agentAddPlugin, 'button'))
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
   expect(dialog.textContent).toContain(zh.agentAddPluginTitle)
@@ -322,7 +323,7 @@ it('confirms before deleting an enabled custom plugin and clears it from every r
   expect(server.settings.agents.plugins.some(plugin => plugin.id === 'feature-exec')).toBe(false)
   expect(server.settings.agents.executor.enabledPlugins).not.toContain('feature-exec')
   await open()
-  expect(document.querySelector('[data-custom-plugin]')).toBeNull()
+  expect(document.querySelector('[data-custom-plugin="feature-exec"]')).toBeNull()
   expect(pluginIds('executor')).not.toContain('feature-exec')
 })
 

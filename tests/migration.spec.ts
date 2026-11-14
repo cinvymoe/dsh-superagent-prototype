@@ -239,7 +239,7 @@ it('upgrades a schema 11 database in place, running only the Agent plugin conver
   expect(migrated.get('schema')).toBe(SCHEMA_VERSION)
   // The historical revision is converted, so the history panel reads the plugin shape.
   expect(migrated.settingsHistory()[0]!.settings.agents.main.enabledPlugins).toEqual(['billion-context'])
-  expect(migrated.settingsHistory()[0]!.settings.agents.plugins).toEqual([])
+  expect(migrated.settingsHistory()[0]!.settings.agents.plugins.map(plugin => plugin.id)).toEqual(['billion-context'])
   expect(migrated.settingsHistory()[0]!.settings.agents.executor.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents'])
   // The schema 11 records are otherwise untouched: the schema 10 steps run only for a schema 10 database.
   expect(migrated.tickets.get('t1')).toEqual(ticket)
