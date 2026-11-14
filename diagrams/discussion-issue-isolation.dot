@@ -1,0 +1,81 @@
+digraph isolation {
+  graph [rankdir=TB, fontname="Noto Sans CJK SC", fontsize=12, bgcolor="white", pad=0.4, nodesep=0.38, ranksep=0.36, compound=true];
+  node [shape=box, style="rounded,filled", fontname="Noto Sans CJK SC", fontsize=10.5, color="#94a3b8", fillcolor="#ffffff", penwidth=1.3, margin="0.16,0.10"];
+  edge [fontname="Noto Sans CJK SC", fontsize=9, color="#64748b", fontcolor="#475569", arrowsize=0.6];
+
+  /* 人 */
+  Panel [label=<<b>〔人〕Panel 面板</b><br/>讨论列表 / 详情　·　需求 / 工单 / 对齐>, fillcolor="#e0f2fe", color="#0284c7"];
+
+  /* ① 讨论管线 */
+  subgraph cluster_discuss {
+    label="① 讨论管线 —— 咨询。整条链路没有 Eval → Decision → Ticket 的任何一环";
+    labeljust=l; style="rounded,dashed"; color="#a78bfa"; fontcolor="#6d28d9"; fontsize=10; penwidth=1.1;
+    Disc [label=<<b>〔Engine〕Discussions</b><br/>LocalDiscussion d-…（正文 / 项目 / 状态）>, fillcolor="#ede9fe", color="#7c3aed"];
+    Ans [label=<<b>〔Engine〕Answering 队列</b><br/>LocalAnswer：queued → answering → answered | failed<br/>maxAnswerers = 2（独立并发池，不占 worker slot）>, fillcolor="#ede9fe", color="#7c3aed"];
+    Ansr [label=<<b>〔Answerer〕answerer-&lt;discussionId&gt;</b><br/>composeDiscuss　·　只读 read / read_image / glob / grep<br/>无 Ticket　·　无 Mandate　·　无 worktree　·　单讨论串行>, fillcolor="#d1fae5", color="#059669"];
+    Disc -> Ans [label="ask(text)"];
+    Ans -> Ansr [label="出队拉起 / 复用会话"];
+    Ansr -> Ans [label="回答文本", style=dashed, color="#059669", fontcolor="#047857"];
+  }
+
+  /* ② Issue 管线 */
+  subgraph cluster_issue {
+    label="② Issue 管线 —— 工作。判定 → 派工 → 报告 → 收尾，与改造前一致";
+    labeljust=l; style="rounded,dashed"; color="#38bdf8"; fontcolor="#0369a1"; fontsize=10; penwidth=1.1;
+    Intake [label=<<b>〔Engine〕Intake</b>　Trigger 去重 / 记录 / 扇出>, fillcolor="#ede9fe", color="#7c3aed"];
+    Thread [label=<<b>〔Engine〕Thread 线程</b>　消息时序 + Subscription 订阅>, fillcolor="#ede9fe", color="#7c3aed"];
+    Gate [shape=diamond, style="filled", label=<<b>〔Engine〕闸门</b><br/>Thread 属 local:d-… ？>, fillcolor="#ede9fe", color="#7c3aed", fontsize=10, margin="0.05,0.03"];
+    Reject [label=<<b>✗ 拒绝入队</b><br/>讨论永不产生<br/>Eval / Decision / Ticket>, fillcolor="#fee2e2", color="#dc2626", fontcolor="#991b1b", fontsize=9.5];
+    Eval [label=<<b>〔Engine〕Eval</b><br/>Gate 准入（确定性）→ Assessment 研判（模型）>, fillcolor="#ede9fe", color="#7c3aed"];
+    Router [label=<<b>〔Router〕主 Session —— orchestrator</b><br/>orchestrator_route：accept / attach / stop / ignore<br/>只研判与路由，无文件写权限>, fillcolor="#fef3c7", color="#d97706"];
+    Tickets [label=<<b>〔Engine〕Tickets / Assignments</b><br/>Mandate 授权 + 派工 + 报告落账>, fillcolor="#ede9fe", color="#7c3aed"];
+    Worker [label=<<b>〔Worker〕worker-&lt;ticketId&gt;</b><br/>worktree + 全量工具　·　每 Ticket 一个<br/>mode = work | align（discuss 已删除）>, fillcolor="#cffafe", color="#0891b2"];
+    Intake -> Thread [label="入线程"];
+    Thread -> Gate [label="入队前"];
+    Gate -> Eval [label="否：普通需求"];
+    Gate -> Reject [label="是", color="#dc2626", fontcolor="#b91c1c"];
+    Eval -> Router [label="candidate 卡片", color="#d97706", fontcolor="#b45309"];
+    Router -> Tickets [label="Decision", color="#d97706", fontcolor="#b45309"];
+    Tickets -> Worker [label="Assignment"];
+    Worker -> Tickets [label="Report", style=dashed, color="#0891b2", fontcolor="#0e7490", constraint=false];
+  }
+
+  Out [label=<<b>〔Source〕GitHub Issue / PR 评论 · 飞书消息 · Channel 回复</b><br/>外部通道：只收发消息，不判定、不执行>, fillcolor="#f1f5f9", color="#64748b"];
+  Kernel [label=<<b>共享内核（不是角色，两层都只是「用」，互不穿透）</b><br/>Store / KV（同一 sqlite）　·　Sessions（main / worker / answerer 三种角色声明）<br/>Delivery · Replies · Outbox　·　Sources>, fillcolor="#f8fafc", color="#cbd5e1"];
+
+  /* 跨链路 */
+  Panel -> Disc [label="新建讨论 / 发言"];
+  Panel -> Intake [label="提交需求 · 人点「创建 Issue」\n——唯一跨界动作", color="#7c3aed", fontcolor="#6d28d9", style=bold];
+  Disc -> Intake [label="passive Trigger（只留痕，不判定）", style=dashed, constraint=false];
+  Ans -> Panel [label="状态 + 回答（轮询）", style=dashed, constraint=false];
+  Tickets -> Out [label="收尾与对外写入"];
+  Out -> Intake [label="webhook / 轮询", style=dashed, constraint=false];
+
+
+  /* ───────── 时间线（典型值） ───────── */
+  Timeline [shape=plaintext, label=<
+    <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#e2e8f0">
+      <TR><TD COLSPAN="7" BGCOLOR="#f8fafc" ALIGN="LEFT"><B>时间线（设计目标 / 典型量级，非实测）</B></TD></TR>
+      <TR><TD BGCOLOR="#f5f3ff"><B>讨论</B></TD>
+          <TD BGCOLOR="#f5f3ff"><B>T0</B><BR/>人发言</TD>
+          <TD BGCOLOR="#f5f3ff"><B>+0s</B><BR/>记录 · 入队</TD>
+          <TD BGCOLOR="#f5f3ff"><B>数秒内</B><BR/>Answerer 拉起</TD>
+          <TD BGCOLOR="#f5f3ff"><B>≤120s</B><BR/>作答（超时上限）</TD>
+          <TD BGCOLOR="#f5f3ff"><B>写完即</B><BR/>面板刷新可见</TD>
+          <TD BGCOLOR="#ffffff">—</TD></TR>
+      <TR><TD BGCOLOR="#e0f2fe"><B>Issue</B></TD>
+          <TD BGCOLOR="#e0f2fe"><B>T0</B><BR/>消息到达</TD>
+          <TD BGCOLOR="#e0f2fe"><B>批处理</B><BR/>同 Thread 合并</TD>
+          <TD BGCOLOR="#e0f2fe"><B>+秒级</B><BR/>Gate · Assessment</TD>
+          <TD BGCOLOR="#e0f2fe"><B>+秒级</B><BR/>Router 决策</TD>
+          <TD BGCOLOR="#e0f2fe"><B>+即时</B><BR/>建 Ticket · 派工</TD>
+          <TD BGCOLOR="#e0f2fe"><B>10min ~ 数小时</B><BR/>Worker 执行 → PR</TD></TR>
+    </TABLE>
+  >];
+
+  Legend [shape=note, label="角色　〔人〕蓝 = 决策与确认　　〔Engine〕紫 = 编排 + 唯一状态写入　　〔Router〕橙 = 研判路由\n〔Answerer〕绿 = 讨论只读会话　　〔Worker〕青 = 工单执行　　〔Source〕灰 = 外部通道\n实线 = 主动调用　虚线 = 异步回传　粗线 = 唯一跨界　　任何结论都须回 Engine 落账后才生效", fillcolor="#f8fafc", color="#cbd5e1", fontsize=9.5];
+
+  Worker -> Kernel [style=invis];
+  Kernel -> Timeline [style=invis];
+  Timeline -> Legend [style=invis];
+}

@@ -96,3 +96,14 @@ flowchart TB
   K -.->|reportRelay / notice| R
   T -.->|订阅扇出| K
 ```
+
+## 图 3：讨论与 Issue 双管线隔离（设计提案，未实施）
+
+[![讨论与 Issue 双管线隔离](./discussion-issue-isolation.png)](./discussion-issue-isolation.svg)
+
+- 源文件：`discussion-issue-isolation.dot`（Graphviz；`dot -Tpng -Gdpi=130` 渲染）。当前 PNG 2205×1734。
+- 背景：讨论（`local:d-…` Thread）目前与需求共用同一条 Engine 管线，讨论里的提问会进 Eval 并被 `kind=ignore`，用户看到的是「没执行」；本图给出隔离后的目标形态。
+- 两条管线：① 讨论 = Discussions → Answering 队列 → Answerer（只读会话，无 Ticket/Mandate/worktree，独立并发 `discussions.maxAnswerers`）→ answer 回写面板；② Issue = Intake → Thread → 闸门 → Eval → Router → Tickets → Worker，与改造前一致。
+- 闸门：`queueForEval()` 对 `local:d-…` 主 Thread 直接拒绝入队，讨论永不产生 Eval / Decision / Ticket；唯一跨界动作是人在面板点「创建 Issue」。
+- 角色色键：〔人〕蓝＝决策与确认、〔Engine〕紫＝编排与唯一状态写入、〔Router〕橙＝研判路由、〔Answerer〕绿＝讨论只读会话、〔Worker〕青＝工单执行、〔Source〕灰＝外部通道。
+- 时间线为设计目标 / 典型量级（非实测）：讨论 ≤120s（沿用 `eval.timeoutSeconds`），Issue 判定秒级、Worker 执行 10min～数小时。
