@@ -92,7 +92,7 @@ Copy [examples/profile.cordis.patch.yml](../examples/profile.cordis.patch.yml) t
 
 | Key | Required | Meaning |
 | --- | --- | --- |
-| `stateDir` | yes | Absolute path: the database, the lock, the command shims in `worker-bin`, the agent's git configuration, requirement images in `local-images` and, by default, the Ticket directories in `work`. Back it up before upgrades |
+| `stateDir` | yes | Absolute path: the database, the lock, the command shims in `worker-bin` and `worker-bin-<chain>`, the agent's git configuration, requirement images in `local-images` and, by default, the Ticket directories in `work`. Back it up before upgrades |
 | `promptMaxChars`, `admissionContextMaxPages`, `admissionContextTimeoutMs` | no | The largest saved prompt configuration, and how many Thread pages one assessment reads within what time |
 
 After the first start, edit machine limits in **Settings → Deployment** or the DeepSeek Harness Plugin Manager. Changes apply without restart. `stateDir` cannot be changed there. Invalid values or unknown configuration keys prevent startup; the log identifies the key.
@@ -290,14 +290,16 @@ curl -s -X PUT -H 'x-orchestrator-request: 1' -H 'content-type: application/json
 
 Setup uses the DeepSeek Harness subprocess service, as worker shells do. It removes environment variables whose names contain KEY, PASSWORD, SECRET or TOKEN.
 
-Setup resolves each chain's CLI and account (a chain without its own CLI uses the Source-level CLI), verifies each chain's code repository and that account's push access, verifies that each intake repository is readable (and defaults it to the chain's code repository), writes the worker environment, and checks that git uses only the agent credentials for github.com. A failure names the chain and CLI it came from. A Feishu setup failure disables only the Feishu Source.
+Setup resolves each chain's CLI and account (a chain without its own CLI uses the Source-level CLI), verifies each chain's code repository and that account's push access, verifies that each intake repository is readable (and defaults it to the chain's code repository), writes the worker environment of every chain, and checks that each chain's git uses only that chain's agent credentials for github.com. A failure names the chain and CLI it came from. A Feishu setup failure disables only the Feishu Source.
 
 The process environment that setup writes:
 
 - **Command shims** in `<stateDir>/worker-bin`, first on `PATH`: `gh` runs the agent's CLI; `lark-cli` runs the bot's CLI; blocked commands fail. A shim removes its own directory from `PATH` before it runs its target.
 - **git configuration** in `<stateDir>/worker-gitconfig`: replaces the operator's global and system git configuration. It selects the agent CLI as the github.com credential helper, rewrites GitHub SSH addresses to HTTPS and defines Git LFS filters. Personal git settings such as an HTTP proxy do not apply. No commit identity is set here, git never prompts for credentials, and `GH_TOKEN` and `GITHUB_TOKEN` are removed.
 
-A file in `worker-bin` or `worker-gitconfig` that dsh-superagent did not write stops setup. A Ticket directory inside a git repository whose own configuration adds credentials fails the Ticket.
+A deployment with several chains gets one pair per chain: the Source's first chain keeps these two paths, and each other chain has `worker-bin-<chain>` and `worker-gitconfig-<chain>` beside them, with that chain's CLI, login and credential helper. A Ticket's prepare command and every command in its worker Session read the pair of the Ticket's chain, resolved per command, so Tickets of different chains can run at the same time without using each other's account. A chain that startup has not resolved yet uses the first chain's pair until the save's restart resolves it.
+
+A file in `worker-bin`, `worker-gitconfig`, `worker-bin-<chain>` or `worker-gitconfig-<chain>` that dsh-superagent did not write stops setup. A Ticket directory inside a git repository whose own configuration adds credentials fails the Ticket.
 
 ## Try it
 

@@ -90,8 +90,9 @@ async function receive(trigger: Trigger, target = runtime) {
 let services: Record<string, unknown>
 /** DSH's job registry the Runtime's Executor reads its workers' shell jobs from. */
 let jobs: ReturnType<typeof jobRegistry>
-/** What worker commands of the startup checks print, by argv; an Error makes the command fail with its message. */
-let answers: Record<string, string | Error>
+/** What worker commands of the startup checks print, by argv; an Error makes the command fail with its message, and a
+ * function answers from the command's environment when a chain's answer depends on which environment runs it. */
+let answers: Record<string, string | Error | ((spec: { argv: readonly string[]; env?: Record<string, string> }) => string | Error)>
 /** Stand-in CLIs on disk, since setup finds executables before it runs them: the agent's, the merge account's and the Feishu bot's. */
 const AGENT = () => join(directory, 'agent-gh')
 const OTHER = () => join(directory, 'other-gh')
@@ -102,7 +103,8 @@ const subprocess = { spawn: vi.fn((spec: { argv: readonly string[] }) => {
   // Strip leading `env` and `KEY=VALUE` arguments before looking up the command response.
   const argv = [...spec.argv]
   while (argv[0] === 'env' || /^[A-Z_]+=/.test(argv[0] ?? '')) argv.shift()
-  const answer = answers[argv.join(' ')] ?? ''
+  const raw = answers[argv.join(' ')]
+  const answer = typeof raw === 'function' ? raw(spec as { argv: readonly string[]; env?: Record<string, string> }) : raw ?? ''
   const reader = (text: string) => ({ readFrom: () => ({ text, nextOffset: text.length, lossy: false }) })
   return { done: Promise.resolve({ exitCode: answer instanceof Error ? 1 : 0, signal: null }), collected: { stdout: reader(answer instanceof Error ? '' : answer), stderr: reader(answer instanceof Error ? answer.message : '') } }
 }) }
@@ -1131,6 +1133,60 @@ it('leaves auto-merge to the delivery requirements, with the agent\'s own gh and
   expect(delivery).toContain('Never enable auto-merge as the agent account')
   expect(delivery).toContain('<merge CLI> pr merge <number> --auto --merge --match-head-commit <sha>')
   expect(runtime.prompts.preview(runtime.prompts.current().config).worker).not.toContain('gh-merge')
+})
+
+it('gives each chain\'s ticket that chain\'s gh and git environment in its prepare command and worker shell, without another chain\'s', async () => {
+  try {
+  const TOOLS = () => join(directory, 'tools-gh')
+  writeFileSync(TOOLS(), '#!/bin/sh\n', { mode: 0o755 })
+  answers[`${TOOLS()} api user`] = '{"login":"tools-bot","id":8}'
+  for (const repository of ['acme/tools', 'acme/tools-issues']) {
+    answers[`${TOOLS()} api repos/${repository} --jq {name: .full_name, push: .permissions.push}`] = `{"name":"${repository}","push":${repository === 'acme/tools'}}\n`
+  }
+  answers[`${AGENT()} api repos/acme/widgets-issues --jq {name: .full_name, push: .permissions.push}`] = '{"name":"acme/widgets-issues","push":false}\n'
+  // Setup checks the git configuration of the environment it runs in, so the answer depends on the chain's environment.
+  answers[HELPERS] = ({ env }) => env?.GIT_CONFIG_GLOBAL === workerGitConfig(directory, 'tools')
+    ? `file:${workerGitConfig(directory, 'tools')}\0${credentialHelper(TOOLS())}\0`
+    : `file:${workerGitConfig(directory)}\0${credentialHelper(AGENT())}\0`
+  const next = await restart({}, { github: { chains: [
+    { id: 'default', intakeRepository: 'acme/widgets-issues', codeRepository: 'acme/widgets' },
+    { id: 'tools', intakeRepository: 'acme/tools-issues', codeRepository: 'acme/tools', cli: TOOLS() },
+  ], cli: AGENT() } })
+  await next.ready
+  next.sources.register(feishuKind); next.sources.register(githubKind)
+  expect(next.setupProblem).toBeUndefined()
+  // Setup wrote the primary chain at the original paths and the other chain beside them, each with its own CLI and helper.
+  expect(readFileSync(join(directory, 'worker-bin', 'gh'), 'utf8')).toContain(`exec '${AGENT()}'`)
+  expect(readFileSync(join(directory, 'worker-bin-tools', 'gh'), 'utf8')).toContain(`exec '${TOOLS()}'`)
+  expect(readFileSync(workerGitConfig(directory, 'tools'), 'utf8')).toContain(`\thelper = "${credentialHelper(TOOLS())}"`)
+  expect(next.setup.environmentFor('tools').PATH!.split(':')[0]).toBe(join(directory, 'worker-bin-tools'))
+  const save = (command: string) => next.store.saveSettings({ ...next.store.settings(), executor: { ...next.store.settings().executor, prepare: command } })
+  save('true')
+  // A ticket from the second chain's Issue picks that chain for its execution, its prepare command and its shell.
+  const issue = issueTrigger({ number: 12, title: 'Tools regression', body: '@agent-bot please fix the tools',
+    created_at: '2026-09-09T00:00:00Z', html_url: 'https://github.com/acme/tools/issues/12', user: { login: 'alice', type: 'User' } }, 'agent-bot', 'tools:12')
+  await receive(issue)
+  const accepted = await route({ kind: 'accept', trigger_id: issue.id, title: 'Fix tools', worktree_name: 'fix-tools', acknowledgement: 'On it.' })
+  const tools = runtime.store.tickets.get((accepted.ticket as { ticket_id: string }).ticket_id)!
+  expect(tools.execution).toMatchObject({ chain: 'tools', repository: 'acme/tools', intakeRepository: 'acme/tools-issues' })
+  expect(runtime.sessionEnvironment(`worker-${tools.id}`).GIT_CONFIG_GLOBAL).toBe(workerGitConfig(directory, 'tools'))
+  // The default chain's ticket, live at the same time, keeps the primary environment.
+  const plain = await acceptedTicket(feishu('7', '@bot 修一下标题'))
+  expect(runtime.sessionEnvironment(plain.sessionId).GIT_CONFIG_GLOBAL).toBe(workerGitConfig(directory))
+  expect(runtime.sessionEnvironment(plain.sessionId).PATH!.split(':')[0]).toBe(join(directory, 'worker-bin'))
+  expect(runtime.sessionEnvironment('worker-unknown').GIT_CONFIG_GLOBAL).toBe(workerGitConfig(directory))
+  // Each prepare command receives the environment of its own ticket's chain.
+  const prepared = subprocess.spawn.mock.calls.map(([spec]) => spec as { argv: string[]; env?: Record<string, string> })
+    .filter(spec => spec.argv[0] === 'sh' && spec.argv[2] === 'true')
+    .map(spec => ({ id: spec.env?.DSH_SUPERAGENT_TICKET, env: spec.env! }))
+  expect(prepared.find(run => run.id === tools.id)!.env).toMatchObject({ GIT_CONFIG_GLOBAL: workerGitConfig(directory, 'tools'),
+    PATH: expect.stringContaining(join(directory, 'worker-bin-tools')) })
+  expect(prepared.find(run => run.id === plain.ticket.id)!.env).toMatchObject({ GIT_CONFIG_GLOBAL: workerGitConfig(directory) })
+  expect(prepared.find(run => run.id === plain.ticket.id)!.env.PATH).not.toContain(join(directory, 'worker-bin-tools'))
+  } finally {
+    // Later tests count the prepare spawns they make, so this one leaves the mock as it found it.
+    subprocess.spawn.mockClear()
+  }
 })
 
 it('runs the prepare command once for a new ticket, under the execution root with the ticket\'s environment, and fails the ticket with its output', async () => {

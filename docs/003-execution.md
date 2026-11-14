@@ -62,7 +62,7 @@ An explicitly configured root (a project's `worktreeRoot` or a non-empty `execut
 
 A failed command fails the Ticket and records its output. A retry or a person's message on one of the Ticket's Threads tries preparation again. A typical command uses `git worktree` to create a checkout. A pull request belongs to the Ticket when its branch's last path segment matches the Ticket's short name.
 
-With multiple repository chains, the same prepare command runs for every chain. Select the local clone from `DSH_SUPERAGENT_GITHUB_REPOSITORY` (for example with a `case` on `owner/name`) and use `DSH_SUPERAGENT_DIR` as the worktree path; a command that hard-codes one clone only serves that chain.
+With multiple repository chains, the same prepare command runs for every chain, and each Ticket's prepare command and worker Session run with the `gh` shim and git credential helper of the Ticket's own chain, which the Deployment guide's setup checks describe; Tickets of two chains may run at once without using each other's account. Select the local clone from `DSH_SUPERAGENT_GITHUB_REPOSITORY` (for example with a `case` on `owner/name`) and use `DSH_SUPERAGENT_DIR` as the worktree path; a command that hard-codes one clone only serves that chain.
 
 ### Concurrency
 
