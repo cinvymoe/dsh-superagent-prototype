@@ -10,6 +10,7 @@ import { key, liveTicket, type Ticket } from '../core/index.ts'
 import { mandateInstructions, ticketOfSession } from '../executor/dsh.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import { AGENT_TOOLS, MAIN_TOOLS, ROUTER_PRESET, roleTools, WORKER_PRESET } from './agent-tools.ts'
+import { Capabilities } from './capabilities.ts'
 import { AgentDelivery, messageId } from './delivery.ts'
 import type { Effects } from './effects.ts'
 import { resolveExecutionStrategy, type ExecutionServices } from './execution-strategy.ts'
@@ -46,6 +47,8 @@ export interface SessionsHost {
  * `tools` recomputes the Session's tool restriction from the saved `agents` block, so a settings save reaches it.
  */
 interface SessionBinding { disposers: (() => void)[]; scope?: Context; skills?: { revision: number; dispose: () => void }; subagent?: true
+  /** Standard-mode plugins this Session mounts for its role, reconciled on every tool refresh and released with the binding. */
+  capabilities?: Capabilities
   tools?: () => void }
 
 declare module '@deepseek-ai/cordis' {
@@ -269,6 +272,9 @@ export class Sessions {
     if (!master && !ticket) { this.limitSubagent(agent); return }
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
+    // The role's mounted capabilities come from this Session's own scope: enabled ones are loaded now, and the tool refresh
+    // installed below reconciles them after a save.
+    binding.capabilities = new Capabilities(agent.ctx)
     this.retryHealth.restore(agent.id, agent.session.snapshotEvents())
     if (agent.status === 'idle') this.retryHealth.clear(agent.id)
     this.updateModelHealth()
@@ -319,7 +325,11 @@ export class Sessions {
     const missing = AGENT_TOOLS.main.required.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the main Session's tools ${missing.join(', ')}, which this host does not provide`)
     const restrict = this.installTools(agent, binding, () => {
-      const tools = roleTools('main', this.host.store.settings().agents)
+      const agents = this.host.store.settings().agents
+      // Mounted capabilities register in this Session's own scope, so their tools never enter this allow list; the call only
+      // keeps the mounted set in step with the saved block.
+      binding.capabilities?.sync('main', agents)
+      const tools = roleTools('main', agents)
       // A required tool was checked above, so it stays exactly as before; a plugin tool is dropped while its plugin is not
       // installed, instead of making `restrict` refuse a name it cannot resolve.
       return tools.filter(name => AGENT_TOOLS.main.required.includes(name) || agent.ctx.tools.get(name, parent))
@@ -411,7 +421,9 @@ export class Sessions {
     // Execution tools a slice's strategy adds never come from a plugin, so no `agents` save can turn them off.
     const allow = () => {
       const now = current()
-      const tools = [...roleTools(workerRole(now), store.settings().agents), ...strategyOf(now)?.tools ?? []]
+      const agents = store.settings().agents
+      binding.capabilities?.sync(workerRole(now), agents)
+      const tools = [...roleTools(workerRole(now), agents), ...strategyOf(now)?.tools ?? []]
       return [...new Set(tools)].filter(name => agent.ctx.tools.get(name, parent))
     }
     const strategy = strategyOf(current())
@@ -445,9 +457,11 @@ export class Sessions {
     const ticketId = parent === undefined ? undefined : ticketOfSession(parent)
     const ticket = ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
     if (!ticket) return
-    // A subagent inherits its worker's tools without a role of its own, and follows a save through the same binding.
+    // A subagent inherits its worker's tools without a role of its own, and follows a save through the same binding. Its
+    // capability set follows the same role, so a capability the executor enabled is mounted in the subagent too.
     const binding: SessionBinding = { disposers: [], subagent: true }
     this.bindings.set(agent, binding)
+    binding.capabilities = new Capabilities(agent.ctx)
     binding.disposers.push(...this.workOnly(agent, ticket, binding))
   }
   /** Register the skills of a prompt version in the agent's skill scope, in place of an earlier version's. */
@@ -483,6 +497,8 @@ export class Sessions {
     if (!binding) return
     this.bindings.delete(agent)
     binding.skills?.dispose()
+    // Unmount first: the mounted tools must go with the capability set, before the tool filters below are lifted.
+    binding.capabilities?.stop()
     for (const dispose of binding.disposers.splice(0).reverse()) {
       try { dispose() } catch (error) { this.ctx.logger.warn('dsh-superagent could not release what it registered for a Session: %s', String(error)) }
     }

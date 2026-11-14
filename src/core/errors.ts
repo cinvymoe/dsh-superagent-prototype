@@ -43,6 +43,7 @@ export const USER_ERRORS = {
   agentsPluginRequiredTool: ['refused', 'The Agent plugin {plugin} cannot declare a required tool: {tools}'],
   agentsUnknownPlugin: ['refused', 'The {role} Agent enables plugins that do not exist: {plugins}'],
   agentsPluginRole: ['refused', 'The {role} Agent cannot enable these plugins, which do not apply to it: {plugins}'],
+  agentsPluginRequires: ['refused', 'The {role} Agent cannot enable these plugin dependencies: {requires}'],
   setupComplete: ['refused', 'Setup is complete'],
   prepareUnavailable: ['refused', 'The checkout cannot take a local merge: {reasons}'],
   prepareBusy: ['refused', 'A pull and build is already running'],
