@@ -290,7 +290,10 @@ export async function startRuntime(seed?: (store: Store) => void) {
   const workspaceRegistry = { create: async (cwd: string) => ({ id: cwd }), archiveSession }
   // The host's global tool registry, which `GET settings` reads through DSH's tools service. A spec registers a fake
   // plugin tool here; the per-Session registries above are separate, as they are on a real host.
-  const globalTools = new Map<string, { name: string; description: string }>()
+  // The profile's own tool plugins register the built-in tools globally, as a real host does; a spec adds others.
+  const globalTools = new Map<string, { name: string; description: string }>(
+    ['skill', 'bash', 'read', 'read_image', 'glob', 'grep', 'job_output', 'job_list', 'job_kill']
+      .map(name => [name, { name, description: '' }]))
   const toolRegistry = {
     schemas: vi.fn(() => [...globalTools.values()].map(tool => ({ ...tool, parameters: { type: 'object' } }))),
     register: vi.fn((tool: { name: string; description?: string }) => {

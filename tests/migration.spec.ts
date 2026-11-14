@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { SCHEMA_VERSION, Store } from '../src/app/store.ts'
+import { roleTools } from '../src/app/agent-tools.ts'
 import { KV } from '../src/kv.ts'
 import { basisOf, reasonsOf, withoutCopies } from '../src/app/migration.ts'
 import { Prompts, composePrompt, defaultPrompts } from '../src/app/prompts.ts'
@@ -173,6 +174,78 @@ it('writes a schema 10 database in its current shape once, so nothing reads an o
   again.close()
 })
 
+it('converts the per-tool Agent block into plugins, narrows each role and keeps the old added tools usable', () => {
+  const path = join(directory, 'db.sqlite')
+  schema10(path, {
+    settings: { agents: {
+      main: { model: null, disabledTools: ['read_image'], addedTools: ['compress'] },
+      aligner: { model: null, disabledTools: [], addedTools: [] },
+      executor: { model: null, disabledTools: ['web_search'], addedTools: ['plugin_lint'] },
+    } },
+    'settings-version:1': { revision: 1, savedAt: '', source: 'web', policyVersion: '', policyChanged: false, notified: [],
+      settings: { agents: { main: { model: null, disabledTools: ['read_image'], addedTools: [] } } } },
+  })
+  const store = new Store(path)
+  expect(store.get('schema')).toBe(SCHEMA_VERSION)
+  const agents = store.settings().agents
+  expect(agents).not.toHaveProperty('disabledTools')
+  expect(agents.main).not.toHaveProperty('addedTools')
+  // A disabled tool turns its whole built-in plugin off; the old added tools become a stored plugin that stays enabled.
+  expect(agents.main.enabledPlugins).toEqual(['billion-context', 'imported-main'])
+  expect(agents.plugins).toEqual(expect.arrayContaining([
+    { id: 'imported-main', name: 'Imported main tools', tools: ['compress'], roles: ['main'] },
+    { id: 'imported-executor', name: 'Imported executor tools', tools: ['plugin_lint'], roles: ['executor'] },
+  ]))
+  expect(agents.executor.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents', 'imported-executor'])
+  // The migration only narrows: the new role sets are subsets of the old effective surface, which included the compression
+  // tools whenever the host provided them and the added tools after the catalog.
+  const old = {
+    main: [...['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'], ...['compress', 'decompress', 'search_context',
+      'acp_status', 'acp_cache', 'acp_read_original_image'], 'compress'],
+    executor: [...['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill',
+      'web_search', 'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents',
+      'interrupt_agent'].filter(name => name !== 'web_search'), 'plugin_lint'],
+  }
+  const tools = (role: 'main' | 'executor') => roleTools(role, agents)
+  expect(new Set(tools('main'))).toEqual(new Set(old.main))
+  expect(tools('executor').every(name => old.executor.includes(name))).toBe(true)
+  expect(tools('executor')).toContain('plugin_lint')
+  // The historical snapshot is converted too, so the history panel reads it in the current shape.
+  expect(store.settingsHistory().at(-1)!.settings.agents.main.enabledPlugins).toEqual(['billion-context'])
+  store.close()
+})
+
+it('upgrades a schema 11 database in place, running only the Agent plugin conversion', () => {
+  const path = join(directory, 'db.sqlite')
+  const store = new Store(path)
+  const ticket = { id: 't1', title: 'Fix', decisionId: 'd1', assignments: [], inputs: [], undelivered: [], createdAt: '1', updatedAt: '2',
+    channels: [], mandate: { strength: 'explicit', policyVersion: 'v1', basis: { via: 'listed' }, actor, scope: 'small' },
+    origin: { triggerId: 'x', triggerIds: ['x'] } }
+  store.tickets.save(ticket as never)
+  store.close()
+  const db = new DatabaseSync(path)
+  db.prepare("UPDATE kv SET value='11' WHERE key='schema'").run()
+  const old = { agents: {
+    main: { model: null, disabledTools: ['read_image'], addedTools: [] },
+    aligner: { model: null, disabledTools: [], addedTools: [] },
+    executor: { model: null, disabledTools: ['web_search'], addedTools: [] },
+  } }
+  const version = (revision: number, settings: unknown) => JSON.stringify({ revision, savedAt: '', source: 'panel', policyVersion: '',
+    policyChanged: false, notified: [], settings })
+  db.prepare('INSERT INTO kv VALUES (?, ?)').run('settings-version:1', version(1, old))
+  db.prepare('INSERT OR REPLACE INTO kv VALUES (?, ?)').run('settings-revision', '1')
+  db.close()
+  const migrated = new Store(path)
+  expect(migrated.get('schema')).toBe(SCHEMA_VERSION)
+  // The historical revision is converted, so the history panel reads the plugin shape.
+  expect(migrated.settingsHistory()[0]!.settings.agents.main.enabledPlugins).toEqual(['billion-context'])
+  expect(migrated.settingsHistory()[0]!.settings.agents.plugins).toEqual([])
+  expect(migrated.settingsHistory()[0]!.settings.agents.executor.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents'])
+  // The schema 11 records are otherwise untouched: the schema 10 steps run only for a schema 10 database.
+  expect(migrated.tickets.get('t1')).toEqual(ticket)
+  migrated.close()
+})
+
 it('keeps each message as a receipt of what became of it, with why one was dropped by the code the panel words it by', () => {
   const path = join(directory, 'db.sqlite')
   schema10(path, {})
@@ -202,7 +275,7 @@ it('changes nothing when one step fails: the database stays at schema 10 as it w
     updatedAt: '2', mandate: mandate({ via: 'listed' }), meta: { sourceTriggerId: 'trig-1', workspace: '/w/fix-1' } }
   // The current settings must validate; an invalid value aborts the migration transaction.
   schema10(path, { settings: { executor: { maxWorkers: 'many' } } }, { ticket: [ticket] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 11 failed: the settings: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 12 failed: the settings: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t1'").get()!.value))).toMatchObject({ meta: { workspace: '/w/fix-1' } })
@@ -475,7 +548,7 @@ it('names the ticket it stopped at when a ticket does not read, and leaves the d
   const path = join(directory, 'db.sqlite')
   const { inputs: _inputs, ...broken } = ticket10('t9')
   schema10(path, {}, { ticket: [broken] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 11 failed: ticket t9: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 12 failed: ticket t9: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t9'").get()!.value))).toEqual(broken)

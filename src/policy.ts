@@ -73,17 +73,45 @@ export type RoleModel = z.infer<typeof RoleModelSchema>
 /** The three Agent roles a person configures; an Executor Session's subagents inherit its tools. */
 export const AGENT_ROLES = ['main', 'aligner', 'executor'] as const
 export type AgentRole = typeof AGENT_ROLES[number]
-/** One role's overrides: its model when set (null inherits the role's default model), the optional tools it turns off, and the host-registered tools it adds. */
-export const AgentRoleConfigSchema = z.object({
-  model: RoleModelSchema.nullable().default(null),
-  disabledTools: z.array(z.string().trim().min(1).max(LIMITS.toolName)).default([]),
-  addedTools: z.array(z.string().trim().min(1).max(LIMITS.toolName)).default([]),
+/** A plugin's id: a stable lower-case slug shared by the built-in catalog and stored plugins. */
+export const AgentPluginIdSchema = z.string().trim().regex(/^[a-z][a-z0-9-]{0,63}$/)
+/**
+ * A shared plugin definition: the capability group a role enables as a unit. Built-in groups live in
+ * `src/app/agent-tools.ts`; a stored plugin is one a migration imported from the old `addedTools` (S2 adds a panel
+ * for creating them). `roles` absent means every role; `tools` may be empty in stored data and is refused on save.
+ */
+export const AgentPluginSchema = z.object({
+  id: AgentPluginIdSchema,
+  name: z.string().trim().min(1).max(LIMITS.pluginName),
+  description: z.string().trim().max(LIMITS.pluginDescription).optional(),
+  tools: z.array(z.string().trim().min(1).max(LIMITS.toolName)).default([]),
+  roles: z.array(z.enum(AGENT_ROLES)).optional(),
 }).strict()
-/** The three roles' overrides; reading stays lenient, so a tool name the catalog dropped, or an added one the host no longer registers, is still accepted here and checked only on save. */
+export type AgentPlugin = z.infer<typeof AgentPluginSchema>
+/**
+ * The plugins each role enables before a person changes the block, reproducing the tool surface the per-tool catalog
+ * had: the main Session's image and billion-context compression tools, and a worker's image, web, skills, todo and
+ * subagent tools. `agent-tools.ts` holds the built-in definitions these ids name.
+ */
+export const DEFAULT_ENABLED_PLUGINS: Readonly<Record<AgentRole, readonly string[]>> = {
+  main: ['image', 'billion-context'],
+  aligner: ['image', 'web', 'skills', 'todo', 'subagents'],
+  executor: ['image', 'web', 'skills', 'todo', 'subagents'],
+}
+/** One role's overrides: its model when set (null inherits the role's default model) and the plugins it enables. */
+const agentRoleConfig = (role: AgentRole) => z.object({
+  model: RoleModelSchema.nullable().default(null),
+  enabledPlugins: z.array(AgentPluginIdSchema).default(() => [...DEFAULT_ENABLED_PLUGINS[role]]),
+}).strict()
+/**
+ * The three roles and the shared plugin catalog. Reading stays lenient about a stored plugin's tools, which the host may
+ * no longer register; a save checks the whole block against the built-in catalog and the role scopes.
+ */
 export const AgentsConfigSchema = z.object({
-  main: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),
-  aligner: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),
-  executor: AgentRoleConfigSchema.default(() => AgentRoleConfigSchema.parse({})),
+  plugins: z.array(AgentPluginSchema).default([]),
+  main: agentRoleConfig('main').default(() => agentRoleConfig('main').parse({})),
+  aligner: agentRoleConfig('aligner').default(() => agentRoleConfig('aligner').parse({})),
+  executor: agentRoleConfig('executor').default(() => agentRoleConfig('executor').parse({})),
 }).strict()
 export type AgentsConfig = z.infer<typeof AgentsConfigSchema>
 

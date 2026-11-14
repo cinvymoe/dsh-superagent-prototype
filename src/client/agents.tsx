@@ -1,12 +1,14 @@
 /**
- * Agents settings group: the main Session, the aligner and the executor with the model each inherits and the tools each
- * may call, and the Executor's running load with a link to the concurrency setting.
+ * Agents settings group: the main Session, the aligner and the executor with the model each inherits and the plugins each
+ * enables, and the Executor's running load with a link to the concurrency setting.
  */
 import type { AgentsConfig, AgentRole, RoleModel } from '../policy.ts'
 import { roleModel } from '../agent-model.ts'
 import type { SettingsView } from './api.ts'
-import { Button, Icon, InfoTip, Switch, Tag } from './controls.tsx'
+import type { AgentPluginCatalog } from '../app/agent-tools.ts'
+import { Button, InfoTip, Switch, Tag } from './controls.tsx'
 import { SaveBar } from './draft.tsx'
+import type { DshSuperagentKey } from './locales.ts'
 import { usePanel, usePanelData } from './provider.tsx'
 import { settingsRoute } from './route.ts'
 import { ConfigHistory, Fields, ModelField, useBlockDraft, useSettings } from './settings-kit.tsx'
@@ -36,11 +38,17 @@ function modelText(t: T, model: RoleModel | null): string {
   return model ? `${model.provider} / ${model.model}${model.reasoningEffort ? ` · ${model.reasoningEffort}` : ''}`
     : t('agentInheritedDefault')
 }
-function ToolRow({ name, note, checked, disabled,
-  onChange }: { name: string; note?: string; checked: boolean; disabled?: boolean; onChange: (next: boolean) => void }) {
-  return <div className="dt-switch-row">
+/** A built-in plugin's localized name or description, falling back to the definition's own text for a stored plugin. */
+function pluginText(t: T, plugin: AgentPluginCatalog, field: 'name' | 'hint'): string {
+  if (!plugin.builtIn) return field === 'name' ? plugin.name : plugin.description ?? ''
+  const key = `agentPlugin${field === 'name' ? '' : 'Hint'}.${plugin.id}` as DshSuperagentKey
+  const text = t(key)
+  return text === key ? field === 'name' ? plugin.name : plugin.description ?? '' : text
+}
+function ToolRow({ name, note, required }: { name: string; note?: string; required?: boolean }) {
+  return <div className="dt-switch-row" data-agent-tool={name}>
     <span className="dt-field-head">{name}{note && <Tag tone="quiet">{note}</Tag>}</span>
-    <Switch checked={checked} label={name} disabled={disabled} onChange={onChange} />
+    <Switch checked label={name} disabled={required} onChange={() => {}} />
   </div>
 }
 export function AgentsSettings() {
@@ -54,30 +62,20 @@ export function AgentsSettings() {
   // Every role shows the model a blank field inherits, the same `roleModel` the runtime uses for new Sessions.
   const inherited = (role: AgentRole) => roleModel({ agents: withoutOverride(value, role), eval: blocks.eval.value,
     executor: blocks.executor.value }, role)
-  // Keep `disabledTools` in the catalog's optional order, so a save's diff is stable whatever order a person toggles in.
-  const toggle = (role: AgentRole, tool: string, on: boolean, optional: readonly string[]) => {
-    const off = new Set(value[role].disabledTools)
-    if (on) off.delete(tool); else off.add(tool)
-    edit(role, { disabledTools: optional.filter(name => off.has(name)) })
+  const plugins = new Map(agents.plugins.map(plugin => [plugin.id, plugin]))
+  // Keep the enabled ids in the catalog's order, so a save's diff is stable whatever order a person toggles in.
+  const toggle = (role: AgentRole, plugin: string, on: boolean, catalog: readonly string[]) => {
+    const enabled = new Set(value[role].enabledPlugins)
+    if (on) enabled.add(plugin); else enabled.delete(plugin)
+    edit(role, { enabledPlugins: catalog.filter(id => enabled.has(id)) })
   }
-  // An added tool follows the host's catalog order; one whose plugin the host no longer registers stays listed so a person
-  // can remove it before the save that would refuse it.
-  const addTool = (role: AgentRole, tool: string, catalog: readonly string[]) => {
-    const added = value[role].addedTools
-    edit(role, { addedTools: [...catalog.filter(name => added.includes(name) || name === tool),
-      ...added.filter(name => !catalog.includes(name))] })
-  }
-  const removeTool = (role: AgentRole, tool: string) => edit(role, { addedTools: value[role].addedTools.filter(name => name !== tool) })
   return <div className="dt-form">
     <form className="dt-form" onSubmit={event => { void draft.submit(event) }}>
       <Fields disabled={draft.busy}>
         <Hint>{t('agentsIntroShort')}<InfoTip text={t('agentsIntro')} /></Hint>
-        {agents.roles.map(({ role, required, optional, addableTools }: RoleCatalog) => {
-          const added = value[role].addedTools
-          const catalog = addableTools.map(tool => tool.name)
-          const descriptions = new Map(addableTools.map(tool => [tool.name, tool.description]))
-          const addedShown = [...catalog.filter(name => added.includes(name)), ...added.filter(name => !catalog.includes(name))]
-          const addable = catalog.filter(name => !added.includes(name))
+        {agents.roles.map(({ role, required, plugins: applicable }: RoleCatalog) => {
+          const enabled = value[role].enabledPlugins
+          const catalog = applicable.filter(id => plugins.has(id))
           return <div key={role} className="dt-form dt-block" data-agent-role={role}>
             <h2 className="dt-block-title">{t(`agentRole.${role}`)}<InfoTip text={t(`agentRoleHint.${role}`)} /></h2>
             <Section title={t('agentModel')} hint={t('agentModelHint')}>
@@ -88,37 +86,28 @@ export function AgentsSettings() {
               </p>
               <ModelField id={`dt-agent-${role}-model`} value={value[role].model} onChange={model => edit(role, { model })} />
             </Section>
-            <Section title={t('agentTools')} hint={t('agentToolsHint')}>
-              {required.map(tool => <ToolRow key={tool} name={tool} note={t('agentToolRequired')} checked disabled
-                onChange={() => {}} />)}
-              {optional.map(tool => <ToolRow key={tool} name={tool} checked={!value[role].disabledTools.includes(tool)}
-                onChange={next => toggle(role, tool, next, optional)} />)}
+            <Section title={t('agentRequiredTools')} hint={t('agentRequiredToolsHint')}>
+              {required.map(tool => <ToolRow key={tool} name={tool} note={t('agentToolRequired')} required />)}
             </Section>
-            {(catalog.length > 0 || addedShown.length > 0) && <Section title={t('agentPluginTools')} hint={t('agentPluginToolsHint')}>
-              {addedShown.length > 0 && <>
-                <div className="dt-subhead" data-plugin-group="added"><span className="dt-field-head">{t('agentPluginAdded')}</span>
-                  <span className="dt-count">{addedShown.length}</span></div>
-                {addedShown.map(tool => {
-                  const description = descriptions.get(tool)
-                  return <div key={tool} className="dt-switch-row" data-plugin-tool={tool} data-plugin-state="added">
-                    <span className="dt-field-head">{tool}{description && <InfoTip text={description} />}
-                      <Tag tone="quiet">{t('agentPluginAddedTag')}</Tag>
-                      {!description && <Tag tone="warning">{t('agentPluginUnavailable')}</Tag>}</span>
-                    <Button variant="ghost" size="sm" icon={<Icon name="trash" />}
-                      aria-label={t('agentPluginRemoveLabel', { tool })} onClick={() => removeTool(role, tool)}>{t('agentPluginRemove')}</Button>
-                  </div>
-                })}
-              </>}
-              {addable.length > 0 ? <>
-                <div className="dt-subhead" data-plugin-group="addable"><span className="dt-field-head">{t('agentPluginAvailable')}</span>
-                  <span className="dt-count">{addable.length}</span></div>
-                {addable.map(tool => <div key={tool} className="dt-switch-row" data-plugin-tool={tool} data-plugin-state="available">
-                  <span className="dt-field-head">{tool}{descriptions.get(tool) && <InfoTip text={descriptions.get(tool)!} />}</span>
-                  <Button variant="ghost" size="sm" icon={<Icon name="plus" />}
-                    aria-label={t('agentPluginAddLabel', { tool })} onClick={() => addTool(role, tool, catalog)}>{t('agentPluginAdd')}</Button>
-                </div>)}
-              </> : <Hint>{addedShown.length > 0 ? t('agentPluginAllAdded') : t('agentPluginNone')}</Hint>}
-            </Section>}
+            <Section title={t('agentPlugins')} hint={t('agentPluginsHint')}>
+              {catalog.length === 0 ? <Hint>{t('agentPluginsNone')}</Hint> : catalog.map(id => {
+                const plugin = plugins.get(id)!
+                const on = enabled.includes(id)
+                const details = `${t('agentPluginTools')}: ${plugin.tools.join(', ')}`
+                const missing = plugin.missingTools.length > 0 ? ` · ${t('agentPluginMissingTools', { tools: plugin.missingTools.join(', ') })}` : ''
+                return <div key={id} className="dt-switch-row" data-agent-plugin={id}
+                  data-plugin-state={on ? 'enabled' : 'disabled'} data-plugin-provided={plugin.provided ? 'true' : 'false'}>
+                  <span className="dt-field-head">{pluginText(t, plugin, 'name')}
+                    {!plugin.builtIn && <Tag tone="quiet">{t('agentPluginCustom')}</Tag>}
+                    {!on && <Tag tone="quiet">{t('agentPluginDisabled')}</Tag>}
+                    {!plugin.provided && <Tag tone="warning">{t('agentPluginUnavailable')}</Tag>}
+                    {pluginText(t, plugin, 'hint') && <InfoTip text={pluginText(t, plugin, 'hint')} />}
+                    <span className="dt-hint" data-plugin-tools>{details}{missing}</span>
+                  </span>
+                  <Switch checked={on} label={pluginText(t, plugin, 'name')} onChange={next => toggle(role, id, next, catalog)} />
+                </div>
+              })}
+            </Section>
             {role === 'executor' && state && <Section title={t('agentConcurrency')} hint={t('agentConcurrencyHint')}>
               <p className="dt-flow">
                 <LabelValue label={t('executingLabel')} value={`${state.load.running} / ${state.load.maxWorkers}`} />

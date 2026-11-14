@@ -5,6 +5,8 @@ export const LIMITS = {
   evalTimeoutSeconds: { min: 30, max: 600 },
   maxWorkers: { min: 1, max: 16 },
   toolName: 80,
+  pluginName: 100,
+  pluginDescription: 500,
   prepareCommand: 4000,
   promptMaxChars: { min: 1000, max: 1_000_000 },
   admissionContextMaxPages: { min: 1, max: 100 },

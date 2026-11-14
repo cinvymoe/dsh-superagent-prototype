@@ -1684,8 +1684,8 @@ it('applies a saved agents block to the main Session, a running Executor and its
   expect(restricts.get('child-1')).toEqual([{ allow: workerTools }])
   // Saving the block reinstalls each restriction at once; the next step reads it, and a step in flight keeps its tools.
   const saved = runtime.store.settings()
-  const value = { main: { model: null, disabledTools: ['read_image'] }, aligner: saved.agents.aligner,
-    executor: { model: null, disabledTools: ['web_search'] } }
+  const value = { main: { model: null, enabledPlugins: ['billion-context'] }, aligner: saved.agents.aligner,
+    executor: { model: null, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] } }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   const executorTools = workerTools.filter(name => name !== 'web_search')
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS.filter(name => name !== 'read_image') })
@@ -1701,9 +1701,10 @@ it('applies a saved agents block to the main Session, a running Executor and its
   expect(restricts.get(sessionId)!.length).toBe(installed)
 })
 
-it('applies a role\'s added tools to the main Session and an Executor with its subagents, gaining and losing them on save', async () => {
-  // A plugin registers a tool after the Sessions exist, as billion-context does; it is not in any role's catalog.
+it('applies a role\'s stored plugin tools to the main Session and an Executor with its subagents, gaining and losing them on save', async () => {
+  // A plugin registers a tool after the Sessions exist, as billion-context does; it is not in any built-in plugin.
   lateTools.push('plugin_tool')
+  const stored = { id: 'extra-tools', name: 'Extra tools', tools: ['plugin_tool'], roles: ['main', 'executor'] as const }
   ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
   // Without a configured added tool the allow lists stay exactly the catalog lists.
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
@@ -1716,8 +1717,8 @@ it('applies a role\'s added tools to the main Session and an Executor with its s
   expect(restricts.get(running.sessionId)).toEqual([{ allow: workerTools }])
   // Saving the block adds the tool at each Session's next step, its subagent included.
   const saved = runtime.store.settings()
-  const value = { main: { model: null, disabledTools: [], addedTools: ['plugin_tool'] }, aligner: saved.agents.aligner,
-    executor: { model: null, disabledTools: [], addedTools: ['plugin_tool'] } }
+  const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'extra-tools'] },
+    aligner: saved.agents.aligner, executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'extra-tools'] } }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, 'plugin_tool'] })
   expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: [...workerTools, 'plugin_tool'] })
@@ -1726,7 +1727,8 @@ it('applies a role\'s added tools to the main Session and an Executor with its s
   const next = await acceptedTicket(feishu('2', '@bot 再修一个回归'))
   expect(restricts.get(next.sessionId)).toEqual([{ allow: [...workerTools, 'plugin_tool'] }])
   // Removing it loses it at the next step of every running Session, the subagent and main Session included.
-  const removed = { ...value, main: { ...value.main, addedTools: [] }, executor: { ...value.executor, addedTools: [] } }
+  const removed = { ...value, plugins: [], main: { ...value.main, enabledPlugins: ['image', 'billion-context'] },
+    executor: { ...value.executor, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }
   await runtime.settings.save('agents', removed, runtime.store.blockRevision('agents'), 'panel')
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
   expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: workerTools })
@@ -1736,9 +1738,10 @@ it('applies a role\'s added tools to the main Session and an Executor with its s
 
 it('ignores an added tool the host stops providing, without admitting other tools or throwing', async () => {
   lateTools.push('plugin_tool')
+  const stored = { id: 'extra-tools', name: 'Extra tools', tools: ['plugin_tool'], roles: ['main', 'executor'] as const }
   const saved = runtime.store.settings()
-  const value = { main: { model: null, disabledTools: [], addedTools: ['plugin_tool'] }, aligner: saved.agents.aligner,
-    executor: { model: null, disabledTools: [], addedTools: ['plugin_tool'] } }
+  const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'extra-tools'] },
+    aligner: saved.agents.aligner, executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'extra-tools'] } }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   const running = await acceptedTicket()
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, 'plugin_tool'] })
@@ -1757,14 +1760,14 @@ it('ignores an added tool the host stops providing, without admitting other tool
   expect(restricts.get(next.sessionId)).toEqual([{ allow: workerTools }])
 })
 
-it('keeps the host\'s compression tools on the main Session while a person turns read_image off', async () => {
+it('keeps the host\'s compression tools on the main Session while a person turns its image plugin off', async () => {
   lateTools.push(...COMPRESSION_TOOLS)
   ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, ...COMPRESSION_TOOLS] })
   const settings = runtime.store.settings()
-  await runtime.settings.save('agents', { ...settings.agents, main: { model: null, disabledTools: ['read_image'] } },
+  await runtime.settings.save('agents', { ...settings.agents, main: { model: null, enabledPlugins: ['billion-context'] } },
     runtime.store.blockRevision('agents'), 'panel')
-  // The compression tools stay automatic: they are not part of the catalog, so turning read_image off leaves them in.
+  // The image plugin only owns read_image, so turning it off leaves the billion-context tools in.
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS.filter(name => name !== 'read_image'), ...COMPRESSION_TOOLS] })
 })
 
@@ -1778,8 +1781,8 @@ it('seeds each role\'s model override into new Sessions only, leaving a running 
   const first = await acceptedTicket()
   expect(selection(first.sessionId)).toEqual([])
   // Saving overrides changes no running Session's model: an existing Session keeps the model it started with.
-  await runtime.settings.save('agents', { ...runtime.store.settings().agents, main: { model: mainModel, disabledTools: [] },
-    executor: { model: executorModel, disabledTools: [] } }, runtime.store.blockRevision('agents'), 'panel')
+  await runtime.settings.save('agents', { ...runtime.store.settings().agents, main: { model: mainModel, enabledPlugins: ['image', 'billion-context'] },
+    executor: { model: executorModel, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }, runtime.store.blockRevision('agents'), 'panel')
   expect(selection(runtime.masterId)).toEqual([])
   expect(selection(first.sessionId)).toEqual([])
   // A Ticket accepted after the save creates its Executor Session on the executor's effective model.

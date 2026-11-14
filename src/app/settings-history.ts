@@ -10,19 +10,20 @@ type SourceSettings = SettingsVersion['settings']['sources'][string]
 export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction' | 'ruleEnabled' | 'ruleDisabled' | 'ruleRemoved'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'maxWorkers' | 'paused' | 'resumed' | 'executionDirectory' | 'prepareCommand'
-  | 'blockedCommands' | 'agentMainModel' | 'agentAlignerModel' | 'agentExecutorModel' | 'agentMainTools' | 'agentAlignerTools'
-  | 'agentExecutorTools' | 'agentMainAdded' | 'agentAlignerAdded' | 'agentExecutorAdded'
+  | 'blockedCommands' | 'agentMainModel' | 'agentAlignerModel' | 'agentExecutorModel' | 'agentMainPluginEnabled'
+  | 'agentAlignerPluginEnabled' | 'agentExecutorPluginEnabled' | 'agentMainPluginDisabled' | 'agentAlignerPluginDisabled'
+  | 'agentExecutorPluginDisabled' | 'agentPluginAdded' | 'agentPluginRemoved'
 /** A single settings diff entry rendered by the panel using `change.<code>` and field labels from the Source listing. */
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
   field?: string; part?: true
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
-/** Each Agent role's model, turned-off-tool and added-tool change codes. */
-const AGENT_CHANGES: Readonly<Record<AgentRole, { model: SettingsChangeCode; tools: SettingsChangeCode; added: SettingsChangeCode }>> = {
-  main: { model: 'agentMainModel', tools: 'agentMainTools', added: 'agentMainAdded' },
-  aligner: { model: 'agentAlignerModel', tools: 'agentAlignerTools', added: 'agentAlignerAdded' },
-  executor: { model: 'agentExecutorModel', tools: 'agentExecutorTools', added: 'agentExecutorAdded' },
+/** Each Agent role's model and plugin enable/disable change codes. */
+const AGENT_CHANGES: Readonly<Record<AgentRole, { model: SettingsChangeCode; enabled: SettingsChangeCode; disabled: SettingsChangeCode }>> = {
+  main: { model: 'agentMainModel', enabled: 'agentMainPluginEnabled', disabled: 'agentMainPluginDisabled' },
+  aligner: { model: 'agentAlignerModel', enabled: 'agentAlignerPluginEnabled', disabled: 'agentAlignerPluginDisabled' },
+  executor: { model: 'agentExecutorModel', enabled: 'agentExecutorPluginEnabled', disabled: 'agentExecutorPluginDisabled' },
 }
 /** A snapshot's Agent overrides; revisions saved before the block existed carry none. */
 const agentsOf = (settings: SettingsVersion['settings']) => (settings.agents as AgentsConfig | undefined) ?? AgentsConfigSchema.parse({})
@@ -85,9 +86,19 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
   for (const role of AGENT_ROLES) {
     const was = wasAgents[role], is = isAgents[role], codes = AGENT_CHANGES[role]
     if (!same(was.model, is.model)) changes.push({ code: codes.model })
-    if (!same(was.disabledTools, is.disabledTools)) changes.push({ code: codes.tools, from: was.disabledTools.join(' '), to: is.disabledTools.join(' ') })
-    if (!same(was.addedTools, is.addedTools)) changes.push({ code: codes.added, from: was.addedTools.join(' '), to: is.addedTools.join(' ') })
+    // A comparison is by plugin id and order-independent, as enabling one twice means the same thing as once.
+    const wasPlugins = new Set(was.enabledPlugins), isPlugins = new Set(is.enabledPlugins)
+    const enabled = is.enabledPlugins.filter(id => !wasPlugins.has(id))
+    const disabled = was.enabledPlugins.filter(id => !isPlugins.has(id))
+    if (enabled.length > 0) changes.push({ code: codes.enabled, items: [...new Set(enabled)] })
+    if (disabled.length > 0) changes.push({ code: codes.disabled, items: [...new Set(disabled)] })
   }
+  const wasPlugins = new Map(wasAgents.plugins.map(plugin => [plugin.id, plugin]))
+  const isPlugins = new Map(isAgents.plugins.map(plugin => [plugin.id, plugin]))
+  const added = [...isPlugins.keys()].filter(id => !wasPlugins.has(id))
+  const removed = [...wasPlugins.keys()].filter(id => !isPlugins.has(id))
+  if (added.length > 0) changes.push({ code: 'agentPluginAdded', items: added })
+  if (removed.length > 0) changes.push({ code: 'agentPluginRemoved', items: removed })
   for (const id of new Set([...Object.keys(before.sources), ...Object.keys(after.sources)])) changes.push(...sourceChanges(id, before.sources[id], after.sources[id], sources))
   return changes
 }

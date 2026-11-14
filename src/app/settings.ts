@@ -8,7 +8,7 @@ import type { SourceHost } from '../sources/host.ts'
 import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import type {} from '@deepseek-ai/dsh-tools'
-import { agentCatalog, validateAgentTools, type AgentCatalog, type RegisteredTool } from './agent-tools.ts'
+import { agentCatalog, validateAgentPlugins, type AgentsCatalog, type RegisteredTool } from './agent-tools.ts'
 import { resolveRoleModel } from './role-models.ts'
 import { changedPaths, settingsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -47,9 +47,9 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'agents' | 'source', Block
     guard: (current, candidate, origin) => { if (origin !== 'panel' && environment(current) !== environment(candidate)) throw new UserError('panelOnlyEnvironment') },
   },
   agents: {
-    // Reading stays lenient; a save is checked against each role's catalog and the host's registered global tools, so a
-    // retired or unregistered tool name cannot be saved again.
-    parse: (value, _sources, _id, tools) => { const agents = AgentsConfigSchema.parse(value); validateAgentTools(agents, tools); return agents },
+    // Reading stays lenient; a save is checked against the built-in plugin catalog and each role's scope, so a stored plugin
+    // cannot repeat an id or declare a forbidden or required tool, and a role cannot enable an unknown or inapplicable one.
+    parse: value => { const agents = AgentsConfigSchema.parse(value); validateAgentPlugins(agents); return agents },
     merge: (settings, value) => ({ ...settings, agents: value as SettingsValue['agents'] }),
     // A model or tool change reaches running Sessions, so only the management panel may make one.
     guard: (current, candidate, origin) => {
@@ -125,8 +125,8 @@ export class Settings {
     const tools = this.host.context.get('tools')
     return tools ? tools.schemas().map(({ name, description }) => ({ name, description })) : []
   }
-  /** The three roles' catalog as `GET settings` offers it, each with the registered tools a person may add to it. */
-  catalog(): AgentCatalog[] { return agentCatalog(this.registeredTools()) }
+  /** The Agents catalog as `GET settings` offers it: the shared plugins, each role's scope, and the host's ungrouped tools. */
+  catalog(): AgentsCatalog { return agentCatalog(this.host.store.settings().agents, this.registeredTools()) }
   /**
    * Returns an overview of all settings blocks with their current block revisions: full values for `pause`, `eval`,
    * `executor` and `agents`; rule summaries and allowed-sender counts for `policy`; and instance status switches for `sources`
