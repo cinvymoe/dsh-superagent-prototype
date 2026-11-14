@@ -344,8 +344,8 @@ describe('github source', () => {
       return 'HTTP/2.0 200 OK\r\nX-Poll-Interval: 60\r\n\r\n[]'
     })
     const config = GithubConfigSchema.parse({})
-    await pollRound(h, config, { id: 'alpha', intakeRepository: 'acme/intake-a', codeRepository: 'acme/code-a' }, alpha)
-    await pollRound(h, config, { id: 'beta', intakeRepository: 'acme/intake-b', codeRepository: 'acme/code-b' }, beta)
+    await pollRound(h, config, { id: 'alpha', intakeRepository: 'acme/intake-a', codeRepository: 'acme/code-a', cli: '' }, alpha)
+    await pollRound(h, config, { id: 'beta', intakeRepository: 'acme/intake-b', codeRepository: 'acme/code-b', cli: '' }, beta)
     expect(reads).toEqual(['repos/acme/intake-a/notifications', 'repos/acme/intake-b/notifications'])
     h.store.close()
   })
@@ -562,7 +562,7 @@ describe('github source', () => {
     const comment = (id: number, login: string, at: string, body: string) => ({ id, body, user: { login }, created_at: at, updated_at: at })
     github(h, { 'issues/7': { ...issue(7, { title: 'Fix the margin' }), pull_request: { url: 'x' } }, 'pulls/7': openPull(7),
       'issues/7/comments': [comment(1, 'agent-bot', '2026-09-01T01:00:00Z', 'mine'), comment(2, 'a', '2026-08-01T00:00:00Z', 'old'),
-        comment(3, 'b', '2026-09-01T02:00:00Z', 'new')] })
+        comment(3, 'b', '2026-09-01T02:00:00Z', 'new'), comment(4, 'agent-bot[bot]', '2026-09-01T03:00:00Z', 'the App bot')] })
     await pollGithubThreads(h)
     expect(h.receive).toHaveBeenCalledTimes(1)
     expect(h.receive.mock.calls[0]![0]).toMatchObject({ actor: { id: 'b' }, text: 'new', threads: [{ source: 'github', id: '7' }] })
@@ -1094,6 +1094,20 @@ describe('source context', () => {
       origin: { triggerId: 'source-t1' } })
     h.store.close()
   })
+})
+it('shows each chain\'s own account in the GitHub Source facts', () => {
+  const base = testDeployment()
+  const target = (chain: string, login: string, code: string) => ({ ...base, chain, repository: code, intakeRepository: code,
+    github: { cli: `/bin/${login}`, login, noreply: '' } })
+  const deployment = testDeployment({ chains: {
+    alpha: target('alpha', 'Alpha-Bot', 'acme/code-a'),
+    beta: target('beta', 'Beta-Bot', 'acme/code-b'),
+  } })
+  const facts = githubKind.facts!(deployment)
+  expect(facts.accounts).toMatchObject({ zh: 'alpha: @Alpha-Bot；beta: @Beta-Bot' })
+  expect(facts.cli).toMatchObject({ zh: '每条链路使用各自的账号：@Alpha-Bot、@Beta-Bot' })
+  // A blank per-chain CLI is filled by the schema and falls back to the Source CLI at setup.
+  expect(GithubConfigSchema.parse({ chains: [{ id: 'alpha', codeRepository: 'acme/widgets' }] }).chains[0]!.cli).toBe('')
 })
 it('reports GitHub as failing only after the configured number of consecutive failed polls', () => {
   const eof = new Error('Get "https://api.github.com/x": EOF')

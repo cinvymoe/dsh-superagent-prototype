@@ -872,9 +872,9 @@ it('waits for setup without the agent\'s GitHub CLI: the panel works, and nothin
   const next = await restart({}, { github: { cli: '' } })
   await next.ready
   expect(next.configured()).toBe(false)
-  expect(next.setupProblem).toEqual({ place: 'github', code: 'agentCliUnset', values: {}, detail: 'The agent GitHub CLI is not set.' })
+  expect(next.setupProblem).toEqual({ place: 'github', code: 'agentCliUnset', values: { chain: 'default' }, detail: 'The agent GitHub CLI is not set for chain default.' })
   expect(next.health.runtime).toMatchObject({ state: 'paused', code: 'setupPending' })
-  expect(() => next.deployment).toThrow('dsh-superagent is waiting for setup: The agent GitHub CLI is not set.')
+  expect(() => next.deployment).toThrow('dsh-superagent is waiting for setup: The agent GitHub CLI is not set for chain default.')
   expect((await api('GET', 'state')).body).toMatchObject({ setup: { problem: { place: 'github' }, accounts: null, machine: { stateDir: directory } } })
   expect(overviewOf(next).problems[0]).toEqual({ kind: 'setup', ...next.setupProblem })
   await receive(feishu('30', '@bot 修一下'), next)

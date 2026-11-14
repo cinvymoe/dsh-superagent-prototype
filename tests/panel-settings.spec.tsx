@@ -103,7 +103,7 @@ it('shows save and discard only while a settings block has edits, at the end of 
   await click(find(zh['term.source'], '.dt-settings-link'))
   expect(all('.dt-savebar')).toHaveLength(0)
   const github = all('.dt-card').find(card => card.querySelector('.dt-card-title')?.textContent === 'GitHub')!
-  await type(field<HTMLInputElement>('智能体的 GitHub CLI'), 'gh-other')
+  await type(field<HTMLInputElement>('默认的 GitHub CLI'), 'gh-other')
   expect(github.lastElementChild!.classList.contains('dt-savebar')).toBe(true)
   // The agent CLI is read by setup, so the bar warns that saving restarts dsh-superagent and interrupts running work.
   expect(github.lastElementChild!.textContent).toContain('2 个进行中的派工会中断')

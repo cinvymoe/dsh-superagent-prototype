@@ -1,7 +1,8 @@
 /** Probes repository and account CLIs, configures the worker execution environment and command shims, and tracks setup readiness. */
 import type { Context } from '@deepseek-ai/cordis'
 import { UserError } from '../core/index.ts'
-import { SETUP_FIELDS, resolveDeployment, resolveFeishuBot, workerProbe, type Deployment, type Machine } from '../deployment.ts'
+import { GithubConfigSchema, SETUP_FIELDS, normalizeGithubConfig, resolveDeployment, resolveFeishuBot, workerProbe, type Deployment,
+  type Machine } from '../deployment.ts'
 import { agentVariables, verifyEnvironment, withoutDirectory, workerBin, workerEnvironment, writeEnvironment } from '../infra/environment.ts'
 import type { Settings, SettingsBlock } from '../policy.ts'
 import { SetupError, type SetupProblem } from '../setup.ts'
@@ -15,8 +16,13 @@ export interface SetupHost {
 
 const setupFields = (settings: Settings) =>
   JSON.stringify(Object.entries(SETUP_FIELDS).map(([id, keys]) => keys.map(key => {
-    const value = settings.sources[id]?.config[key]
-    return key === 'chains' ? value ?? [] : value ?? ''
+    const config = settings.sources[id]?.config ?? {}
+    // Compare chains through the schema: a stored row without the new optional fields must not look changed against a parsed one.
+    if (key === 'chains') {
+      const parsed = GithubConfigSchema.safeParse(normalizeGithubConfig(config))
+      return parsed.success ? parsed.data.chains : config[key] ?? []
+    }
+    return config[key] ?? ''
   })))
 export const setupChanged = (before: Settings, after: Settings): boolean => setupFields(before) !== setupFields(after)
 

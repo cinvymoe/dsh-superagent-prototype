@@ -88,10 +88,10 @@ export class Projects {
     }
     const fields = local.validateProject(merged, project)
     const target = project.chain ?? project.id
-    const row = this.row({ id: target, intakeRepository: fields.intakeRepository, codeRepository: fields.codeRepository })
     const { block, config, enabled } = this.source()
-    const exists = config.chains.some(chain => chain.id === target)
-    const chains = exists ? config.chains.map(chain => chain.id === target ? row : chain) : [...config.chains, row]
+    const existing = config.chains.find(chain => chain.id === target)
+    const row = this.row({ id: target, intakeRepository: fields.intakeRepository, codeRepository: fields.codeRepository }, existing?.cli)
+    const chains = existing ? config.chains.map(chain => chain.id === target ? row : chain) : [...config.chains, row]
     await this.save(block, enabled, config, chains)
     const updated = local.patchProject(project, { ...fields, chain: target })
     try { local.putProject(updated) }
@@ -120,9 +120,9 @@ export class Projects {
   }
 
   /** A chain row for a project, defaulting the intake repository to the code repository when a legacy record has one. */
-  private row(project: { id: string; intakeRepository?: string; codeRepository?: string }): GithubChain {
+  private row(project: { id: string; intakeRepository?: string; codeRepository?: string }, cli = ''): GithubChain {
     const code = project.codeRepository ?? ''
-    return { id: project.id, intakeRepository: project.intakeRepository ?? code, codeRepository: code }
+    return { id: project.id, intakeRepository: project.intakeRepository ?? code, codeRepository: code, cli }
   }
 
   /** The `worktreeRoot` field to merge: an omitted key keeps the stored root, and an empty value clears it. */

@@ -38,6 +38,12 @@ describe('account-isolated operations', () => {
     const gh = vi.spyOn(commands,'gh')
     await send(commands, reply); expect(gh).not.toHaveBeenCalled()
   })
+  it('recognizes a reply the App bot form of the account already posted', async () => {
+    const commands = new Commands(() => deployment, {}, new AbortController().signal)
+    vi.spyOn(commands,'pages').mockResolvedValue([{ body:'<!-- dsh-superagent:stable-operation -->',user:{login:'Agent-Bot[bot]'} }])
+    const gh = vi.spyOn(commands,'gh')
+    await send(commands, reply); expect(gh).not.toHaveBeenCalled()
+  })
   it('posts the reply as the model wrote it, only to the fixed repository', async () => {
     const commands = new Commands(() => deployment, {}, new AbortController().signal); vi.spyOn(commands,'pages').mockResolvedValue([])
     const gh = vi.spyOn(commands,'gh').mockResolvedValue({})

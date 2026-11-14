@@ -512,7 +512,7 @@ it('lets only the create-requirement route carry a body above the management lim
 
 /** A local project owns one GitHub chain: creating or editing it touches only that chain, and its tickets execute through it. */
 describe('project repository chains', () => {
-  type Chain = { id: string; intakeRepository: string; codeRepository: string }
+  type Chain = { id: string; intakeRepository: string; codeRepository: string; cli?: string }
   /** The GitHub Source chains as stored, in order. */
   const chains = (): Chain[] => h.runtime.store.settings().sources.github!.config.chains as Chain[]
   /** The project rows the panel's `GET local/projects` answers with. */
@@ -539,8 +539,8 @@ describe('project repository chains', () => {
     const after = chains()
     expect(after).toHaveLength(before.length + 1)
     // Every chain that existed before is untouched, field by field.
-    for (const chain of before) expect(after.find(row => row.id === chain.id)).toEqual(chain)
-    expect(after.find(row => row.id === project.id)).toEqual({ id: project.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    for (const chain of before) expect(after.find(row => row.id === chain.id)).toEqual({ ...chain, cli: chain.cli ?? '' })
+    expect(after.find(row => row.id === project.id)).toEqual({ id: project.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project', cli: '' })
     expect((await projects()).find(row => row.id === project.id))
       .toMatchObject({ id: project.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
   })
@@ -573,7 +573,7 @@ describe('project repository chains', () => {
     const updated = await h.api('PUT', `local/projects/${a.id}`, { name: 'Alpha renamed', codeRepository: 'acme/project' })
     expect(updated.status).toBe(200)
     expect(updated.body.project).toMatchObject({ id: a.id, name: 'Alpha renamed', intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
-    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project', cli: '' })
     // The other project's row is deeply equal to its snapshot, with no new row appended.
     expect(chains().find(row => row.id === b.id)).toEqual(rowOfB)
     expect(chains().filter(row => row.id === b.id)).toHaveLength(1)
@@ -583,7 +583,7 @@ describe('project repository chains', () => {
     const refused = await h.api('PUT', `local/projects/${a.id}`, { worktreeRoot: 'relative/root' })
     expect(refused.status).toBe(400)
     expect(refused.body).toMatchObject({ code: 'projectWorktreeRoot' })
-    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project' })
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/project', cli: '' })
   })
 
   it('executes a project ticket through the project\'s own chain', async () => {
