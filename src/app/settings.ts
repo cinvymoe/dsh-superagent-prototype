@@ -8,7 +8,7 @@ import type { SourceHost } from '../sources/host.ts'
 import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import type {} from '@deepseek-ai/dsh-tools'
-import { agentCatalog, validateAgentPlugins, type AgentsCatalog, type RegisteredTool } from './agent-tools.ts'
+import { agentCatalog, closeAgentsPlugins, validateAgentPlugins, type AgentsCatalog, type RegisteredTool } from './agent-tools.ts'
 import { resolveRoleModel } from './role-models.ts'
 import { changedPaths, settingsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -49,7 +49,8 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'agents' | 'source', Block
   agents: {
     // Reading stays lenient; a save is checked against the built-in plugin catalog and each role's scope, so a stored plugin
     // cannot repeat an id or declare a forbidden or required tool, and a role cannot enable an unknown or inapplicable one.
-    parse: value => { const agents = AgentsConfigSchema.parse(value); validateAgentPlugins(agents); return agents },
+    // A saved block is closed over each plugin's `requires` first, so enabling one capability also enables its dependencies.
+    parse: value => { const agents = closeAgentsPlugins(AgentsConfigSchema.parse(value)); validateAgentPlugins(agents); return agents },
     merge: (settings, value) => ({ ...settings, agents: value as SettingsValue['agents'] }),
     // A model or tool change reaches running Sessions, so only the management panel may make one.
     guard: (current, candidate, origin) => {

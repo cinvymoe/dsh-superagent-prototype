@@ -65,9 +65,9 @@ it('lists the three roles with required tools and plugin switches, and says suba
   expect(zh.agentsIntroShort).toContain('插件')
   expect(zh.agentsIntroShort).toContain('子代理')
   // A role offers only its applicable plugins, and every switch that is not a required tool belongs to a plugin row.
-  expect(pluginIds('main')).toEqual(['image', 'billion-context'])
-  expect(pluginIds('aligner')).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
-  expect(pluginIds('executor')).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
+  expect(pluginIds('main')).toEqual(['image', 'billion-context', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
+  expect(pluginIds('aligner')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
+  expect(pluginIds('executor')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   for (const role of ['main', 'aligner', 'executor']) {
     expect(all(`[data-agent-role="${role}"] [role="switch"]:not([disabled])`).every(item => !!item.closest('[data-agent-plugin]'))).toBe(true)
     expect(card(role).querySelector('[data-plugin-tool]')).toBeNull()

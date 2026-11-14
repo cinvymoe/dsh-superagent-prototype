@@ -33,11 +33,25 @@ export const REQUIRED_TOOLS: Readonly<Record<AgentRole, readonly string[]>> = {
   executor: ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'],
 }
 /**
+ * A plugin a Session mounts into its own scope when the role enables it: the module the profile resolves, and the config
+ * that role passes. Its tools are registered by that plugin instance, so they are absent until a role turns it on and they
+ * never enter the role's allow list (`tools.restrict` masks inherited tools only).
+ */
+export interface MountedPluginSpec {
+  module: string
+  config: (role: AgentRole) => Readonly<Record<string, unknown>>
+}
+/**
  * A built-in plugin's definition: its tools, the roles it applies to, and where its tools come from. A `preset` group's
  * tools are registered by the bundle's own agent presets, so they are available whenever those presets run; a `host`
- * group's tools come from an installed host plugin and are checked against the host's global registry.
+ * group's tools come from an installed host plugin and are checked against the host's global registry; a `mount` group is
+ * a standard-mode plugin no preset registers, which `src/app/capabilities.ts` mounts for the role that enables it.
  */
-export interface BuiltinPlugin extends AgentPlugin { roles: AgentRole[]; providedBy: 'preset' | 'host' }
+export interface BuiltinPlugin extends AgentPlugin {
+  roles: AgentRole[]
+  providedBy: 'preset' | 'host' | 'mount'
+  mount?: MountedPluginSpec
+}
 /**
  * The built-in plugin groups, whose defaults reproduce the per-tool catalog they replace: `image` and `billion-context` on
  * the main Session, and `image`, `web`, `skills`, `todo` and `subagents` on a worker. They stay code-owned: a save cannot add,
@@ -55,6 +69,24 @@ export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
     tools: ['subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent'], providedBy: 'preset' },
   { id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
     tools: [...COMPRESSION_TOOLS], roles: ['main'], providedBy: 'host' },
+  // Standard-mode plugins no superagent preset registers: a role enables one and its Session mounts it, so an unenabled
+  // capability has no tool and no prompt section at all. `ask-user` blocks on the main Session because a person is waiting
+  // there, and times out on a worker, which must keep working while the answer is pending.
+  { id: 'ask-user', name: 'Ask user', description: 'Ask the person a question and wait for the answer.',
+    tools: ['ask_user_question'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    mount: { module: '@deepseek-ai/dsh-tool-ask-user',
+      config: role => role === 'main' ? { mode: 'legacy' } : { mode: 'timed', timeout: 120 } } },
+  { id: 'present', name: 'Present', description: 'Publish a file as a deliverable for the person.',
+    tools: ['present'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    mount: { module: '@deepseek-ai/dsh-tool-present', config: () => ({}) } },
+  { id: 'web-fetch', name: 'Web fetch', description: 'Read a web page in full.',
+    tools: ['web_fetch'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    // A second dsh-tool-web instance registers only the fetch tool, so it never shadows the preset's web_search.
+    mount: { module: '@deepseek-ai/dsh-tool-web', config: () => ({ search: false, fetch: true }) } },
+  { id: 'fork-subagent', name: 'Fork subagent', description: 'Fork this Session into a subagent that keeps its context.',
+    tools: ['subagent_fork'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    mount: { module: '@deepseek-ai/dsh-tool-subagent',
+      config: role => ({ provider: 'fork', toolName: 'subagent_fork', agentPreset: AGENT_TOOLS[role].preset }) } },
 ]
 /** One role's configurable tool surface: the preset it runs under and the tools it cannot turn off. */
 export interface AgentTools { preset: string; required: readonly string[] }
@@ -63,6 +95,8 @@ export interface RegisteredTool { name: string; description: string }
 /** One plugin as `GET settings` offers it: its definition, whether code owns it, its role scope, and the tools this host lacks. */
 export interface AgentPluginCatalog extends AgentPlugin {
   roles: AgentRole[]; builtIn: boolean; provided: boolean; missingTools: string[]
+  /** Where a built-in group's tools come from; a stored plugin has none. */
+  providedBy?: 'preset' | 'host' | 'mount'
 }
 /** One role's catalog as `GET settings` offers it: the required tools, the applicable plugins, and the enabled ones. */
 export interface AgentRoleCatalog {
@@ -125,6 +159,49 @@ export function enabledPluginDefs(role: AgentRole, agents: AgentsConfig): AgentP
     return [plugin]
   })
 }
+/** Whether this plugin's tools are registered by a per-Session mount instead of a preset or the host's global registry. */
+export function isMountedPlugin(plugin: AgentPlugin): plugin is BuiltinPlugin & { providedBy: 'mount' } {
+  return (plugin as BuiltinPlugin).providedBy === 'mount'
+}
+/** The mounts a role's enabled plugins ask for, in catalog order: the module and the config that role passes it. */
+export function capabilityMounts(role: AgentRole, agents: AgentsConfig): { id: string; module: string; config: Readonly<Record<string, unknown>> }[] {
+  return enabledPluginDefs(role, agents).flatMap(plugin => isMountedPlugin(plugin) && plugin.mount
+    ? [{ id: plugin.id, module: plugin.mount.module, config: plugin.mount.config(role) }]
+    : [])
+}
+/**
+ * The enabled plugins with every `requires` closed over: a role that turns on one capability also gets what it depends on,
+ * in the order the block lists them and with the dependencies appended in declaration order. An id the catalog does not
+ * know for the role is left out here so `validateAgentPlugins` reports it instead of a save dropping it silently;
+ * `closeAgentsPlugins` applies this to every role of a saved block.
+ */
+export function closeAgentPlugins(role: AgentRole, agents: AgentsConfig): string[] {
+  const enabled = new Set(agents[role].enabledPlugins)
+  const required = new Set<string>()
+  // The dependency closure first, then one catalog-ordered pass: a save keeps a role's plugins in the order the panel shows
+  // them, and closing an already closed block changes nothing.
+  const collect = (id: string) => {
+    for (const dependency of pluginOf(role, agents, id)?.requires ?? []) {
+      if (required.has(dependency) || !pluginOf(role, agents, dependency)) continue
+      required.add(dependency)
+      collect(dependency)
+    }
+  }
+  for (const id of enabled) collect(id)
+  const out = rolePlugins(role, agents)
+    .filter(plugin => enabled.has(plugin.id) || required.has(plugin.id))
+    .map(plugin => plugin.id)
+  // Keep ids this block cannot resolve: validation, not the closure, is what refuses an unknown or inapplicable plugin.
+  for (const id of agents[role].enabledPlugins) if (!out.includes(id)) out.push(id)
+  return out
+}
+/** The saved block with every role's `requires` closed over, so enabling one capability also enables what it depends on. */
+export function closeAgentsPlugins(agents: AgentsConfig): AgentsConfig {
+  return { ...agents,
+    main: { ...agents.main, enabledPlugins: closeAgentPlugins('main', agents) },
+    aligner: { ...agents.aligner, enabledPlugins: closeAgentPlugins('aligner', agents) },
+    executor: { ...agents.executor, enabledPlugins: closeAgentPlugins('executor', agents) } }
+}
 /** A role's catalog order: the main Session's built-ins, else the work tools, which keeps a Session's allow list stable. */
 export function orderedTools(role: AgentRole): readonly string[] {
   return role === 'main' ? MAIN_TOOLS : WORK_TOOLS
@@ -138,6 +215,9 @@ export function roleTools(role: AgentRole, agents: AgentsConfig): string[] {
   const allowed = new Set(REQUIRED_TOOLS[role])
   const extra: string[] = []
   for (const plugin of enabledPluginDefs(role, agents)) {
+    // A mounted capability's tool is registered in the Session's own scope, which `tools.restrict` cannot name; putting it
+    // in the allow list would fail every Session that has not mounted the plugin (`names unknown global tool`).
+    if (isMountedPlugin(plugin)) continue
     for (const tool of plugin.tools) {
       if (allowed.has(tool)) continue
       allowed.add(tool)
@@ -213,10 +293,13 @@ export function agentCatalog(agents: AgentsConfig, registered: readonly Register
   const plugins = [...BUILTIN_PLUGINS, ...agents.plugins].map(plugin => {
     const builtIn = BUILTIN_PLUGINS.find(item => item.id === plugin.id)
     const tools = [...new Set(plugin.tools)]
-    // The bundle's presets always register their own groups; only a host plugin's or a stored plugin's tools can be missing.
-    const missingTools = builtIn?.providedBy === 'preset' ? [] : tools.filter(name => !available.has(name))
-    return { ...plugin, tools, roles: plugin.roles ?? [...AGENT_ROLES], builtIn: builtIn !== undefined,
-      provided: missingTools.length === 0, missingTools }
+    // The bundle's presets always register their own groups, and a mounted group registers on enabling, so only a host
+    // plugin's or a stored plugin's tools can be missing from the host's global registry.
+    const missingTools = builtIn?.providedBy === 'preset' || builtIn?.providedBy === 'mount' ? []
+      : tools.filter(name => !available.has(name))
+    const { mount: _mount, ...definition } = plugin as BuiltinPlugin
+    return { ...definition, tools, roles: plugin.roles ?? [...AGENT_ROLES], builtIn: builtIn !== undefined,
+      providedBy: builtIn?.providedBy, provided: missingTools.length === 0, missingTools }
   })
   return {
     plugins,
@@ -257,5 +340,9 @@ export function validateAgentPlugins(agents: AgentsConfig): void {
     if (unknown.length > 0) throw new UserError('agentsUnknownPlugin', { role, plugins: unknown.join(', ') })
     const inapplicable = ids.filter(id => !pluginApplies(plugin(id)!, role))
     if (inapplicable.length > 0) throw new UserError('agentsPluginRole', { role, plugins: inapplicable.join(', ') })
+    // `closeAgentPlugins` adds every known, applicable dependency, so a refused one names a dependency this role cannot have.
+    const unresolved = ids.flatMap(id => (plugin(id)?.requires ?? [])
+      .filter(required => !known(required) || !pluginApplies(plugin(required)!, role)).map(required => `${id} -> ${required}`))
+    if (unresolved.length > 0) throw new UserError('agentsPluginRequires', { role, requires: unresolved.join(', ') })
   }
 }

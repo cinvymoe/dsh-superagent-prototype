@@ -169,9 +169,18 @@ export function AgentsSettings() {
   }
   const taken = new Set([...definitions.keys(), ...value.plugins.map(plugin => plugin.id)])
   // Keep the enabled ids in the catalog's order, so a save's diff is stable whatever order a person toggles in.
+  // Switching a capability on also switches on what it requires, so the panel never asks for a dependency by hand.
   const toggle = (role: AgentRole, plugin: string, on: boolean, catalog: readonly string[]) => {
     const enabled = new Set(value[role].enabledPlugins)
-    if (on) enabled.add(plugin); else enabled.delete(plugin)
+    if (on) {
+      const pending = [plugin]
+      while (pending.length > 0) {
+        const id = pending.pop()!
+        if (enabled.has(id)) continue
+        enabled.add(id)
+        for (const required of definitions.get(id)?.requires ?? []) pending.push(required)
+      }
+    } else enabled.delete(plugin)
     edit(role, { enabledPlugins: catalog.filter(id => enabled.has(id)) })
   }
   /** Take a plugin out of the catalog and out of every role's enabled list in one edit. */
@@ -230,6 +239,7 @@ export function AgentsSettings() {
                   data-plugin-state={on ? 'enabled' : 'disabled'} data-plugin-provided={plugin.provided ? 'true' : 'false'}>
                   <span className="dt-field-head">{pluginText(t, plugin, 'name')}
                     {!plugin.builtIn && <Tag tone="quiet">{t('agentPluginCustom')}</Tag>}
+                    {plugin.providedBy === 'mount' && <Tag tone="quiet">{t('agentPluginMounted')}</Tag>}
                     {!on && <Tag tone="quiet">{t('agentPluginDisabled')}</Tag>}
                     {!plugin.provided && <Tag tone="warning">{t('agentPluginUnavailable')}</Tag>}
                     {pluginText(t, plugin, 'hint') && <InfoTip text={pluginText(t, plugin, 'hint')} />}
