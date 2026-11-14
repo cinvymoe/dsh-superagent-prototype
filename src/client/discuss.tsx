@@ -221,6 +221,13 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
   const { data, error } = usePoll(async () => active
     ? call('GET local/issues', { query: { project: active.id } })
     : { issues: [] }, [call, active?.id])
+  // The source discussions of the same project, so a requirement made from one can name it and jump back to its thread.
+  const { data: discussionData } = usePoll(async () => active
+    ? call('GET local/discussions', { query: { project: active.id } })
+    : { discussions: [] }, [call, active?.id])
+  const discussions = discussionData?.discussions ?? []
+  const discussionTitle = (id: string) => discussions.find(discussion => discussion.id === id)?.title ?? id
+  const openDiscussion = (id: string) => navigate({ page: 'trigger', id: `local:${id}` })
   const issues = data?.issues ?? []
   // Every bucket keeps the host's newest-first order: filtering only hides rows, it never reorders them.
   const shown = issues.filter(issue => filter === 'all' || requirementBucket(issue) === filter)
@@ -264,7 +271,10 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
                   <span>{t('discuss.slicesCount', { count: current?.slices.length ?? 0 })}</span>
                   {/* The round count tells a reviewer how many alignment proposals this requirement went through. */}
                   {rounds.length > 0 && <span>{t('discuss.roundsCount', { count: rounds.length })}</span>}
-                  {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}</div>
+                  {!!issue.images?.length && <span>{t('discuss.imageCount', { count: issue.images.length })}</span>}
+                  {issue.discussionId && <button type="button" className="dt-textlink"
+                    onClick={() => openDiscussion(issue.discussionId!)}>{t('discuss.sourceDiscussion',
+                    { title: discussionTitle(issue.discussionId) })}</button>}</div>
               </div>
             </li>
           })}</ul>
@@ -278,6 +288,11 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
 export function RequirementDetail({ id, filter }: { id: string; filter: RequirementFilter }) {
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/issues/:id', { id }), [id])
+  // The discussion this requirement was made from, so the detail card can name it and jump back to its thread.
+  const { data: discussionData } = usePoll(() => call('GET local/discussions', {}), [])
+  const discussionTitle = (discussionId: string) =>
+    discussionData?.discussions.find(discussion => discussion.id === discussionId)?.title ?? discussionId
+  const openDiscussion = (discussionId: string) => navigate({ page: 'trigger', id: `local:${discussionId}` })
   const [comment, setComment] = useState('')
   // One answer draft per Ticket: a requirement can wait on several Tickets at once, and each answer is its own comment.
   const [answers, setAnswers] = useState<Record<string, string>>({})
@@ -376,7 +391,10 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
         <div className="dt-row-meta"><span>{t('discuss.author')}：{issue.author}</span><When at={issue.createdAt} />
           <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}
             {data.project.worktreeRoot ? ` · ${data.project.worktreeRoot}` : ''}</span>}
-          {data.project?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: data.project.bot })}</span>}</div>
+          {data.project?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: data.project.bot })}</span>}
+          {issue.discussionId && <button type="button" className="dt-textlink"
+            onClick={() => openDiscussion(issue.discussionId!)}>{t('discuss.sourceDiscussion',
+            { title: discussionTitle(issue.discussionId) })}</button>}</div>
         {issue.body && <MarkdownLite text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
         <RequirementImages issue={issue} />

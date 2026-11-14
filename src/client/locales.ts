@@ -162,6 +162,7 @@ const TEXT = {
   'discuss.noProjects': ['还没有项目。先创建一个项目并绑定执行仓库。', 'No projects yet. Create one and bind an execution repository.'],
   'discuss.project': ['项目', 'Project'],
   'discuss.requirements': ['需求列表', 'Requirements'],
+  'discuss.sourceDiscussion': ['来源讨论：{title}', 'Source discussion: {title}'],
   'discuss.empty': ['还没有需求。在「新建需求」里提交第一条。', 'No requirements yet. Submit the first one under New requirement.'],
   'discuss.emptyFilter': ['当前筛选下没有需求。切换到其它状态或「全部」查看。', 'No requirements under this filter. Switch to another status or All to see them.'],
   'discuss.slicesCount': ['{count} 个切片', '{count} slices'],

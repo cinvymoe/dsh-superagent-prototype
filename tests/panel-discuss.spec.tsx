@@ -4,7 +4,7 @@ import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, remount, all, click, find, settle, type, text, at, tab } from './fixtures/panel.tsx'
-import { localComment, localIssue, localReply, server, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
+import { localComment, localDiscussion, localIssue, localReply, server, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
 
 usePanel()
 
@@ -280,6 +280,41 @@ it('returns from a requirement detail to the requirement list rather than the ov
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
   expect(tab(zh['tab.requirements']).getAttribute('aria-selected')).toBe('true')
   expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Only requirement'])
+})
+
+it('names the source discussion on the list and detail and jumps back to its thread', async () => {
+  server.localProjects = [PROJECT]
+  const discussion = localDiscussion('原始讨论')
+  server.localDiscussions = [discussion]
+  server.localIssues = [{ ...localIssue('From discussion'), discussionId: discussion.id }]
+  // The discussion's own thread page, so the jump-back has somewhere to land.
+  server.threadPages = key => key === `local:${discussion.id}`
+    ? { key, source: 'local', title: discussion.title, stage: 'unsubscribed', latest: undefined, lastAt: discussion.updatedAt,
+      createdAt: discussion.createdAt, subscriptions: 0, tickets: [], evaluating: undefined, pending: 0, pollError: undefined,
+      url: undefined, facts: {}, context: [], correlated: [], decisions: [], timeline: [], earlier: null }
+    : undefined
+  const link = () => all('#dt-page button').find(button =>
+    button.textContent?.trim() === zh['discuss.sourceDiscussion'].replace('{title}', discussion.title))
+  // The requirement list row names its source discussion.
+  at({ page: 'requirements' })
+  await mount()
+  expect(link()).toBeDefined()
+  // Clicking it opens the discussion's own thread page.
+  await click(link()!)
+  expect(server.requests.some(request => request.method === 'GET'
+    && request.path.startsWith(`threads/local:${discussion.id}`))).toBe(true)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toContain(discussion.title)
+  // The requirement detail card names the same discussion and jumps back the same way.
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  expect(link()).toBeDefined()
+  await click(link()!)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toContain(discussion.title)
+  // A directly submitted requirement carries no discussion link.
+  server.localIssues = [localIssue('Direct requirement')]
+  at({ page: 'requirements' })
+  await mount()
+  expect(link()).toBeUndefined()
 })
 
 it('shows a requirement text once and leaves its original message out of the timeline', async () => {
