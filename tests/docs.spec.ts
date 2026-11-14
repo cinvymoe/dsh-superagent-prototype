@@ -67,6 +67,10 @@ describe('documentation', () => {
     expect(files('tests').filter(path => /\.spec\.tsx?$/.test(path) && !tests.includes(path))).toEqual([])
     expect(tests.filter(path => !existsSync(join(ROOT, path)))).toEqual([])
   })
+  it('lists every test once in the test table of 007 Architecture', () => {
+    const tests = listed('Tests')
+    expect(tests.filter((path, index) => tests.indexOf(path) !== index)).toEqual([])
+  })
 })
 
 describe('worktree root documentation', () => {
@@ -93,7 +97,7 @@ describe('worktree root documentation', () => {
     const panel = prose('docs/005-panel.md')
     expect(panel).toContain('an optional absolute `worktreeRoot` (empty keeps the Execution ticket directory root)')
     expect(panel).toContain('**Project name** labels the project')
-    expect(panel).toContain('**Execution repository** is the `owner/name` repository')
+    expect(panel).toContain('**Code repository** is the `owner/name` repository')
     expect(panel).toContain('the Ticket directory root (`executor.directory`; empty uses `<stateDir>/work`)')
     expect(panel).toContain('A local project\'s `worktreeRoot` takes precedence over the Ticket directory root')
     expect(panel).toContain('The prepare command runs in the selected root.')
@@ -112,6 +116,45 @@ describe('worktree root documentation', () => {
     expect(panel).toContain('A local project\'s own `prepare` command replaces it for that project\'s Tickets')
     expect(deployment).toContain('A local project\'s optional `prepare` command replaces this command for its own Tickets')
     expect(architecture).toContain('The prepare command is the Ticket\'s local project\'s own `prepare` command when it sets one, and otherwise `executor.prepare`')
+  })
+})
+
+describe('project execution environment documentation', () => {
+  it('states the project prepare priority, the additive blocked commands and the directory root priority', () => {
+    const execution = prose('docs/003-execution.md')
+    expect(execution).toContain('the project\'s `prepare` > `executor.prepare`')
+    expect(execution).toContain('the deployment\'s `executor.blockedCommands` apply to every Ticket')
+    expect(execution).toContain('a local project\'s own `blockedCommands` add to that list for its Tickets')
+    expect(execution).toContain('their union, deduplicated')
+    expect(execution).toContain('they apply only to its own Tickets')
+    expect(execution).toContain('`gh`, `git` and `lark-cli` can never be blocked')
+    expect(execution).toContain('chosen by priority: the local project\'s `worktreeRoot` > `executor.directory` > `<stateDir>/work`')
+  })
+  it('names the project fields and their empty-value fallbacks in the panel document', () => {
+    const panel = prose('docs/005-panel.md')
+    expect(panel).toContain('an optional prepare command and optional additional blocked commands')
+    expect(panel).toContain('**Additional blocked commands** are optional command names that fail only in this project\'s Executor Session')
+    expect(panel).toContain('the effective list is their union without duplicates')
+    expect(panel).toContain('empty adds none')
+    expect(panel).toContain('prepare command (empty starts a Ticket in an empty directory) and blocked commands (empty blocks none)')
+    expect(panel).toContain('a local project\'s additional blocked commands add to it without duplicates and fail only in that project\'s Executor Session')
+  })
+  it('states the project overrides and the blocked-command union in the deployment executor block', () => {
+    const deployment = prose('docs/006-deployment.md')
+    expect(deployment).toContain('A local project\'s optional `blockedCommands` add to the Execution blocked list for its own Tickets')
+    expect(deployment).toContain('the effective list is the union without duplicates')
+    expect(deployment).toContain('`blockedCommands` blocks those names in every Ticket\'s worker shell')
+    expect(deployment).toContain('a local project\'s extra `blockedCommands` are added to that list, deduplicated, and apply only in that project\'s Executor Session')
+    expect(deployment).toContain('empty starts the Ticket in an empty directory')
+    expect(deployment).toContain('A local project with extra blocked commands gets `<stateDir>/worker-bin-project-<project>` ahead of its chain\'s directory on `PATH`')
+  })
+  it('names the project environment in the module and test rows of the architecture document', () => {
+    const architecture = prose('docs/007-architecture.md')
+    expect(architecture).toContain('the effective blocked-command union')
+    expect(architecture).toContain('prepare command and extra blocked commands')
+    expect(architecture).toContain('the project\'s own execution environment (worktree root, prepare command, extra blocked commands)')
+    expect(architecture).toContain('fails a command only in the project that blocks it')
+    expect(architecture).toContain('the prepare command and the deployment-wide blocked commands whose list a project\'s own blocked commands extend')
   })
 })
 
