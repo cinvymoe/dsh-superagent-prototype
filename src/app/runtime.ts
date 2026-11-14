@@ -151,7 +151,8 @@ export class Runtime extends Service implements SourceHost {
         } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
         lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment,
-        workerEnvironment: () => setup.workerEnvironment, deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,
+        workerEnvironment: () => setup.workerEnvironment, environmentFor: chain => setup.environmentFor(chain),
+        deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,
         worktreeRoot: ticket => this.ticketProject(ticket)?.worktreeRoot,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
       this.assessor = new MasterAssessor({ get engine() { return runtime.engine }, commands, get deployment() { return setup.deployment }, deploymentFor: chain => setup.deploymentFor(chain), effects,
@@ -227,12 +228,24 @@ export class Runtime extends Service implements SourceHost {
     const trigger = sourceTrigger(this, ticket)
     return typeof trigger?.meta.project === 'string' ? this.local.project(trigger.meta.project) : undefined
   }
+  /** The GitHub chain of the message that started a ticket, which is absent for a Source without chains. */
+  originChain(ticket: Ticket): string | undefined {
+    const chain = sourceTrigger(this, ticket)?.meta.chain
+    return typeof chain === 'string' ? chain : undefined
+  }
+  /** The worker environment of a Session: the chain of the ticket it executes, or the deployment's primary chain. */
+  sessionEnvironment(sessionId?: string): Record<string, string> {
+    const ticketId = sessionId?.startsWith('worker-') ? sessionId.slice('worker-'.length) : undefined
+    // A Session outliving a failed setup still gets the primary environment rather than an error from an unresolved deployment.
+    const ticket = ticketId && this.setup.configured() ? this.store.tickets.get(ticketId) : undefined
+    return this.setup.environmentFor(ticket ? this.ticketDeployment(ticket).chain : undefined)
+  }
   /**
    * The deployment a ticket executes under: the chain of its local project, or its chain's configured deployment.
    * A chain added or changed since startup is not resolved yet, so it is read from the stored configuration instead.
    */
   ticketDeployment(ticket: Ticket): Deployment {
-    const base = this.setup.deploymentFor(ticket.execution?.chain)
+    const base = this.setup.deploymentFor(ticket.execution?.chain ?? this.originChain(ticket))
     const project = this.ticketProject(ticket)
     if (!project) return base
     if (project.chain) {

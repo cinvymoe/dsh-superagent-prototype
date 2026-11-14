@@ -10,17 +10,25 @@ export const Config = SandboxBashExecutor.Config
 
 /** The environment provider exposed by the main dsh-superagent plugin. */
 export interface WorkerEnvironment {
-  environment(): Record<string, string>
+  /** The environment of the calling Session's ticket chain; without one, the deployment's primary chain. */
+  environment(sessionId?: string): Record<string, string>
+}
+
+/** The Session a shell execution belongs to, when the caller provided DSH's managed environment. */
+export const sessionOf = (request: Pick<ShellExecRequest, 'dshEnv'>): string | undefined => request.dshEnv?.DSH_SESSION_ID
+
+/** The resolved spec with the worker environment of `sessionId` applied over the caller's own environment. */
+export function withWorkerEnvironment(spec: ShellExecSpec, provider: WorkerEnvironment | undefined, sessionId?: string): ShellExecSpec {
+  const environment = provider?.environment(sessionId) ?? {}
+  return { ...spec, env: { ...spec.env, ...environment } }
 }
 
 /** Bash executor used only by dsh-superagent worker Sessions. */
 export class WorkerShell extends SandboxBashExecutor {
-  /** Carry the worker-only environment on every resolved command while preserving the inherited sandbox policy. */
+  /** Carry the worker-only environment of the calling Session's chain on every resolved command while preserving the inherited sandbox policy. */
   override resolve(request: ShellExecRequest): ShellExecSpec {
-    const spec = super.resolve(request)
     const provider = this.ctx.get('dshSuperagentWorkerEnv') as WorkerEnvironment | undefined
-    const environment = provider?.environment() ?? {}
-    return { ...spec, env: { ...spec.env, ...environment } }
+    return withWorkerEnvironment(super.resolve(request), provider, sessionOf(request))
   }
 }
 

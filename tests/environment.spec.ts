@@ -1,12 +1,12 @@
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SENSITIVE_ENV_PATTERN, type SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
-import { GIT_LOCATION, agentVariables, credentialHelper, runAsWorker, verifyDirectory, withoutDirectory, workerBin, workerGitConfig, writeEnvironment }
-  from '../src/infra/environment.ts'
+import { GIT_LOCATION, agentVariables, credentialHelper, runAsWorker, verifyDirectory, withoutDirectory, workerBin, workerEnvironment,
+  workerGitConfig, writeEnvironment } from '../src/infra/environment.ts'
 import { CliError } from '../src/infra/commands.ts'
 import { testDeployment } from './fixtures/deployment.ts'
 import { gitEnv } from './fixtures/git.ts'
@@ -182,5 +182,47 @@ describe('the repository the host\'s environment names', () => {
       for (const name of GIT_LOCATION) expect(env, name).not.toHaveProperty(name)
       expect(env.GIT_CEILING_DIRECTORIES).toBe(dir)
     } finally { vi.unstubAllEnvs() }
+  })
+})
+
+describe('chain environments', () => {
+  it('binds each chain\'s gh and git credentials to that chain\'s CLI, while the primary chain keeps the original paths', async () => {
+    const log = join(dir, 'calls.log')
+    // A stand-in GitHub CLI that records its argv and answers git's credential lookup with its own login.
+    const recorder = (name: string): string => program(join(dir, name), [
+      `printf '%s %s\\n' '${name}' "$*" >> '${log}'`,
+      `case "$*" in *git-credential*) printf 'username=${name}\\npassword=secret\\n' ;; *) echo '${name}' ;; esac`,
+    ].join('\n'))
+    const primary = recorder('gh-a'), other = recorder('gh-b')
+    const base = testDeployment({ stateDir: dir })
+    const deployment = { ...base, chain: 'default', chains: {
+      default: { ...base, chain: 'default', github: { ...base.github, cli: primary, login: 'bot-a' } },
+      tools: { ...base, chain: 'tools', repository: 'acme/tools', intakeRepository: 'acme/tools', github: { ...base.github, cli: other, login: 'bot-b' } },
+    } }
+    await writeEnvironment(deployment, ['personal-gh'])
+    // Each chain's shim runs that chain's CLI with the worker's arguments, not the other chain's.
+    expect((await exec(join(workerBin(dir), 'gh'), ['api', 'user'])).stdout).toBe('gh-a\n')
+    expect((await exec(join(workerBin(dir, 'tools'), 'gh'), ['pr', 'create'])).stdout).toBe('gh-b\n')
+    expect(readFileSync(log, 'utf8').split('\n').filter(Boolean)).toEqual(['gh-a api user', 'gh-b pr create'])
+    // A blocked command names the login of the chain whose worker runs it.
+    await expect(exec(join(workerBin(dir, 'tools'), 'personal-gh'), [])).rejects
+      .toMatchObject({ stderr: 'personal-gh is blocked in this installation; use gh, which acts as bot-b.\n' })
+    // The isolated git configuration selects each chain's CLI as the github.com credential helper.
+    expect(readFileSync(workerGitConfig(dir), 'utf8')).toContain(`\thelper = "${credentialHelper(primary)}"`)
+    expect(readFileSync(workerGitConfig(dir, 'tools'), 'utf8')).not.toContain(credentialHelper(primary))
+    expect(readFileSync(workerGitConfig(dir, 'tools'), 'utf8')).toContain(`\thelper = "${credentialHelper(other)}"`)
+    // git's credential lookup for a push to GitHub asks the chain's CLI: this is the command `git push` starts at github.com.
+    const credential = execFileSync('git', ['credential', 'fill'], { cwd: dir, input: 'protocol=https\nhost=github.com\n\n',
+      env: { ...workerEnvironment(dir, '/usr/bin:/bin', 'tools'), GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' }, encoding: 'utf8' })
+    expect(credential).toContain('username=gh-b')
+    expect(readFileSync(log, 'utf8').split('\n').filter(Boolean).at(-1)).toBe('gh-b auth git-credential get')
+    // The chain's worker environment is what a prepare command and a worker shell receive: its own bin directory first.
+    expect(workerEnvironment(dir, '/usr/bin', 'tools')).toMatchObject({ GIT_CONFIG_GLOBAL: workerGitConfig(dir, 'tools') })
+    expect(workerEnvironment(dir, '/usr/bin', 'tools').PATH!.split(':')[0]).toBe(workerBin(dir, 'tools'))
+    expect(workerEnvironment(dir, '/usr/bin').PATH!.split(':')[0]).toBe(workerBin(dir))
+  })
+  it('writes a single environment at the original paths for a deployment without chains', async () => {
+    await writeEnvironment(testDeployment({ stateDir: dir }), [])
+    expect(readdirSync(dir).filter(name => name.startsWith('worker-')).sort()).toEqual(['worker-bin', 'worker-gitconfig'])
   })
 })
