@@ -4,6 +4,7 @@ import type { Health } from '../../sources/host.ts'
 import type { SetupProblem } from '../../setup.ts'
 import { anyoneAllowed } from '../../policy.ts'
 import type { Store } from '../store.ts'
+import type { MissingProjectChain } from '../projects.ts'
 import { awaitingEval, dayAgo, newestFirst, ownersOf, snapshot, threadSummary, type ViewHost } from './records.ts'
 import { sourceHealth, type HealthMap } from './sources.ts'
 import { ticketRow, type ExecutorLoad } from './tickets.ts'
@@ -34,8 +35,10 @@ export function evalsHealth(store: Store, now = Date.now()): Health {
 /**
  * Builds the operator overview: active system problems, tickets awaiting human action, executor load, and 24-hour trigger flow.
  * @param setup - Setup problem to surface first (where setup stopped, or a Source paused by setup).
+ * @param missingChains - projects whose own GitHub chain the Source no longer holds; listed as a problem, never repaired here.
  */
-export function overview(host: ViewHost, health: HealthMap, policyVersionValue: string, load: ExecutorLoad, setup?: SetupProblem) {
+export function overview(host: ViewHost, health: HealthMap, policyVersionValue: string, load: ExecutorLoad, setup?: SetupProblem,
+  missingChains: readonly MissingProjectChain[] = []) {
   const { store, sources } = host
   const view = snapshot(host)
   const settings = store.settings()
@@ -50,6 +53,10 @@ export function overview(host: ViewHost, health: HealthMap, policyVersionValue: 
     ...(running.length ? [] : [{ kind: 'no-source' as const }]),
     // Only allowed senders can originate work, so empty allowlists mean no request can ever become a ticket.
     ...(anyoneAllowed(settings) ? [] : [{ kind: 'no-allowed' as const }]),
+    // A project whose named chain the Source no longer holds executes with another chain's identity; list it so a person
+    // can add the chain back, without this view writing any setting.
+    ...missingChains.map(project => ({ kind: 'project-chain-missing' as const, project: { id: project.id, name: project.name },
+      chain: project.chain })),
     ...running.flatMap(source => source.health.filter(item => item.state === 'error').map(item => ({ kind: 'source-error' as const, source: { id: source.id, title: source.title, health: item } }))),
     ...(settings.paused ? [{ kind: 'executor-paused' as const }] : []),
     // Unavailable Evals behind the `evals` health entry are listed individually as `eval-unavailable` below.

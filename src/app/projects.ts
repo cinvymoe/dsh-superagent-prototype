@@ -22,6 +22,9 @@ export interface ProjectsHost {
 export type ProjectInput = { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string; cli?: string }
 export type ProjectUpdate = { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string; cli?: string }
 
+/** A project whose own GitHub chain the stored Source configuration no longer holds, as the health summary reads it. */
+export interface MissingProjectChain { id: string; name: string; chain: string }
+
 /** The chains a stored GitHub Source configuration holds, read leniently so a guard never throws on an old shape. */
 function configuredChains(config: unknown): GithubChain[] {
   const parsed = GithubConfigSchema.safeParse(normalizeGithubConfig(config))
@@ -102,14 +105,34 @@ export class Projects {
   list(): LocalProjectView[] { return this.host.local.projects().map(project => this.view(project)) }
 
   /**
+   * Projects whose own chain the stored GitHub Source configuration no longer holds. Read-only: the panel lists them so
+   * a person can add the chain back, and nothing here writes the Source configuration.
+   */
+  missingChains(): MissingProjectChain[] {
+    const rows = this.chains()
+    return this.host.local.projects().flatMap(project => {
+      const chain = this.missingChainOf(project, rows)
+      return chain ? [{ id: project.id, name: project.name, chain }] : []
+    })
+  }
+
+  /**
    * One project as the panel reads it. The chain's CLI and the account it resolves to are derived on every read, so
    * the project record never carries a bot of its own and a setup that resolves a different account shows through.
+   * A chain the project names but the Source does not hold is reported as `missingChain`, with every other field intact.
    */
   view(project: LocalProject): LocalProjectView {
     const chain = this.chainOf(project)
-    const row = this.chains().find(item => item.id === chain)
+    const rows = this.chains()
+    const row = rows.find(item => item.id === chain)
     const login = this.account(chain)
-    return { ...project, cli: row?.cli ?? '', ...(login ? { bot: login } : {}) }
+    const missingChain = this.missingChainOf(project, rows)
+    return { ...project, cli: row?.cli ?? '', ...(login ? { bot: login } : {}), ...(missingChain ? { missingChain } : {}) }
+  }
+
+  /** The chain a project names that `chains` does not hold; a legacy record naming no chain never counts as missing. */
+  private missingChainOf(project: LocalProject, chains: readonly GithubChain[]): string | undefined {
+    return project.chain !== undefined && !chains.some(chain => chain.id === project.chain) ? project.chain : undefined
   }
 
   /** The chain a project executes through: its own chain, or `default` for a legacy record without one. */

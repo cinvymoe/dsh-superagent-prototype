@@ -81,7 +81,9 @@ export function ProjectBar({ route }: { route: Route }) {
     {projects.length > 0 && <div ref={strip} className="dt-project-strip" role="tablist" aria-label={t('discuss.projects')}
       onKeyDown={walk}>
       {projects.map(item => <button key={item.id} type="button" role="tab" aria-selected={item.id === current}
-        tabIndex={item.id === current ? 0 : -1} className="dt-project-tab" onClick={() => select(item.id)}>{item.name}</button>)}
+        tabIndex={item.id === current ? 0 : -1} className="dt-project-tab" title={item.missingChain
+          ? t('discuss.projectChainMissing', { chain: item.missingChain }) : undefined}
+        onClick={() => select(item.id)}>{item.name}{item.missingChain && <Icon name="alert" size={12} />}</button>)}
     </div>}
     {overflow && projects.length > 0 && <div ref={more} className="dt-project-more-wrap">
       <Button className="dt-project-more" aria-haspopup="menu" aria-expanded={open} icon={<Icon name="chevron-down" size={14} />}
@@ -91,6 +93,8 @@ export function ProjectBar({ route }: { route: Route }) {
           className="dt-project-option" onClick={() => { setOpen(false); select(item.id) }}>
           <span>{item.name}</span><span className="dt-mono">{projectRepositories(item)}</span>
           {item.bot && <span className="dt-mono dt-project-bot">{t('discuss.projectBotAccount', { account: item.bot })}</span>}
+          {item.missingChain && <span className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissingShort',
+            { chain: item.missingChain })}</span>}
         </button>)}
       </div>}
     </div>}
@@ -162,6 +166,8 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
     <PageHead title={title} back={{ label: editing ? t('discuss.new') : t('discuss.requirements'),
       onClick: () => navigate(editing ? { page: 'newRequirement' } : { page: 'requirements' }, true) }} />
     <div className="dt-column">
+      {editing && current?.missingChain && <p className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
+        { chain: current.missingChain })}</p>}
       <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
         <div className="dt-card-head"><span className="dt-card-title">{title}</span></div>
         <input className="dt-text-input" value={name} maxLength={80} placeholder={t('discuss.projectName')}

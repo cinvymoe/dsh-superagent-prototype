@@ -1,0 +1,26 @@
+== requirements head ==
+superagent
+审阅对齐结果，确认或打回。
+cinvymoe/dsh-superagent-prototype → cinvymoe/dsh-superagent-prototype
+GitHub 链路 p-0d3a3830 不在来源配置里，工单会回退到默认链路的身份。请到「来源 → GitHub」补回这条链路。
+== project strip ==
+superagent
+rust_crane
+== overview problems ==
+系统问题
+3
+没有人能发起工作：各来源上的名单都为空，任何请求都不会成为工单
+去添加
+项目 superagent 的 GitHub 链路 p-0d3a3830 不在来源配置里
+
+这些工单会回退到默认链路的身份。请到「来源 → GitHub」补回该链路；这条提示不会改动任何设置。
+
+去打开来源
+GitHub 来源异常
+
+连续 3 次轮询失败，最近一次：Error: GitHub returned no HTTP headers
+
+来源会在每次轮询时自动重试。持续出现时检查网络和该来源的登录状态。
+== edit form head ==
+新建需求
+编辑项目

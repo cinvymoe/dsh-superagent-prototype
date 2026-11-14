@@ -337,3 +337,41 @@ it('keeps the edit page and typed values when the host refuses an unusable bot C
   expect(putRequests().at(-1)).toMatchObject({ path: 'local/projects/p-widgets', body: { cli: '/bad/gh' } })
   expect(server.localProjects.find(item => item.id === 'p-widgets')?.cli).toBe('/bot/gh-widgets')
 })
+
+it('marks a project whose GitHub chain is missing and leaves a consistent project unmarked', async () => {
+  server.localProjects = [{ ...WIDGETS, missingChain: 'p-widgets' }, OTHER]
+  at({ page: 'requirements' })
+  await mount()
+  // The current project's page head says which chain is missing and where to add it back.
+  expect(document.querySelector('.dt-page-head .dt-project-missing-chain')?.textContent)
+    .toBe(zh['discuss.projectChainMissing'].replace('{chain}', 'p-widgets'))
+  // The chip carries the same hint as its tooltip, and the strip keeps showing only the project name.
+  expect(all('.dt-project-strip [role="tab"]').map(item => item.textContent)).toEqual(['Widgets', 'Other'])
+  expect(tab('Widgets').getAttribute('title')).toBe(zh['discuss.projectChainMissing'].replace('{chain}', 'p-widgets'))
+  // A project whose chain the Source still holds shows no hint at all.
+  await click(tab('Other'))
+  expect(document.querySelector('.dt-project-missing-chain')).toBeNull()
+  expect(tab('Other').getAttribute('title')).toBeNull()
+  expect(text()).not.toContain(zh['discuss.projectChainMissingShort'].replace('{chain}', 'p-widgets'))
+})
+
+it('names a missing chain in the More menu row', async () => {
+  server.localProjects = [{ ...WIDGETS, missingChain: 'p-widgets' }, OTHER]
+  at({ page: 'requirements' })
+  await mount()
+  const strip = document.querySelector<HTMLElement>('.dt-project-strip')!
+  Object.defineProperty(strip, 'scrollWidth', { configurable: true, get: () => 640 })
+  Object.defineProperty(strip, 'clientWidth', { configurable: true, get: () => 320 })
+  try {
+    await click(tab('Other'))
+    await click(document.querySelector<HTMLElement>('.dt-project-more')!)
+    const rows = all('[role="menuitemradio"]')
+    expect(rows.find(row => row.textContent?.startsWith('Widgets'))?.textContent)
+      .toContain(zh['discuss.projectChainMissingShort'].replace('{chain}', 'p-widgets'))
+    expect(rows.find(row => row.textContent?.startsWith('Other'))?.textContent)
+      .not.toContain(zh['discuss.projectChainMissingShort'].replace('{chain}', 'p-widgets'))
+  } finally {
+    Reflect.deleteProperty(strip, 'scrollWidth')
+    Reflect.deleteProperty(strip, 'clientWidth')
+  }
+})
