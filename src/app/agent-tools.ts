@@ -68,9 +68,20 @@ export interface AgentPluginCatalog extends AgentPlugin {
 export interface AgentRoleCatalog {
   role: AgentRole; preset: string; required: string[]; plugins: string[]; enabledPlugins: string[]
 }
-/** The whole Agents catalog: the shared plugins (built-in and stored), each role's scope, and the host's ungrouped tools. */
+/** One group of host tools the panel offers to save as a plugin: an MCP server's tools or a shared tool-name prefix. */
+export interface PluginSuggestion {
+  /** The MCP server name, or the prefix at least two tools share; the panel prefills a plugin name from it. */
+  name: string
+  kind: 'mcp' | 'family'
+  tools: { name: string; description: string }[]
+}
+/**
+ * The whole Agents catalog: the shared plugins (built-in and stored), each role's scope, the host-tool groups a person may
+ * save as a plugin, the tools that belong to no group, and every tool name this host registers.
+ */
 export interface AgentsCatalog {
-  plugins: AgentPluginCatalog[]; roles: AgentRoleCatalog[]; ungroupedTools: { name: string; description: string }[]
+  plugins: AgentPluginCatalog[]; roles: AgentRoleCatalog[]; suggestions: PluginSuggestion[]
+  ungroupedTools: { name: string; description: string }[]; availableTools: string[]
 }
 /**
  * Tools a stored plugin can never declare, however a plugin registers them: none that asks or shows a person something
@@ -136,19 +147,62 @@ export function roleTools(role: AgentRole, agents: AgentsConfig): string[] {
   return [...orderedTools(role).filter(name => allowed.has(name)), ...extra]
 }
 /**
- * The catalog `GET settings` offers: the shared plugin definitions with the tools this host lacks, each role's required tools,
- * applicable and enabled plugin ids, and the host's registered global tools that belong to no plugin (for the next slice).
+ * The host's registered tools that no catalog plugin declares, leaving out required, built-in and forbidden names and
+ * repeated registrations. Both the suggestion groups and the ungrouped list are drawn from this set.
  */
-export function agentCatalog(agents: AgentsConfig, registered: readonly RegisteredTool[] = []): AgentsCatalog {
-  const available = new Set(registered.map(tool => tool.name))
+function candidateTools(agents: AgentsConfig, registered: readonly RegisteredTool[]): { name: string; description: string }[] {
   const pluginTools = new Set([...BUILTIN_PLUGINS, ...agents.plugins].flatMap(plugin => plugin.tools))
   const builtInTools = new Set(AGENT_ROLES.flatMap(role => REQUIRED_TOOLS[role]))
   const seen = new Set<string>()
-  const ungroupedTools = registered.filter(tool => {
+  return registered.filter(tool => {
     if (!tool.name || pluginTools.has(tool.name) || builtInTools.has(tool.name) || forbiddenAddedTool(tool.name) || seen.has(tool.name)) return false
     seen.add(tool.name)
     return true
-  }).map(({ name, description }) => ({ name, description })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+  }).map(({ name, description }) => ({ name, description }))
+}
+const byName = (a: { name: string }, b: { name: string }): number => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+/** The `mcp__<server>__<tool>` names DSH's MCP client gives a server's tools; the middle group is the server. */
+const MCP_TOOL = /^mcp__(.+?)__(.+)$/
+/**
+ * The groups the panel offers to turn into a plugin, from the host's tools no catalog plugin declares: each MCP server
+ * (`mcp__<server>__…`), then each tool-name prefix at least two tools share, each in name order. A tool with no such group
+ * is offered on its own so a person can still put it in a plugin. A suggestion only prefills the form; a save stores what
+ * the person confirms, and a tool this host later stops registering stays in the stored plugin but never in an allow list.
+ */
+export function pluginSuggestions(agents: AgentsConfig, registered: readonly RegisteredTool[] = []):
+{ suggestions: PluginSuggestion[]; ungroupedTools: { name: string; description: string }[] } {
+  const mcp = new Map<string, { name: string; description: string }[]>()
+  const families = new Map<string, { name: string; description: string }[]>()
+  const ungrouped: { name: string; description: string }[] = []
+  const push = (group: Map<string, { name: string; description: string }[]>, key: string,
+    tool: { name: string; description: string }) => {
+    const tools = group.get(key)
+    if (tools) tools.push(tool); else group.set(key, [tool])
+  }
+  for (const tool of candidateTools(agents, registered)) {
+    const match = MCP_TOOL.exec(tool.name)
+    if (match) { push(mcp, match[1]!, tool); continue }
+    const cut = tool.name.lastIndexOf('_')
+    if (cut > 0) { push(families, tool.name.slice(0, cut), tool); continue }
+    ungrouped.push(tool)
+  }
+  const suggestions: PluginSuggestion[] = [
+    ...[...mcp.keys()].sort().map(name => ({ name, kind: 'mcp' as const, tools: [...mcp.get(name)!].sort(byName) })),
+    ...[...families.keys()].filter(prefix => families.get(prefix)!.length > 1).sort()
+      .map(name => ({ name, kind: 'family' as const, tools: [...families.get(name)!].sort(byName) })),
+  ]
+  const grouped = new Set(suggestions.flatMap(suggestion => suggestion.tools.map(tool => tool.name)))
+  for (const tools of families.values()) for (const tool of tools) if (!grouped.has(tool.name)) ungrouped.push(tool)
+  return { suggestions, ungroupedTools: ungrouped.sort(byName) }
+}
+/**
+ * The catalog `GET settings` offers: the shared plugin definitions with the tools this host lacks, each role's required tools,
+ * applicable and enabled plugin ids, the groups a person may save as a plugin, the tools that belong to no group, and every
+ * tool name the host registers so the panel can mark a declared tool it lacks.
+ */
+export function agentCatalog(agents: AgentsConfig, registered: readonly RegisteredTool[] = []): AgentsCatalog {
+  const available = new Set(registered.map(tool => tool.name))
+  const { suggestions, ungroupedTools } = pluginSuggestions(agents, registered)
   const plugins = [...BUILTIN_PLUGINS, ...agents.plugins].map(plugin => {
     const builtIn = BUILTIN_PLUGINS.find(item => item.id === plugin.id)
     const tools = [...new Set(plugin.tools)]
@@ -162,7 +216,9 @@ export function agentCatalog(agents: AgentsConfig, registered: readonly Register
     roles: AGENT_ROLES.map(role => ({ role, preset: AGENT_TOOLS[role].preset, required: [...REQUIRED_TOOLS[role]],
       plugins: plugins.filter(plugin => plugin.roles.includes(role)).map(plugin => plugin.id),
       enabledPlugins: [...agents[role].enabledPlugins] })),
+    suggestions,
     ungroupedTools,
+    availableTools: [...available].sort(),
   }
 }
 /**

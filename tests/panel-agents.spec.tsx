@@ -271,6 +271,78 @@ it('lists an Agents save with its role, model and plugin change lines', async ()
   expect(text()).toContain(zh['change.agentPluginAdded'].replace('{items}', 'extra'))
 })
 
+it('adds a custom plugin from an MCP suggestion, enables it and keeps it after a reload', async () => {
+  await open()
+  expect(text()).toContain(zh.agentCustomPluginsNone)
+  await click(find(zh.agentAddPlugin, 'button'))
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+  expect(dialog.textContent).toContain(zh.agentAddPluginTitle)
+  // Each MCP server and shared prefix is offered as a group; the remaining tools are listed one by one.
+  expect(all('[data-plugin-suggestion]').map(item => item.getAttribute('data-plugin-suggestion')))
+    .toEqual(['mcp:magpie', 'family:feature_exec'])
+  expect(dialog.querySelector('[data-plugin-suggestion="mcp:magpie"]')?.textContent).toContain('mcp__magpie__call_tool')
+  expect(all('[data-plugin-candidate]').map(item => item.getAttribute('data-plugin-candidate')))
+    .toEqual(['agent_teams_status', 'automation_create', 'feature_exec_advance', 'feature_exec_start',
+      'mcp__magpie__call_tool', 'mcp__magpie__repos'])
+  // One click takes the whole group and fills the blank name; the default scope is every role.
+  await click(find(zh.agentPluginUseSuggestion, '[data-plugin-suggestion="mcp:magpie"] button'))
+  expect(dialog.querySelector<HTMLInputElement>(`input[aria-label="${zh.agentPluginName}"]`)!.value).toBe('magpie')
+  await click(find(zh.agentPluginAddConfirm, '[role="dialog"] button'))
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(document.querySelector('[data-custom-plugin="magpie"]')?.textContent).toContain('magpie')
+  // A draft plugin is switchable on each applicable role before the save.
+  await click(pluginSwitch('main', 'magpie'))
+  await click(zh.save)
+  expect(server.settings.agents.plugins.find(plugin => plugin.id === 'magpie')).toMatchObject({ name: 'magpie',
+    tools: ['mcp__magpie__call_tool', 'mcp__magpie__repos'], roles: ['main', 'aligner', 'executor'] })
+  expect(server.settings.agents.main.enabledPlugins).toContain('magpie')
+  // A reload reads the stored plugin back from the catalog.
+  await open()
+  expect(document.querySelector('[data-custom-plugin="magpie"]')?.textContent).toContain('magpie')
+  expect(pluginRow('main', 'magpie').getAttribute('data-plugin-state')).toBe('enabled')
+})
+
+it('confirms before deleting an enabled custom plugin and clears it from every role', async () => {
+  await open()
+  await click(find(zh.agentAddPlugin, 'button'))
+  await click(find(zh.agentPluginUseSuggestion, '[data-plugin-suggestion="family:feature_exec"] button'))
+  await click(find(zh.agentPluginAddConfirm, '[role="dialog"] button'))
+  await click(pluginSwitch('executor', 'feature-exec'))
+  await click(zh.save)
+  await settle()
+  expect(server.settings.agents.executor.enabledPlugins).toContain('feature-exec')
+  await click(find(zh.agentPluginDeleteLabel.replace('{name}', 'feature_exec'), 'button'))
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.agentPluginDeleteTitle)
+  // Cancelling keeps the plugin; confirming removes it and its enable entries together.
+  await click(find(zh.cancel, '[role="dialog"] button'))
+  expect(document.querySelector('[data-custom-plugin="feature-exec"]')).not.toBeNull()
+  await click(find(zh.agentPluginDeleteLabel.replace('{name}', 'feature_exec'), 'button'))
+  await click(find(zh.confirm, '[role="dialog"] button'))
+  await click(zh.save)
+  expect(server.settings.agents.plugins.some(plugin => plugin.id === 'feature-exec')).toBe(false)
+  expect(server.settings.agents.executor.enabledPlugins).not.toContain('feature-exec')
+  await open()
+  expect(document.querySelector('[data-custom-plugin]')).toBeNull()
+  expect(pluginIds('executor')).not.toContain('feature-exec')
+})
+
+it('saves a plugin that declares a tool the host lacks and marks it unavailable', async () => {
+  await open()
+  await click(find(zh.agentAddPlugin, 'button'))
+  const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
+  await type(dialog.querySelector<HTMLInputElement>(`input[aria-label="${zh.agentPluginName}"]`)!, 'Ghost tools')
+  await type(dialog.querySelector<HTMLInputElement>(`input[aria-label="${zh.agentPluginExtraTools}"]`)!, 'ghost_tool')
+  await click(find(zh.agentPluginAddConfirm, '[role="dialog"] button'))
+  await click(zh.save)
+  expect(server.settings.agents.plugins.find(plugin => plugin.id === 'ghost-tools')!.tools).toEqual(['ghost_tool'])
+  expect(document.querySelector('[data-custom-plugin="ghost-tools"]')?.textContent).toContain(zh.agentPluginUnavailable)
+  await open()
+  // The declared name stays visible on each role row, marked and listed as one this host does not provide.
+  const row = pluginRow('executor', 'ghost-tools')
+  expect(row.textContent).toContain(zh.agentPluginUnavailable)
+  expect(row.querySelector('[data-plugin-tools]')?.textContent).toContain('ghost_tool')
+})
+
 it('shows the Agents group and its role copy in English', async () => {
   at({ page: 'settings', query: { group: 'agents' } })
   await mount(en)

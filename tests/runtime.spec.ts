@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import { Runtime } from '../src/app/runtime.ts'
+import { roleTools } from '../src/app/agent-tools.ts'
 import { jobRegistry } from './fixtures/host.ts'
 import { evalsHealth } from '../src/app/views/overview.ts'
 import { mandateInstructions } from '../src/executor/dsh.ts'
@@ -1812,6 +1813,24 @@ it('ignores an added tool the host stops providing, without admitting other tool
   expect(() => runtime.sessions.agentsChanged()).not.toThrow()
   expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: workerTools })
   // A Session created while the plugin stays uninstalled starts without the unavailable name.
+  const next = await acceptedTicket(feishu('2', '@bot 再修一个回归'))
+  expect(restricts.get(next.sessionId)).toEqual([{ allow: workerTools }])
+})
+
+it('keeps a stored plugin tool the host never registered out of every allow list, without throwing', async () => {
+  const stored = { id: 'ghost', name: 'Ghost tools', tools: ['ghost_tool'] }
+  const saved = runtime.store.settings()
+  const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'ghost'] },
+    aligner: saved.agents.aligner, executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ghost'] } }
+  await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
+  const running = await acceptedTicket()
+  const workerTools = ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill']
+  // The declared name is in the configured surface but not in a Session's allow list, so nothing tries to resolve it.
+  expect(roleTools('main', value)).toContain('ghost_tool')
+  expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
+  expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: workerTools })
+  expect(JSON.stringify(restricts.get(runtime.masterId)!.at(-1))).not.toContain('ghost_tool')
+  expect(() => runtime.sessions.agentsChanged()).not.toThrow()
   const next = await acceptedTicket(feishu('2', '@bot 再修一个回归'))
   expect(restricts.get(next.sessionId)).toEqual([{ allow: workerTools }])
 })

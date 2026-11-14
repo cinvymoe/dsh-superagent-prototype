@@ -1,5 +1,6 @@
 /** Computes structured settings diffs across saved revisions for display in the management panel. */
 import { AGENT_ROLES, AgentsConfigSchema, type AgentsConfig, type AgentRole } from '../policy.ts'
+import { BUILTIN_PLUGINS } from './agent-tools.ts'
 import type { FieldSpec } from '../sources/kind.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import { KV } from '../kv.ts'
@@ -83,6 +84,9 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
   if (before.executor.prepare !== after.executor.prepare) changes.push({ code: 'prepareCommand' })
   if (!same(before.executor.blockedCommands, after.executor.blockedCommands)) changes.push({ code: 'blockedCommands', from: before.executor.blockedCommands.join(' '), to: after.executor.blockedCommands.join(' ') })
   const wasAgents = agentsOf(before), isAgents = agentsOf(after)
+  // The history names a plugin, not its id: an id it no longer resolves falls back to itself.
+  const names = (agents: AgentsConfig) => new Map([...BUILTIN_PLUGINS, ...agents.plugins].map(plugin => [plugin.id, plugin.name]))
+  const wasNames = names(wasAgents), isNames = names(isAgents)
   for (const role of AGENT_ROLES) {
     const was = wasAgents[role], is = isAgents[role], codes = AGENT_CHANGES[role]
     if (!same(was.model, is.model)) changes.push({ code: codes.model })
@@ -90,13 +94,13 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
     const wasPlugins = new Set(was.enabledPlugins), isPlugins = new Set(is.enabledPlugins)
     const enabled = is.enabledPlugins.filter(id => !wasPlugins.has(id))
     const disabled = was.enabledPlugins.filter(id => !isPlugins.has(id))
-    if (enabled.length > 0) changes.push({ code: codes.enabled, items: [...new Set(enabled)] })
-    if (disabled.length > 0) changes.push({ code: codes.disabled, items: [...new Set(disabled)] })
+    if (enabled.length > 0) changes.push({ code: codes.enabled, items: [...new Set(enabled.map(id => isNames.get(id) ?? id))] })
+    if (disabled.length > 0) changes.push({ code: codes.disabled, items: [...new Set(disabled.map(id => wasNames.get(id) ?? id))] })
   }
   const wasPlugins = new Map(wasAgents.plugins.map(plugin => [plugin.id, plugin]))
   const isPlugins = new Map(isAgents.plugins.map(plugin => [plugin.id, plugin]))
-  const added = [...isPlugins.keys()].filter(id => !wasPlugins.has(id))
-  const removed = [...wasPlugins.keys()].filter(id => !isPlugins.has(id))
+  const added = [...isPlugins.keys()].filter(id => !wasPlugins.has(id)).map(id => isNames.get(id) ?? id)
+  const removed = [...wasPlugins.keys()].filter(id => !isPlugins.has(id)).map(id => wasNames.get(id) ?? id)
   if (added.length > 0) changes.push({ code: 'agentPluginAdded', items: added })
   if (removed.length > 0) changes.push({ code: 'agentPluginRemoved', items: removed })
   for (const id of new Set([...Object.keys(before.sources), ...Object.keys(after.sources)])) changes.push(...sourceChanges(id, before.sources[id], after.sources[id], sources))
