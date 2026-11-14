@@ -255,7 +255,9 @@ describe('settings migration', () => {
       policy: { rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
       eval: { mode: 'auto', timeoutSeconds: 90, model: { provider: 'p', model: 'm' } },
       executor: { model: null, maxWorkers: 5, directory: '', prepare: '', blockedCommands: [] },
-      agents: { main: { model: null, disabledTools: [], addedTools: [] }, aligner: { model: null, disabledTools: [], addedTools: [] }, executor: { model: null, disabledTools: [], addedTools: [] } },
+      agents: { plugins: [], main: { model: null, enabledPlugins: ['image', 'billion-context'] },
+        aligner: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] },
+        executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } },
     })
     expect(migrateSettings(migrated)).toEqual(migrated)
   })
@@ -487,16 +489,33 @@ describe('bots and events without a sender', () => {
 })
 
 describe('agent settings', () => {
-  const empty = { main: { model: null, disabledTools: [], addedTools: [] }, aligner: { model: null, disabledTools: [], addedTools: [] }, executor: { model: null, disabledTools: [], addedTools: [] } }
+  const empty = { plugins: [], main: { model: null, enabledPlugins: ['image', 'billion-context'] },
+    aligner: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] },
+    executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }
   it('parses an empty agents block for the three roles, and defaults one that settings saved before it existed lack', () => {
     expect(SettingsSchema.parse({}).agents).toEqual(empty)
-    // A snapshot written before the block existed reads as the empty block, so an upgrade changes no behavior.
+    // A snapshot written before the block existed reads as the default plugin block, so an upgrade changes no behavior.
     expect(SettingsSchema.parse({ paused: true, eval: { mode: 'auto' } }).agents).toEqual(empty)
     expect(SettingsSchema.parse(migrateSettings({ paused: true, admission: { mode: 'auto' } })).agents).toEqual(empty)
   })
-  it('reads a stored tool name the catalog no longer has, without checking it against the catalog', () => {
-    const stored = SettingsSchema.parse({ agents: { executor: { disabledTools: ['retired_tool'] } } })
-    expect(stored.agents.executor.disabledTools).toEqual(['retired_tool'])
-    expect(stored.agents.main).toEqual({ model: null, disabledTools: [], addedTools: [] })
+  it('reads a stored plugin tool the catalog or host no longer has, without checking it against either', () => {
+    const stored = SettingsSchema.parse({ agents: { plugins: [{ id: 'imported-executor', name: 'Imported executor tools',
+      tools: ['retired_tool'], roles: ['executor'] }], executor: { enabledPlugins: ['imported-executor', 'retired-plugin'] } } })
+    expect(stored.agents.plugins[0]!.tools).toEqual(['retired_tool'])
+    expect(stored.agents.executor.enabledPlugins).toEqual(['imported-executor', 'retired-plugin'])
+    expect(stored.agents.main).toEqual({ model: null, enabledPlugins: ['image', 'billion-context'] })
+  })
+  it('converts the old per-tool block into plugins without widening a role', () => {
+    const old = { main: { model: null, disabledTools: ['read_image'], addedTools: ['compress'] },
+      aligner: { model: null, disabledTools: [], addedTools: [] },
+      executor: { model: null, disabledTools: ['web_search'], addedTools: [] } }
+    const migrated = SettingsSchema.parse(migrateSettings({ agents: old }))
+    expect(migrated.agents.main.enabledPlugins).toEqual(['billion-context', 'imported-main'])
+    expect(migrated.agents.main.enabledPlugins).not.toContain('image')
+    expect(migrated.agents.plugins).toEqual([{ id: 'imported-main', name: 'Imported main tools', tools: ['compress'], roles: ['main'] }])
+    // One disabled tool turns the whole built-in group off, which can only narrow the set.
+    expect(migrated.agents.executor.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents'])
+    expect(migrated.agents).not.toHaveProperty('disabledTools')
+    expect(migrated.agents.main).not.toHaveProperty('addedTools')
   })
 })

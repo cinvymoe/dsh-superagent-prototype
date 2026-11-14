@@ -15,7 +15,7 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
   TriggerRow } from '../../src/client/api.ts'
 import { SETUP_FIELDS } from '../../src/deployment.ts'
 import { AgentsConfigSchema, EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
-import { agentCatalog, validateAgentTools } from '../../src/app/agent-tools.ts'
+import { agentCatalog, validateAgentPlugins } from '../../src/app/agent-tools.ts'
 import { UserError } from '../../src/core/index.ts'
 import { SetupError, type SetupCode } from '../../src/setup.ts'
 import { feishuChannel } from '../../src/sources/feishu-trigger.ts'
@@ -122,7 +122,7 @@ export interface PanelServer {
   joined?: Record<string, string>; joining?: Record<string, string>
   joinError?: string
   settings: Settings; revisions: Record<string, number>
-  /** The global tools the fake host's DSH plugins register, which each role's `addableTools` is drawn from. */
+  /** The global tools the fake host's DSH plugins register, which the Agents catalog distinguishes from the ungrouped ones. */
   registeredTools: { name: string; description: string }[]
   prompts: PromptsView
   tickets: { open: TicketRow[]; ended: TicketRow[] }; ticketDetails: Record<string, TicketPageView>
@@ -232,7 +232,7 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
     executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 },
     agents: { value: server.settings.agents, revision: server.revisions.agents ?? 0 } },
   // The catalog the Agents page offers, as the host's own catalog defines it.
-  agents: { roles: agentCatalog(server.registeredTools) },
+  agents: agentCatalog(server.settings.agents, server.registeredTools),
   sources: sourceSettings(),
   environment: { root: '/srv/dsh-superagent/work', variables: [
     { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
@@ -610,7 +610,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     else if (block === 'agents') {
       // Mirror the host: validate the catalog rules and refuse with the same structured user error the panel localizes.
       const agents = AgentsConfigSchema.parse(body.value)
-      try { validateAgentTools(agents, server.registeredTools) }
+      try { validateAgentPlugins(agents) }
       catch (error) {
         if (error instanceof UserError) return refuse(400, error.message, { code: error.code, values: error.values })
         throw error

@@ -3,7 +3,7 @@ import { SETUP_FIELDS } from '../../deployment.ts'
 import { KV } from '../../kv.ts'
 import { policyVersion } from '../../policy.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
-import { agentCatalog, type AgentCatalog } from '../agent-tools.ts'
+import { agentCatalog, type AgentsCatalog } from '../agent-tools.ts'
 import { declaredVariables, executionRoot } from '../execution-environment.ts'
 import type { Store } from '../store.ts'
 import { problemOf, sourceHealth, type HealthMap, type SetupState } from './sources.ts'
@@ -18,21 +18,20 @@ function policyOf(sources: SourceRegistry, id: string, health: HealthMap) {
     ? { sync } : {} } }
 }
 /**
- * Builds the settings view by block (`{ value, revision }`), the three Agent roles' tool catalog, per-Source
- * configuration and restart-sensitive fields, and execution environment details (`stateDir` provides the default
- * ticket working directory root).
- * @param catalog - the roles' catalog, including the host's registered global tools each role may add.
+ * Builds the settings view by block (`{ value, revision }`), the Agents plugin catalog, per-Source configuration and
+ * restart-sensitive fields, and execution environment details (`stateDir` provides the default ticket working directory root).
+ * @param catalog - the shared plugin catalog and each role's required and applicable plugins.
  */
 export function settingsView(store: Store, sources: SourceRegistry, health: HealthMap, setup: SetupState, stateDir: string,
-  catalog: AgentCatalog[] = agentCatalog()) {
+  catalog: AgentsCatalog = agentCatalog(store.settings().agents)) {
   const settings = store.settings()
   const block = <V>(name: 'policy' | 'eval' | 'executor' | 'agents', value: V) => ({ value, revision: store.blockRevision(name) })
   return {
     policyVersion: policyVersion(settings),
     blocks: { policy: block('policy', settings.policy), eval: block('eval', settings.eval), executor: block('executor', settings.executor),
       agents: block('agents', settings.agents) },
-    // The catalog a save of `blocks.agents` is checked against, which the panel offers role by role.
-    agents: { roles: catalog },
+    // The plugin catalog a save of `blocks.agents` is checked against, which the panel offers role by role.
+    agents: catalog,
     sources: sources.instances(settings).map(instance => {
       const kind = sources.kind(instance.kind)
       const problem = problemOf(instance.id, setup)

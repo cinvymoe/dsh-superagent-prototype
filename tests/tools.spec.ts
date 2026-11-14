@@ -274,7 +274,7 @@ it('saves a settings block by name, a Source\'s block with the Source\'s id', as
   expect(await save({ block: 'pause', value: { paused: true }, revision: 0 })).toEqual({ paused: true })
   // Only the management panel may change the Agent configuration, so the main Session's tool cannot widen one.
   const agents = h.runtime.store.settings().agents
-  await expect(save({ block: 'agents', value: { ...agents, executor: { model: null, disabledTools: ['web_search'] } },
+  await expect(save({ block: 'agents', value: { ...agents, executor: { ...agents.executor, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] } },
     revision: h.runtime.store.blockRevision('agents') })).rejects.toThrow('management panel')
   expect(h.runtime.store.settings().agents).toEqual(agents)
 })

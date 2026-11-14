@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { key, liveTicket, type Ticket } from '../core/index.ts'
 import { mandateInstructions, ticketOfSession } from '../executor/dsh.ts'
 import type { HealthEntry } from '../infra/health.ts'
-import { COMPRESSION_TOOLS, MAIN_TOOLS, ROUTER_PRESET, roleTools, WORKER_PRESET } from './agent-tools.ts'
+import { AGENT_TOOLS, MAIN_TOOLS, ROUTER_PRESET, roleTools, WORKER_PRESET } from './agent-tools.ts'
 import { AgentDelivery, messageId } from './delivery.ts'
 import type { Effects } from './effects.ts'
 import { resolveExecutionStrategy, type ExecutionServices } from './execution-strategy.ts'
@@ -304,27 +304,24 @@ export class Sessions {
     }
   }
   /**
-   * The main Session's tools: its seven mandatory built-ins, the extra tools a person added that this host provides, and
-   * billion-context's compression tools when the host's plugin provides them, so its context gets compressed, minus the
-   * optional tools the saved `agents` block turns off. A host missing a built-in fails this decoration, as the restriction
-   * always did; an added or compression tool is named only while it is visible, so a name left in the block by an uninstalled
-   * plugin neither fails the decoration nor admits anything else. The plugin registers its tools asynchronously, often after
-   * the Session exists, so the allow list is recomputed on DSH's unfiltered `tools/change`; saving `agents` recomputes it
-   * through the same binding. A new filter is installed before the old one is lifted: filters intersect, so the old one would
-   * keep masking the tools the new list admits.
+   * The main Session's tools: its required core tools plus the tools of the plugins the saved `agents` block enables for it.
+   * A plugin's tool is named only while this host provides it, so a name left in the block by an uninstalled plugin (such as
+   * billion-context's compression tools, which arrive asynchronously, often after the Session exists) neither fails the
+   * decoration nor admits anything else. The allow list is recomputed on DSH's unfiltered `tools/change`, and saving `agents`
+   * recomputes it through the same binding. A new filter is installed before the old one is lifted: filters intersect, so the
+   * old one would keep masking the tools the new list admits.
    */
   private mainTools(agent: Agent, binding: SessionBinding): (() => void)[] {
     const parent = scopeParentOf(agent)
     // Read through the parent scope like `workOnly` does: it includes the preset's and the host's global tools and bypasses
     // this Session's own restriction.
-    const missing = MAIN_TOOLS.filter(name => !agent.ctx.tools.get(name, parent))
+    const missing = AGENT_TOOLS.main.required.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the main Session's tools ${missing.join(', ')}, which this host does not provide`)
     const restrict = this.installTools(agent, binding, () => {
       const tools = roleTools('main', this.host.store.settings().agents)
-      // Every built-in was checked above, so it stays in the list exactly as before; an added name is dropped while its
-      // plugin is not installed, instead of making `restrict` refuse a name it cannot resolve.
-      const named = tools.filter(name => MAIN_TOOLS.includes(name) || agent.ctx.tools.get(name, parent))
-      return [...new Set([...named, ...COMPRESSION_TOOLS.filter(name => agent.ctx.tools.get(name, parent))])]
+      // A required tool was checked above, so it stays exactly as before; a plugin tool is dropped while its plugin is not
+      // installed, instead of making `restrict` refuse a name it cannot resolve.
+      return tools.filter(name => AGENT_TOOLS.main.required.includes(name) || agent.ctx.tools.get(name, parent))
     })
     const off = this.ctx.on('tools/change', () => binding.tools?.())
     return [restrict, off]
@@ -397,9 +394,9 @@ export class Sessions {
     } catch { return false }
   }
   /**
-   * An Executor Session's tools: only the profile's work tools, which DSH requires to be known, and none once its ticket
-   * ended; the saved `agents` block removes the optional ones a person turned off and adds the extra tools a person added, at
-   * the next step after a save. A failed or blocked worker keeps its tools, so a person may continue it in its Session; only
+   * An Executor Session's tools: its required core tools plus the tools of the plugins its role enables, and none once its
+   * ticket ended; the saved `agents` block reaches it at the next step after a save. A failed or blocked worker keeps its
+   * tools, so a person may continue it in its Session; only
    * automated input waits (see the executor). A slice Ticket adds the execution tools and pre-run guard its pinned strategy
    * runs. Read inherited tools through the parent scope, which includes the preset's tools. The global view misses preset
    * tools; the agent's own view also includes local tools such as subagent, which restrict refuses to name.
@@ -409,8 +406,8 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     const current = () => store.tickets.get(ticket.id) ?? ticket
     const strategyOf = (now: Ticket) => now.plan ? resolveExecutionStrategy(now.plan, this.executionServices()) : undefined
-    // The role follows the Ticket: an aligner Session uses the aligner's optional tools, every other one the executor's.
-    // Execution tools a slice's strategy adds never come from the catalog, so no `agents` save can turn them off.
+    // The role follows the Ticket: an aligner Session uses the aligner's plugins, every other one the executor's.
+    // Execution tools a slice's strategy adds never come from a plugin, so no `agents` save can turn them off.
     const allow = () => {
       const now = current()
       const tools = [...roleTools(workerRole(now), store.settings().agents), ...strategyOf(now)?.tools ?? []]

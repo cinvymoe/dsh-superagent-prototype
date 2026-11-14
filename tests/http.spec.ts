@@ -105,14 +105,14 @@ it('accepts the agents settings block and answers its refusals with their code',
   const saves: unknown[] = []
   const call = serve({ settings: { save: async (...args: unknown[]) => {
     saves.push(args)
-    if (args[1] === 'refused') throw new UserError('agentsRequiredTool', { role: 'executor', tools: 'bash' })
+    if (args[1] === 'refused') throw new UserError('agentsUnknownPlugin', { role: 'executor', plugins: 'missing' })
     return { saved: true, revision: 1, restarting: false }
   } } })
   expect(await call('PUT', 'settings/agents', { value: 'ok', revision: 0 })).toMatchObject({ status: 200 })
   expect(saves).toEqual([['agents', 'ok', 0, 'panel']])
   expect(await call('PUT', 'settings/agents', { value: 'refused', revision: 0 })).toEqual({ status: 400,
-    body: { error: 'The executor Agent cannot turn off its required tools: bash', code: 'agentsRequiredTool',
-      values: { role: 'executor', tools: 'bash' } } })
+    body: { error: 'The executor Agent enables plugins that do not exist: missing', code: 'agentsUnknownPlugin',
+      values: { role: 'executor', plugins: 'missing' } } })
 })
 
 const PREPARE: PrepareStatus = {

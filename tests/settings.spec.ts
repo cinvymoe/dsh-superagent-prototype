@@ -112,21 +112,22 @@ it('records nothing for a pause that changes nothing, refuses a sync while setup
 it('refuses an agents save outside the panel, saves a changed one once and records no second revision for the same value', async () => {
   h = await startRuntime()
   const { settings, store } = h.runtime
-  const value = store.settings().agents, moved = { ...value, executor: { model: null, disabledTools: ['web_search'], addedTools: [] } }
+  const value = store.settings().agents, moved = { ...value, executor: { ...value.executor, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] } }
   await expect(settings.save('agents', moved, store.blockRevision('agents'), 'tool')).rejects.toThrow(new UserError('panelOnlyAgents'))
   expect(store.settings().agents).toEqual(value)
   expect(store.blockRevision('agents')).toBe(0)
   await settings.save('agents', moved, store.blockRevision('agents'), 'panel')
   expect(store.settings().agents).toEqual(moved)
   expect(store.blockRevision('agents')).toBe(1)
-  // An added tool the host registers saves too, as its own revision; a name it does not register is refused first.
-  h.globalTools.register({ name: 'plugin_lint', description: 'Lint a plugin manifest' })
-  const failed = { ...moved, executor: { ...moved.executor, addedTools: ['not_registered'] } }
+  // A stored plugin saves as its own revision; one that enables a plugin outside its role is refused first.
+  const failed = { ...moved, executor: { ...moved.executor, enabledPlugins: ['billion-context'] } }
   await expect(settings.save('agents', failed, store.blockRevision('agents'), 'panel'))
-    .rejects.toMatchObject({ code: 'agentsUnknownAddedTool' })
-  const added = { ...moved, executor: { ...moved.executor, addedTools: ['plugin_lint'] } }
+    .rejects.toMatchObject({ code: 'agentsPluginRole' })
+  const added = { ...moved, plugins: [{ id: 'extra', name: 'Extra tools', tools: ['plugin_lint'] }],
+    executor: { ...moved.executor, enabledPlugins: [...moved.executor.enabledPlugins, 'extra'] } }
   await settings.save('agents', added, store.blockRevision('agents'), 'panel')
-  expect(store.settings().agents.executor.addedTools).toEqual(['plugin_lint'])
+  expect(store.settings().agents.plugins.map(plugin => plugin.id)).toEqual(['extra'])
+  expect(store.settings().agents.executor.enabledPlugins).toContain('extra')
   expect(store.blockRevision('agents')).toBe(2)
   // The same value again is a no-op save: no new block revision and no new settings revision.
   const revision = store.settingsHistory(1)[0]!.revision

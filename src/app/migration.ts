@@ -1,5 +1,5 @@
 /**
- * Migrates a schema 10 database to schema 11 in a single transaction so runtime readers never convert legacy shapes.
+ * Migrates a schema 10 or 11 database to schema 12 in a single transaction so runtime readers never convert legacy shapes.
  * Databases older than schema 10 are rejected: this version cannot migrate them.
  */
 import { basename } from 'node:path'
@@ -8,7 +8,8 @@ import { isoTime, said, type AcceptMode, type AdmissionCell, type ChannelRef, ty
   type Reason, type Thread, type Ticket, type TicketInput, type TriggerDisposition } from '../core/index.ts'
 import { feishuChatLink } from '../sources/feishu-channel.ts'
 import { POLL_HORIZON_MS } from '../sources/poll.ts'
-import { SettingsSchema, policyVersion, type SettingsOrigin } from '../policy.ts'
+import { AGENT_ROLES, DEFAULT_ENABLED_PLUGINS, SettingsSchema, policyVersion, type SettingsOrigin } from '../policy.ts'
+import { BUILTIN_PLUGINS, FORBIDDEN_ADDED_TOOLS, REQUIRED_TOOLS } from './agent-tools.ts'
 import { autoMergeThreshold, teamDefaults } from './context.ts'
 import { PromptConfigSchema, type PromptConfig, type PromptVersion } from './prompts.ts'
 import type { EffectKind, EffectPayloads } from './effects.ts'
@@ -17,7 +18,7 @@ import type { SettingsVersion, Store } from './store.ts'
 import { Versions } from './versions.ts'
 import { KV, type Key } from '../kv.ts'
 
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 /** The oldest database schema version this build can open and migrate directly. */
 export const OLDEST_SCHEMA = 10
 /** Returns an error message explaining why `version` cannot be opened: older schemas need a new state directory. */
@@ -88,6 +89,13 @@ export function migrateTo11(store: Store): void {
   }
   step('the reasons', () => { reasonsAsCodes(store) })
   step('the Triggers\' times', () => { triggerTimes(store) })
+}
+/**
+ * Rewrite the current and historical settings records from the per-tool Agent block into the plugin block. The same
+ * conversion also runs inside the schema 11 migration, so a schema 10 database reaches schema 12 in one open.
+ */
+export function migrateTo12(store: Store): void {
+  step('the settings', () => { migrateSettingsRecords(store) })
 }
 /**
  * Normalize trigger and thread timestamps to fixed-width millisecond ISO strings so lexicographical text order matches
@@ -220,8 +228,41 @@ export function migrateSettings(value: unknown): unknown {
     executor: { model: old.models?.worker ?? null, ...(old.maxWorkers ? { maxWorkers: old.maxWorkers } : {}), paused: old.paused ?? false },
   })
 }
+/**
+ * Convert the per-tool Agent block into the plugin block, narrowing rather than widening every role: a role starts on the
+ * built-in defaults, a disabled built-in tool turns its whole plugin off (it may take a sibling tool with it), and the old
+ * added tools become one stored plugin scoped to that role and stay enabled. A tool that was both disabled and added stays
+ * off, required and forbidden tools are not imported, and a block already in the plugin shape is left as it is.
+ */
+export function migrateAgents(value: unknown): unknown {
+  if (!isObject(value)) return value
+  const role = (name: string) => isObject(value[name]) ? value[name] as Stored : undefined
+  if (!AGENT_ROLES.some(name => { const entry = role(name); return entry !== undefined && ('disabledTools' in entry || 'addedTools' in entry) })) return value
+  const plugins: Stored[] = Array.isArray(value.plugins) ? value.plugins.filter(isObject) : []
+  const result: Stored = { ...value, plugins }
+  for (const name of AGENT_ROLES) {
+    const old = role(name) ?? {}
+    const { disabledTools, addedTools, ...rest } = old
+    const disabled = Array.isArray(disabledTools) ? disabledTools.filter(item => typeof item === 'string') : []
+    const enabled = Array.isArray(old.enabledPlugins) ? old.enabledPlugins.filter(item => typeof item === 'string')
+      : [...DEFAULT_ENABLED_PLUGINS[name]].filter(id => {
+        const plugin = BUILTIN_PLUGINS.find(item => item.id === id)
+        return !plugin || !plugin.tools.some(tool => disabled.includes(tool))
+      })
+    const added = Array.isArray(addedTools) ? addedTools.filter(item => typeof item === 'string') : []
+    const imported = [...new Set(added)].filter(tool => !disabled.includes(tool) && !REQUIRED_TOOLS[name].includes(tool)
+      && !FORBIDDEN_ADDED_TOOLS.includes(tool))
+    if (imported.length > 0) {
+      const id = `imported-${name}`
+      if (!plugins.some(plugin => plugin.id === id)) plugins.push({ id, name: `Imported ${name} tools`, tools: imported, roles: [name] })
+      if (!enabled.includes(id)) enabled.push(id)
+    }
+    result[name] = { ...rest, enabledPlugins: enabled }
+  }
+  return result
+}
 function withoutRemovedFields(value: Stored): Stored {
-  const { executor, policy, sources, ...rest } = value as { executor?: Stored; policy?: Stored; sources?: Record<string, Stored> }
+  const { executor, policy, sources, agents, ...rest } = value as { executor?: Stored; policy?: Stored; sources?: Record<string, Stored>; agents?: unknown }
   // `paused` is now a top-level setting rather than a field on `executor`.
   const { reviewer: _reviewer, visualReviewer: _visualReviewer, branchPrefix: _branchPrefix, paused, ...kept } = executor ?? {}
   const { members, memberChat, autoMergeLineLimit: _limit, rules: storedRules, ...policyRest } = policy ?? {}
@@ -242,7 +283,7 @@ function withoutRemovedFields(value: Stored): Stored {
   // Rewrite environment variable prefixes from the project's earlier names in `prepare` commands.
   if (typeof kept.prepare === 'string') kept.prepare = kept.prepare.replace(/\bDSH_(?:TAG|GO|FREELANCER)_/g, 'DSH_SUPERAGENT_')
   return { ...rest, ...(typeof paused === 'boolean' ? { paused } : {}), ...(executor ? { executor: kept } : {}),
-    ...(instances ? { sources: instances } : {}),
+    ...(instances ? { sources: instances } : {}), ...(agents !== undefined ? { agents: migrateAgents(agents) } : {}),
     ...(policy ? { policy: { ...policyRest, ...(rules ? { rules } : {}), ...(parts ? { sources: parts } : {}) } } : {}) }
 }
 

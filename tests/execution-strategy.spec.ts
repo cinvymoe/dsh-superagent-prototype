@@ -103,9 +103,10 @@ describe('the worker a slice Ticket gets', () => {
     expect(guard!({ name: 'bash' })).toMatch(/feature_exec_start/)
     expect(guard!({ name: 'feature_exec_start' })).toBeUndefined()
   })
-  it('keeps a feature-exec slice\'s execution tools while the executor turns its optional tools off', () => {
-    const off = { main: { model: null, disabledTools: [] }, aligner: { model: null, disabledTools: [] },
-      executor: { model: null, disabledTools: ['web_search', 'read_image'] } }
+  it('keeps a feature-exec slice\'s execution tools while the executor turns its optional plugins off', () => {
+    const off = { main: { model: null, enabledPlugins: ['image', 'billion-context'] },
+      aligner: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] },
+      executor: { model: null, enabledPlugins: ['skills', 'todo', 'subagents'] } }
     const { allow } = restricted(ticket(featureExec), true, off)
     // The execution tools are not in the executor's catalog, so no save can turn them off; required tools stay too.
     expect(allow).toEqual(expect.arrayContaining(FEATURE_EXEC))
