@@ -272,7 +272,8 @@ function routes(runtime: HttpHost): Routes {
     'POST local/issues': async ({ body }) => {
       // The one route that carries images, so it alone reads more than the default management body limit.
       const input = z.object({ title: z.string().trim().min(1).max(200).optional(), body: z.string().trim().max(20_000).optional(),
-        project: z.string().min(1), images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional()
+        project: z.string().min(1), discussion: z.string().min(1).optional(),
+        images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional()
       }).parse(await body(REQUIREMENT_BODY_BYTES))
       return { issue: runtime.local.view(runtime.local.create(input)) }
     },

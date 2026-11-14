@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import { UserError, key, type ExecutionMode } from '../core/index.ts'
 import { policyVersion, type Settings, type SettingsOrigin } from '../policy.ts'
-import { alignPrompt, answerPrompt, executePrompt, nativeExecutePrompt, masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy,
+import { alignPrompt, answerPrompt, discussPrompt, executePrompt, nativeExecutePrompt, masterPrompt, workerPrompt, sharedPrompt, guides, mainAdmissionPolicy, handoffPolicy,
   teamDefaults, sourceSkills, cliNotes } from './context.ts'
 import { environmentLines, type Variable } from './execution-environment.ts'
 import { promptsNotice } from './notices.ts'
@@ -144,14 +144,22 @@ export class Prompts {
     return composePrompt(config, role, environmentSection(config, variables), role === 'orchestrator' ? policySection(this.store.settings(), config) : undefined)
   }
   /**
-   * An aligner's prompt: the shared rules and guides, without the worker's implementation mandate, followed by the alignment
-   * guide. An aligner plans and asks; it must not read like a worker that owns delivery.
+   * The shared rules and guides an aligner or a discussion session reads, without the worker's implementation mandate,
+   * followed by `guide`. Neither owns delivery, so neither may read like a worker that does.
    */
-  composeAlign(config: PromptConfig, variables = this.environment()): string {
+  private composeGuide(config: PromptConfig, variables: Variable[] | undefined, guide: string): string {
     const parts = promptParts(config, 'worker', environmentSection(config, variables))
       .filter(part => !['runtime/worker', 'runtime/work', 'runtime/handoff/worker'].includes(part.name))
       .map(part => part.text)
-    return [...parts, alignPrompt].join('\n\n')
+    return [...parts, guide].join('\n\n')
+  }
+  /** An aligner's prompt, which ends with the alignment guide. */
+  composeAlign(config: PromptConfig, variables = this.environment()): string {
+    return this.composeGuide(config, variables, alignPrompt)
+  }
+  /** A discussion session's prompt, which ends with the discussion guide. */
+  composeDiscuss(config: PromptConfig, variables = this.environment()): string {
+    return this.composeGuide(config, variables, discussPrompt)
   }
   /**
    * A slice worker's prompt: the worker rules and guides, followed by the handoff of the execution strategy its Ticket

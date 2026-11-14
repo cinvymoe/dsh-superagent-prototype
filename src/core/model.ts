@@ -324,8 +324,11 @@ export interface Ticket {
   execution?: Execution
   /** The latest failed delivery of an Input to its worker, until a delivery succeeds. */
   delivery?: { error: string; at: string }
-  /** How its worker works: the default implementation, or the requirement alignment that must be confirmed before delivery. */
-  mode?: 'work' | 'align'
+  /**
+   * How its worker works: the default implementation, a discussion that only answers on its Thread, or the requirement
+   * alignment that must be confirmed before delivery.
+   */
+  mode?: 'work' | 'discuss' | 'align'
   /** Tickets that must have ended before this one launches, by ticket id. */
   dependsOn?: string[]
   /**

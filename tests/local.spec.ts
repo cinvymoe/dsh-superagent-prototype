@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LocalIssues, requirementTitle } from '../src/app/local.ts'
+import { Discussions } from '../src/app/discussions.ts'
 import { LocalQuestions, QUESTION_LIMIT, type TicketAnswers } from '../src/app/local-questions.ts'
 import { Store } from '../src/app/store.ts'
 import { KV } from '../src/kv.ts'
@@ -26,7 +27,9 @@ describe('the local issue board', () => {
     directories.push(directory)
     const store = new Store(join(directory, 'orchestrator.sqlite'))
     const triggers: Trigger[] = []
-    const issues = new LocalIssues({ store, stateDir: directory, receive: trigger => { triggers.push(trigger); return { kind: 'stored' } as never } })
+    const receive = (trigger: Trigger) => { triggers.push(trigger); return { kind: 'stored' } as never }
+    const discussions = new Discussions({ store, receive })
+    const issues = new LocalIssues({ store, stateDir: directory, discussions, receive })
     const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
     return { issues, triggers, project, directory, store }
   }
@@ -301,7 +304,8 @@ describe('requirement questions', () => {
     const directory = mkdtempSync(join(tmpdir(), 'dsh-superagent-local-'))
     directories.push(directory)
     const store = new Store(join(directory, 'orchestrator.sqlite'))
-    const issues = new LocalIssues({ store, stateDir: directory, receive: () => ({ kind: 'stored' }) as never })
+    const receive = () => ({ kind: 'stored' }) as never
+    const issues = new LocalIssues({ store, stateDir: directory, discussions: new Discussions({ store, receive }), receive })
     const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
     const issue = issues.create({ title: 'Ask about a dispatched ticket', project: project.id })
     const questions = new LocalQuestions({ store, local: issues, answers: { ask }, lifetime, now: () => at })

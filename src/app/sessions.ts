@@ -27,7 +27,7 @@ export interface SessionsHost {
   /** DSH Cordis context: sessions, agents, persistence, and their events. */
   readonly context: Context
   readonly store: Pick<Store, 'tickets' | 'settings' | 'get' | 'set' | 'keys'>
-  readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'composeAlign' | 'composeExecute' | 'composeAnswer' | 'skills'>
+  readonly prompts: Pick<Prompts, 'current' | 'version' | 'compose' | 'composeAlign' | 'composeDiscuss' | 'composeExecute' | 'composeAnswer' | 'skills'>
   readonly effects: Pick<Effects, 'enqueue' | 'handle' | 'idle' | 'pending'>
   /** The `models` health entry, which reports managed sessions waiting on a model-budget retry. */
   readonly health: HealthEntry
@@ -279,6 +279,7 @@ export class Sessions {
       // A slice worker is told to run the execution strategy its Ticket pinned; any other worker implements directly.
       const strategy = current?.plan && resolveExecutionStrategy(current.plan, this.executionServices())
       const composed = master ? host.prompts.compose(version.config, 'orchestrator', current ? host.environment(current) : undefined)
+        : current?.mode === 'discuss' ? host.prompts.composeDiscuss(version.config, host.environment(current))
         : current?.mode === 'align' ? host.prompts.composeAlign(version.config, host.environment(current))
         : strategy ? host.prompts.composeExecute(version.config, strategy.mode, host.environment(current))
         : host.prompts.compose(version.config, 'worker', current ? host.environment(current) : undefined)
