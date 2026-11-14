@@ -5,17 +5,17 @@ viewport, theme, locale and seeded state; only the built `dsh-superagent` differ
 
 ## Revisions
 
-- **Before**: S1's plugin catalog, commit `1844f37c` (the S1 slice: per-role plugin switches, no custom plugin
-  add/delete), merged onto `main` `6bef1ea1`.
-- **After**: the S2 ticket branch at commit `45e6705c`, which is S1 `1844f37c` plus the custom plugin catalog.
+- **Before**: S1 as merged, `d74d21bf` (per-role plugin switches; no custom plugin add/delete), in `main` at
+  `6ed55d10`.
+- **After**: the S2 ticket commit `0c3da4d6`, which is `main` `6ed55d10` plus the custom plugin catalog.
 - The final evidence commit may sit on a later head; the code under capture is the S2 commit named above, and the
   captures below are only added by this commit.
 
 ## Build
 
 ```sh
-git archive 1844f37c | tar -x -C /tmp/s2-before-src
-git archive <S2 commit> | tar -x -C /tmp/s2-after-src
+git archive d74d21bf | tar -x -C /tmp/s2-before-src
+git archive 0c3da4d6 | tar -x -C /tmp/s2-after-src
 (cd /tmp/s2-before-src && pnpm build)
 (cd /tmp/s2-after-src && pnpm build)
 ```
