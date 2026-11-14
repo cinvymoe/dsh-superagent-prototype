@@ -183,7 +183,7 @@ const editButton = () => {
   return button
 }
 const values = () => [zh['discuss.projectName'], zh['discuss.projectIntakeRepository'], zh['discuss.projectCodeRepository'],
-  zh['discuss.projectWorktreeRoot']].map(label => field(label).value)
+  zh['discuss.projectWorktreeRoot'], zh['discuss.projectBot']].map(label => field(label).value)
 
 it('edits one project from the New requirement page head and leaves the other project\'s repositories alone', async () => {
   server.localProjects = [WIDGETS, OTHER]
@@ -196,7 +196,7 @@ it('edits one project from the New requirement page head and leaves the other pr
   await click(editButton())
   // The edit page is its own route with the current project's values already filled in.
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
-  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees'])
+  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', ''])
   expect(all('textarea')).toHaveLength(0)
   await type(field(zh['discuss.projectName']), 'Widgets renamed')
   await type(field(zh['discuss.projectCodeRepository']), 'acme/gadgets')
@@ -218,7 +218,7 @@ it('edits one project from the New requirement page head and leaves the other pr
     .toMatchObject({ name: 'Other', intakeRepository: 'acme/intake', codeRepository: 'acme/other' })
   // Editing the other project later writes only that project.
   await click(editButton())
-  expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', ''])
+  expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', '', ''])
   await type(field(zh['discuss.projectName']), 'Other renamed')
   await click(zh['discuss.saveProject'])
   expect(putRequests()).toHaveLength(2)
@@ -240,7 +240,7 @@ it('keeps the edit page and its values when the update is refused, then clears a
   // A refused save shows the existing localized refusal and leaves the person on the form with their edits intact.
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.projectWorktreeRoot'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
-  expect(values()).toEqual(['Widgets kept', 'acme/intake', 'acme/widgets', 'relative/root'])
+  expect(values()).toEqual(['Widgets kept', 'acme/intake', 'acme/widgets', 'relative/root', ''])
   expect(server.localProjects.find(item => item.id === 'p-widgets')).toMatchObject({ name: 'Widgets', worktreeRoot: '/srv/worktrees' })
   // An emptied root is sent as an empty string, which clears the stored root.
   await type(field(zh['discuss.projectWorktreeRoot']), '')
@@ -266,4 +266,55 @@ it('leaves the edit page without a request from Cancel or Back', async () => {
   await click(document.querySelector<HTMLElement>('.dt-page-head button')!)
   expect(putRequests()).toHaveLength(0)
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
+})
+
+it('shows each project\'s own bot account in the page head and the More menu, switching with the project', async () => {
+  server.localProjects = [{ ...WIDGETS, cli: '/bot/gh-widgets', bot: 'widgets-bot[bot]' },
+    { ...OTHER, cli: '/bot/gh-other', bot: 'other-bot[bot]' }]
+  at({ page: 'newRequirement' })
+  await mount()
+  // The New requirement page head names the current project's bot beside its repositories.
+  expect(text()).toContain(zh['discuss.projectBotAccount'].replace('{account}', 'widgets-bot[bot]'))
+  expect(text()).not.toContain('other-bot[bot]')
+  const strip = document.querySelector<HTMLElement>('.dt-project-strip')!
+  Object.defineProperty(strip, 'scrollWidth', { configurable: true, get: () => 640 })
+  Object.defineProperty(strip, 'clientWidth', { configurable: true, get: () => 320 })
+  try {
+    await click(tab('Other'))
+    // Switching the project switches the head's bot account; every menu row carries its own.
+    expect(text()).toContain(zh['discuss.projectBotAccount'].replace('{account}', 'other-bot[bot]'))
+    expect(text()).not.toContain('widgets-bot[bot]')
+    await click(document.querySelector<HTMLElement>('.dt-project-more')!)
+    const items = all('[role="menuitemradio"]')
+    expect(items.map(item => item.textContent)).toEqual([
+      `Widgets${'acme/intake → acme/widgets'}机器人 @widgets-bot[bot]`,
+      `Other${'acme/intake → acme/other'}机器人 @other-bot[bot]`,
+    ])
+    // The edit form pre-fills the bot CLI of the project being edited, not the Source default.
+    await click(document.querySelector<HTMLElement>('.dt-project-more')!)
+    await click(editButton())
+    expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', '', '/bot/gh-other'])
+  } finally {
+    Reflect.deleteProperty(strip, 'scrollWidth')
+    Reflect.deleteProperty(strip, 'clientWidth')
+  }
+})
+
+it('keeps the edit page and typed values when the host refuses an unusable bot CLI', async () => {
+  server.localProjects = [{ ...WIDGETS, cli: '/bot/gh-widgets', bot: 'widgets-bot[bot]' }, OTHER]
+  server.refuseProjectCli = { cli: '/bad/gh', code: 'agentCliMissing',
+    values: { chain: 'p-widgets', cli: '/bad/gh', output: '/bad/gh is not an executable file' }, detail: 'The bot CLI was not found.' }
+  at({ page: 'newRequirement' })
+  await mount()
+  await click(editButton())
+  await type(field(zh['discuss.projectBot']), '/bad/gh')
+  await click(zh['discuss.saveProject'])
+  // The refusal reaches the page in the panel's language, with the host's own line after it.
+  const reason = zh['setup.agentCliMissing'].replace('{chain}', 'p-widgets').replace('{cli}', '/bad/gh')
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(`${reason}\n/bad/gh is not an executable file`)
+  // The page and every typed value stay, so one field can be corrected instead of starting over.
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe(zh['discuss.editProject'])
+  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', '/bad/gh'])
+  expect(putRequests().at(-1)).toMatchObject({ path: 'local/projects/p-widgets', body: { cli: '/bad/gh' } })
+  expect(server.localProjects.find(item => item.id === 'p-widgets')?.cli).toBe('/bot/gh-widgets')
 })

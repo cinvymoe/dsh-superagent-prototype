@@ -10,7 +10,7 @@ import type { SettingsView } from './views/settings.ts'
 import type { SourceStatusView } from './views/sources.ts'
 import type { DecisionListView, SearchView, ThreadDetailView, ThreadListView } from './views/threads.ts'
 import type { TicketListView } from './views/tickets.ts'
-import type { LocalImageInput, LocalIssueView, LocalProject, LocalQuestion, LocalSlice } from '../sources/local-format.ts'
+import type { LocalImageInput, LocalIssueView, LocalProjectView, LocalQuestion, LocalSlice } from '../sources/local-format.ts'
 import type { ExecutionMode } from '../core/model.ts'
 import type { Receipt } from './store.ts'
 
@@ -40,13 +40,13 @@ export interface Api {
   'POST decisions/:id/dismiss': { response: { dismissed: true } }
   'GET tickets': { query?: Paged & { state?: TicketFilter }; response: TicketListView }
   'GET tickets/:id': { response: TicketPageView }
-  'GET local/projects': { response: { projects: LocalProject[] } }
-  'POST local/projects': { body: { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string }; response: { project: LocalProject } }
-  'PUT local/projects/:id': { body: { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string }; response: { project: LocalProject } }
+  'GET local/projects': { response: { projects: LocalProjectView[] } }
+  'POST local/projects': { body: { name: string; intakeRepository: string; codeRepository: string; worktreeRoot?: string; cli?: string }; response: { project: LocalProjectView } }
+  'PUT local/projects/:id': { body: { name?: string; intakeRepository?: string; codeRepository?: string; worktreeRoot?: string; cli?: string }; response: { project: LocalProjectView } }
   // Local requirement responses carry the HTTP view (`LocalIssueView`), whose `slicesFinished` is derived per read.
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }
   'POST local/issues': { body: { title?: string; body?: string; project: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }
-  'GET local/issues/:id': { response: { issue: LocalIssueView; project: LocalProject | null; thread: ThreadDetailView; replies: Receipt[] } }
+  'GET local/issues/:id': { response: { issue: LocalIssueView; project: LocalProjectView | null; thread: ThreadDetailView; replies: Receipt[] } }
   'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssueView } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssueView } }
   'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string; roundId?: string }; response: { issue: LocalIssueView; tickets: { id: string; title: string }[] } }

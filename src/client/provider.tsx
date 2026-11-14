@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { caller, usePoll, type ApiMessages, type Call, type SetupView, type StateView } from './api.ts'
 import type { Route } from './route.ts'
 import STYLES from './client.css?raw'
-import type { LocalProject } from '../sources/local-format.ts'
+import type { LocalProjectView } from '../sources/local-format.ts'
 import { errorText, setupText, valueLabel, type T } from './text.ts'
 
 export interface PanelContext {
@@ -28,7 +28,7 @@ export interface PanelData {
   running: number
   /** Incremented each time dsh-superagent recovers from a restart so dependent views refetch. */
   restarts: number
-  projects: LocalProject[]
+  projects: LocalProjectView[]
   reloadProjects: () => Promise<void>
 }
 const Panel = createContext<PanelContext | undefined>(undefined)

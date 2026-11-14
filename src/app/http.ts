@@ -216,18 +216,20 @@ function routes(runtime: HttpHost): Routes {
       return ticketList(views(runtime), state, offset, limit)
     },
     'GET tickets/:id': ({ params }) => ticketPage(runtime, params.id),
-    'GET local/projects': () => ({ projects: runtime.local.projects() }),
+    // A project view derives its chain's bot CLI and account on every read; the record stores neither.
+    'GET local/projects': () => ({ projects: runtime.projects.list() }),
     'POST local/projects': async ({ body }) => {
       const input = z.object({ name: z.string().trim().min(1).max(80), intakeRepository: z.string().trim().min(3).max(200),
-        codeRepository: z.string().trim().min(3).max(200), worktreeRoot: z.string().trim().max(4096).optional() }).parse(await body())
-      return { project: await runtime.projects.create(input) }
+        codeRepository: z.string().trim().min(3).max(200), worktreeRoot: z.string().trim().max(4096).optional(),
+        cli: z.string().trim().max(4096).optional() }).parse(await body())
+      return { project: runtime.projects.view(await runtime.projects.create(input)) }
     },
     'PUT local/projects/:id': async ({ params, body }) => {
       const input = z.object({ name: z.string().trim().min(1).max(80).optional(),
         intakeRepository: z.string().trim().min(3).max(200).optional(), codeRepository: z.string().trim().min(3).max(200).optional(),
-        worktreeRoot: z.string().trim().max(4096).optional() }).parse(await body())
+        worktreeRoot: z.string().trim().max(4096).optional(), cli: z.string().trim().max(4096).optional() }).parse(await body())
       if (Object.keys(input).length === 0) throw new RouteError(400, 'No project field to update')
-      return { project: await runtime.projects.update(params.id, input) }
+      return { project: runtime.projects.view(await runtime.projects.update(params.id, input)) }
     },
     // Every local route that returns a requirement returns its view, which adds the derived slicesFinished flag.
     'GET local/issues': ({ query }) => {
@@ -246,7 +248,7 @@ function routes(runtime: HttpHost): Routes {
       if (!issue) throw new RouteError(404, 'Local issue not found')
       const thread = threadDetail(views(runtime), runtime.local.thread(issue.id), undefined, 200)
       if (!thread) throw new RouteError(404, 'Local issue thread not found')
-      return { issue: runtime.local.view(issue), project: issue.project ? runtime.local.project(issue.project) ?? null : null,
+      return { issue: runtime.local.view(issue), project: issue.project ? runtime.projects.view(runtime.local.project(issue.project)!) ?? null : null,
         thread, replies: runtime.store.receipts.thread('local', runtime.local.thread(issue.id)) }
     },
     'POST local/issues/:id/comments': async ({ params, body }) => {

@@ -137,9 +137,11 @@ export interface PanelServer {
   /** Requirements whose confirmed alignment already dispatched tickets, so their execution mode is read-only. */
   dispatchedIssues: Set<string>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
-    worktreeRoot?: string; createdAt: string; updatedAt: string }[]
+    worktreeRoot?: string; cli?: string; bot?: string; createdAt: string; updatedAt: string }[]
   /** When set, the create-requirement route refuses with this JSON error (and creates nothing). */
   refuseIssueCreate?: { status: 400; error: string; code: string; values: Record<string, string> }
+  /** When set, a project write naming this CLI is refused with the setup problem the host would report. */
+  refuseProjectCli?: { cli: string; code: SetupCode; values: Record<string, string>; detail: string }
   threads: ThreadRow[]
   threadPages: (key: string, query: { before?: string; around?: string }) => ThreadPageView | undefined
   person: TicketRow[]; search: Pick<ApiResponse<'GET search'>, 'items' | 'threads'>; history: HistoryView
@@ -439,10 +441,14 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
       return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
     }
+    if (server.refuseProjectCli && body.cli === server.refuseProjectCli.cli) {
+      const { detail, ...setup } = server.refuseProjectCli
+      return refuse(400, detail, { setup: { place: 'github', ...setup } })
+    }
     let id = 'p-fixture', index = 2
     while (server.localProjects.some(item => item.id === id)) id = `p-fixture-${index++}`
     const project = { id, name: body.name, chain: id, intakeRepository: body.intakeRepository, codeRepository: body.codeRepository,
-      ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}),
+      ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}), ...(body.cli ? { cli: body.cli } : {}),
       createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }
     server.localProjects = [project, ...server.localProjects]
     return { project }
@@ -453,6 +459,10 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (Object.keys(body).length === 0) return refuse(400, 'No project field to update')
     if (body.worktreeRoot && !body.worktreeRoot.startsWith('/')) {
       return refuse(400, 'A project worktree root must be an absolute path', { code: 'projectWorktreeRoot' })
+    }
+    if (server.refuseProjectCli && body.cli === server.refuseProjectCli.cli) {
+      const { detail, ...setup } = server.refuseProjectCli
+      return refuse(400, detail, { setup: { place: 'github', ...setup } })
     }
     const next = { ...project, ...body, updatedAt: '2026-09-23T00:00:00Z' }
     if ('worktreeRoot' in body && !body.worktreeRoot) delete next.worktreeRoot

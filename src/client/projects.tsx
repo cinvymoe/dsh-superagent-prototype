@@ -90,6 +90,7 @@ export function ProjectBar({ route }: { route: Route }) {
         {projects.map(item => <button key={item.id} type="button" role="menuitemradio" aria-checked={item.id === current}
           className="dt-project-option" onClick={() => { setOpen(false); select(item.id) }}>
           <span>{item.name}</span><span className="dt-mono">{projectRepositories(item)}</span>
+          {item.bot && <span className="dt-mono dt-project-bot">{t('discuss.projectBotAccount', { account: item.bot })}</span>}
         </button>)}
       </div>}
     </div>}
@@ -100,8 +101,9 @@ export function ProjectBar({ route }: { route: Route }) {
 }
 
 /**
- * Standalone project form shared by creation and editing: the four project fields, the same validation hints, and the
- * same submit path. Creating sends POST; editing sends PUT for the project named by the route and pre-fills its values.
+ * Standalone project form shared by creation and editing: the project fields (including the bot CLI of a project that
+ * owns a chain), the same validation hints, and the same submit path. Creating sends POST; editing sends PUT for the
+ * project named by the route and pre-fills its values.
  * A refused save keeps the page and the typed values, so the person can correct one field instead of starting over.
  */
 export function ProjectFormPage({ edit }: { edit?: string }) {
@@ -113,6 +115,7 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
   const [intakeRepository, setIntakeRepository] = useState('')
   const [codeRepository, setCodeRepository] = useState('')
   const [worktreeRoot, setWorktreeRoot] = useState('')
+  const [bot, setBot] = useState('')
   const [loaded, setLoaded] = useState(!editing)
   const [busy, setBusy] = useState(false)
   // Pre-fill once the project list arrives; later list polls must not overwrite what the person is typing.
@@ -122,11 +125,13 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
     setIntakeRepository(current.intakeRepository ?? current.codeRepository ?? current.repository ?? '')
     setCodeRepository(current.codeRepository ?? current.repository ?? '')
     setWorktreeRoot(current.worktreeRoot ?? '')
+    setBot(current.cli ?? '')
     setLoaded(true)
   }, [editing, loaded, current])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const cleanName = name.trim(), cleanIntake = intakeRepository.trim(), cleanCode = codeRepository.trim(), root = worktreeRoot.trim()
+    const cleanBot = bot.trim()
     if (busy || !cleanName || !cleanIntake || !cleanCode) return
     setBusy(true)
     try {
@@ -134,9 +139,9 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
       // update route expresses by sending the empty string; creation omits the key instead.
       const project = editing
         ? (await call('PUT local/projects/:id', { id: edit, body: { name: cleanName, intakeRepository: cleanIntake,
-          codeRepository: cleanCode, worktreeRoot: root } })).project
+          codeRepository: cleanCode, worktreeRoot: root, cli: cleanBot } })).project
         : (await call('POST local/projects', { body: { name: cleanName, intakeRepository: cleanIntake, codeRepository: cleanCode,
-          ...(root ? { worktreeRoot: root } : {}) } })).project
+          ...(root ? { worktreeRoot: root } : {}), ...(cleanBot ? { cli: cleanBot } : {}) } })).project
       await reloadProjects()
       setProject(project.id)
       // Creation opens the new project's requirement list; editing returns to the New requirement page that opened
@@ -170,6 +175,12 @@ export function ProjectFormPage({ edit }: { edit?: string }) {
           aria-label={t('discuss.projectWorktreeRoot')} spellCheck={false}
           onChange={event => setWorktreeRoot(event.target.value)} />
         <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
+        {/* A project that owns no chain has nowhere to store a bot, so its edit form leaves the field out. */}
+        {(!editing || !!current?.chain || current?.codeRepository !== undefined) && <>
+          <input className="dt-text-input dt-mono" value={bot} maxLength={4096} placeholder={t('discuss.projectBot')}
+            aria-label={t('discuss.projectBot')} spellCheck={false} onChange={event => setBot(event.target.value)} />
+          <p className="dt-hint">{t('discuss.projectBotHint')}</p>
+        </>}
         <div className="dt-actions">
           <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim() || !intakeRepository.trim() || !codeRepository.trim()}>
             {editing ? t('discuss.saveProject') : t('discuss.createProject')}</Button>

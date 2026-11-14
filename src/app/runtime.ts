@@ -184,7 +184,8 @@ export class Runtime extends Service implements SourceHost {
       this.localQuestions = new LocalQuestions({ store, local: this.local,
         answers: new Questions({ context: ctx, store, sessions, lifetime: this.lifetime }), lifetime: this.lifetime,
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
-      this.projects = new Projects({ store, local: this.local, settings: this.settings })
+      this.projects = new Projects({ store, local: this.local, settings: this.settings, configured: () => setup.configured(),
+        deploymentFor: chain => setup.deploymentFor(chain) })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger) }

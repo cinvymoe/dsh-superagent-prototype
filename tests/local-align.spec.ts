@@ -515,13 +515,13 @@ describe('project repository chains', () => {
   type Chain = { id: string; intakeRepository: string; codeRepository: string; cli?: string }
   /** The GitHub Source chains as stored, in order. */
   const chains = (): Chain[] => h.runtime.store.settings().sources.github!.config.chains as Chain[]
-  /** The project rows the panel's `GET local/projects` answers with. */
+  /** The project rows the panel's `GET local/projects` answers with, including the derived bot CLI and account. */
   const projects = async () => (await h.api('GET', 'local/projects')).body.projects as { id: string; name: string; chain?: string
-    intakeRepository?: string; codeRepository?: string; repository?: string }[]
-  const create = async (name: string, intakeRepository: string, codeRepository: string) => {
-    const answer = await h.api('POST', 'local/projects', { name, intakeRepository, codeRepository })
+    intakeRepository?: string; codeRepository?: string; repository?: string; cli?: string; bot?: string }[]
+  const create = async (name: string, intakeRepository: string, codeRepository: string, cli?: string) => {
+    const answer = await h.api('POST', 'local/projects', { name, intakeRepository, codeRepository, ...(cli ? { cli } : {}) })
     expect(answer.status).toBe(200)
-    return answer.body.project as { id: string; name: string; chain: string; intakeRepository: string; codeRepository: string }
+    return answer.body.project as { id: string; name: string; chain: string; intakeRepository: string; codeRepository: string; cli?: string }
   }
   /** The first message on a local issue's thread, which an accept routes into a ticket. */
   const accept = async (issueId: string) => {
@@ -596,6 +596,76 @@ describe('project repository chains', () => {
     const environment = Object.fromEntries(h.runtime.ticketEnvironment(ticket).map(variable => [variable.key, variable.value]))
     expect(environment.DSH_SUPERAGENT_GITHUB_REPOSITORY).toBe('acme/widgets')
     expect(environment.DSH_SUPERAGENT_GITHUB_INTAKE_REPOSITORY).toBe('acme/intake')
+  })
+
+  it('writes an entered bot only to its own chain and keeps a blank one on the Source-level CLI', async () => {
+    // Rows stored before chains carried a CLI read with the schema's blank default, so normalize the snapshot.
+    const before = chains().map(row => ({ ...row, cli: row.cli ?? '' }))
+    const withBot = await create('Bot project', 'acme/intake', 'acme/widgets', h.projectBotCli)
+    const withDefault = await create('Default bot', 'acme/intake', 'acme/other')
+    // The entered CLI lands on exactly that project's chain row; the other project's row is unchanged field by field.
+    expect(chains().find(row => row.id === withBot.id)).toEqual({ id: withBot.id, intakeRepository: 'acme/intake',
+      codeRepository: 'acme/widgets', cli: h.projectBotCli })
+    expect(chains().find(row => row.id === withDefault.id)).toEqual({ id: withDefault.id, intakeRepository: 'acme/intake',
+      codeRepository: 'acme/other', cli: '' })
+    for (const row of before) expect(chains().find(item => item.id === row.id)).toEqual(row)
+    // Reading the project back reports its chain's CLI; the account appears once setup resolves the chain.
+    expect((await projects()).find(row => row.id === withBot.id)).toMatchObject({ cli: h.projectBotCli })
+    expect((await projects()).find(row => row.id === withBot.id)).not.toHaveProperty('bot')
+  })
+
+  it('shows each project\'s own bot account once setup resolved its chain', async () => {
+    const at = '2026-09-01T00:00:00.000Z'
+    const settings = h.runtime.store.settings()
+    h.runtime.store.saveSettings({ ...settings, sources: { ...settings.sources, github: { enabled: true,
+      config: { cli: h.agentCli, chains: [
+        { id: 'alpha', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets', cli: '' },
+        { id: 'beta', intakeRepository: 'acme/intake', codeRepository: 'acme/other', cli: h.projectBotCli },
+      ] } } } })
+    // Resolve the configured chains as a restart's setup run does, so both accounts are known.
+    expect(await h.runtime.setup.run(h.runtime.store.settings())).toBe(true)
+    h.runtime.local.putProject({ id: 'p-alpha', name: 'Alpha project', chain: 'alpha',
+      intakeRepository: 'acme/intake', codeRepository: 'acme/widgets', createdAt: at, updatedAt: at })
+    h.runtime.local.putProject({ id: 'p-beta', name: 'Beta project', chain: 'beta',
+      intakeRepository: 'acme/intake', codeRepository: 'acme/other', createdAt: at, updatedAt: at })
+    const listed = await projects()
+    expect(listed.find(row => row.id === 'p-alpha')).toMatchObject({ bot: 'agent-bot', cli: '' })
+    expect(listed.find(row => row.id === 'p-beta')).toMatchObject({ bot: 'project-bot', cli: h.projectBotCli })
+  })
+
+  it('refuses an unusable bot CLI with a 400 and leaves every project and chain unchanged', async () => {
+    const before = chains().map(row => ({ ...row }))
+    const namesBefore = (await projects()).map(row => row.name)
+    const missing = await h.api('POST', 'local/projects', { name: 'Bad bot', intakeRepository: 'acme/intake', codeRepository: 'acme/other',
+      cli: join(h.directory, 'missing-gh') })
+    expect(missing.status).toBe(400)
+    expect(missing.body).toMatchObject({ setup: { place: 'github', code: 'agentCliMissing' } })
+    expect((await projects()).map(row => row.name)).toEqual(namesBefore)
+    expect(chains()).toEqual(before)
+    // An edit is refused the same way, before the stored row or record changes.
+    const steady = await create('Steady', 'acme/intake', 'acme/other')
+    const refused = await h.api('PUT', `local/projects/${steady.id}`, { cli: join(h.directory, 'missing-gh') })
+    expect(refused.status).toBe(400)
+    expect(refused.body).toMatchObject({ setup: { place: 'github', code: 'agentCliMissing' } })
+    expect(chains().find(row => row.id === steady.id)?.cli).toBe('')
+  })
+
+  it('sets, keeps and clears one project\'s bot without touching the other project\'s chain', async () => {
+    const a = await create('Alpha bot', 'acme/intake', 'acme/widgets')
+    const b = await create('Beta bot', 'acme/intake', 'acme/other')
+    const rowOfB = { ...chains().find(row => row.id === b.id)! }
+    const set = await h.api('PUT', `local/projects/${a.id}`, { cli: h.projectBotCli })
+    expect(set.status).toBe(200)
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/widgets',
+      cli: h.projectBotCli })
+    expect(chains().find(row => row.id === b.id)).toEqual(rowOfB)
+    // An update that names no bot keeps the stored one, so editing a name never resets the project's bot.
+    expect((await h.api('PUT', `local/projects/${a.id}`, { name: 'Alpha renamed' })).status).toBe(200)
+    expect(chains().find(row => row.id === a.id)?.cli).toBe(h.projectBotCli)
+    // An emptied field writes the blank row again, so the chain falls back to the Source default CLI.
+    expect((await h.api('PUT', `local/projects/${a.id}`, { cli: '' })).status).toBe(200)
+    expect(chains().find(row => row.id === a.id)).toEqual({ id: a.id, intakeRepository: 'acme/intake', codeRepository: 'acme/widgets', cli: '' })
+    expect(chains().find(row => row.id === b.id)).toEqual(rowOfB)
   })
 
   it('binds a legacy project to the chain its code repository names at startup, idempotently and without a chain for unmatched ones', async () => {
