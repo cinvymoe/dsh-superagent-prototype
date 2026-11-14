@@ -75,6 +75,7 @@ export function executorTools(host: ExecutorToolsHost, ticket: Ticket): Tool[] {
       }).strict(),
       execute: async args => ({ trigger_id: args.trigger_id, queued: host.engine.handback(ticketId, args.trigger_id, args.reason) }),
     }),
+    // Only an aligner publishes an alignment; a discuss Session answers on its Thread and gets no such tool.
     ...(ticket.mode === 'align' ? [tool({
       name: 'orchestrator_align',
       description: 'Publish the requirement alignment to the local discussion board: a summary, one or more execution slices with acceptance criteria and dependencies, and the overall acceptance. A person then confirms or sends it back; this does not create execution tickets.',

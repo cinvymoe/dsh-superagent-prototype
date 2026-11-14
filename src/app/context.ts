@@ -9,6 +9,8 @@ export const masterPrompt = promptFile('orchestrator')
 export const workerPrompt = promptFile('worker')
 /** Appended to a worker's prompt when its ticket aligns a requirement instead of implementing it. */
 export const alignPrompt = promptFile('align')
+/** Appended to a worker's prompt when its ticket holds a discussion on its own Thread instead of implementing or aligning work. */
+export const discussPrompt = promptFile('discuss')
 /** Appended to a slice worker's prompt when it runs the feature-exec execution strategy. */
 export const executePrompt = promptFile('execute')
 /** A one-question Session's prompt: it reads the worker's inherited context and answers without changing anything. */
