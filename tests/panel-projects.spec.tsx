@@ -44,7 +44,7 @@ it('keeps the requirement list when switching projects there and refetches it', 
   expect(projectTabs.map(item => item.textContent)).toEqual(['Widgets', 'Other'])
   expect(projectTabs.map(item => item.getAttribute('aria-selected'))).toEqual(['true', 'false'])
   // The page tablist is separate and selects Requirements.
-  expect(document.querySelector('.dt-tabs')?.querySelectorAll('[role="tab"]')).toHaveLength(8)
+  expect(document.querySelector('.dt-tabs')?.querySelectorAll('[role="tab"]')).toHaveLength(9)
   expect(selectedPageTab()).toBe(zh['tab.requirements'])
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
   expect(text()).toContain('acme/intake → acme/widgets')
