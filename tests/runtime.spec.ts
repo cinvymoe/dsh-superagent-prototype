@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { bindScopeParent } from '@deepseek-ai/dsh-scope'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
 import { join } from 'node:path'
@@ -22,6 +22,7 @@ import { SettingsSchema, policyVersion, type SettingsOrigin } from '../src/polic
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { feishuKind } from '../src/sources/feishu.ts'
 import { githubKind, pollRound } from '../src/sources/github.ts'
+import { localKind } from '../src/sources/local.ts'
 import { CliError, Commands } from '../src/infra/commands.ts'
 import { UserError, key, runningAssignment, said, threadKey, waitsForPerson, type Trigger } from '../src/core/index.ts'
 import { feishuTrigger } from '../src/sources/feishu.ts'
@@ -29,7 +30,7 @@ import { feishuChannel } from '../src/sources/feishu-trigger.ts'
 import { commentTrigger, githubChannel, issueTrigger } from '../src/sources/github-trigger.ts'
 import { IM_WORDS } from '../src/infra/text.ts'
 import { observePull, pullOf } from '../src/sources/github-pull.ts'
-import { credentialHelper, workerGitConfig } from '../src/infra/environment.ts'
+import { credentialHelper, workerBin, workerGitConfig, workerProjectBin } from '../src/infra/environment.ts'
 import { policyHistory } from '../src/app/settings-history.ts'
 import { overview } from '../src/app/views/overview.ts'
 import { preview, readable } from '../src/app/views/text.ts'
@@ -1184,6 +1185,94 @@ it('gives each chain\'s ticket that chain\'s gh and git environment in its prepa
     PATH: expect.stringContaining(join(directory, 'worker-bin-tools')) })
   expect(prepared.find(run => run.id === plain.ticket.id)!.env).toMatchObject({ GIT_CONFIG_GLOBAL: workerGitConfig(directory) })
   expect(prepared.find(run => run.id === plain.ticket.id)!.env.PATH).not.toContain(join(directory, 'worker-bin-tools'))
+  } finally {
+    // Later tests count the prepare spawns they make, so this one leaves the mock as it found it.
+    subprocess.spawn.mockClear()
+  }
+})
+
+it('blocks a command only in the project that adds it, gives every ticket the union, and hands the same PATH to its subagents', async () => {
+  try {
+  const repository = (name: string): void => {
+    for (const repo of [`acme/${name}`, `acme/${name}-issues`]) {
+      answers[`${AGENT()} api repos/${repo} --jq {name: .full_name, push: .permissions.push}`] = `{"name":"${repo}","push":true}\n`
+    }
+  }
+  repository('alpha'); repository('beta')
+  // The deployment's own list is the bottom line every project keeps; only a project adds to it.
+  runtime.store.saveSettings({ ...runtime.store.settings(), executor: { ...runtime.store.settings().executor, blockedCommands: ['installation-cli'] } })
+  const alpha = await runtime.projects.create({ name: 'Alpha', intakeRepository: 'acme/alpha-issues', codeRepository: 'acme/alpha', blockedCommands: ['foo'] })
+  const beta = await runtime.projects.create({ name: 'Beta', intakeRepository: 'acme/beta-issues', codeRepository: 'acme/beta' })
+  // Creating a project with blocked commands writes only its own shim directory, without waiting for a restart.
+  expect(readdirSync(workerProjectBin(directory, alpha.id))).toEqual(['foo'])
+  expect(existsSync(workerProjectBin(directory, beta.id))).toBe(false)
+  // A save of the Source resolves the two project chains, as it does outside a test. Each chain's git check reads its
+  // own configuration, which the fake subprocess reports from the environment the check supplies.
+  answers[HELPERS] = ({ env }) => `file:${env?.GIT_CONFIG_GLOBAL}\0${credentialHelper(AGENT())}\0`
+  await restart({}, { github: { chains: [
+    { id: 'default', intakeRepository: 'acme/widgets', codeRepository: 'acme/widgets' },
+    { id: alpha.id, intakeRepository: 'acme/alpha-issues', codeRepository: 'acme/alpha' },
+    { id: beta.id, intakeRepository: 'acme/beta-issues', codeRepository: 'acme/beta' },
+  ], cli: AGENT() } })
+  await runtime.ready
+  // The fake host keeps its agents by id across a restart, so tell the new runtime to decorate the master Session again.
+  await runtime.sessions.ensure(runtime.masterId, directory, 'dsh-superagent orchestrator', 'orchestrator')
+  runtime.sources.register(feishuKind); runtime.sources.register(githubKind); runtime.sources.register(localKind)
+  runtime.store.saveSettings({ ...runtime.store.settings(), executor: { ...runtime.store.settings().executor, prepare: 'true' } })
+  // The deployment's command sits in each project's chain directory, and the project's own only in its project directory.
+  for (const id of [alpha.id, beta.id]) expect(readdirSync(join(directory, `worker-bin-${id}`)).sort()).toEqual(['gh', 'installation-cli', 'lark-cli'])
+  expect(readdirSync(workerProjectBin(directory, alpha.id))).toEqual(['foo'])
+  // A project that adds no extra command keeps no project directory, so no worker of it reads a stray one.
+  expect(existsSync(workerProjectBin(directory, beta.id))).toBe(false)
+  const accept = async (project: { id: string }, title: string) => {
+    const issue = runtime.local.create({ title, project: project.id })
+    await runtime.idle()
+    const trigger = runtime.store.read.threadTriggers(`local:${issue.id}`, 1)[0]!
+    const result = await route({ kind: 'accept', trigger_id: trigger.id, title: `Run ${title}`, worktree_name: 'run-project', acknowledgement: '收到。' }) as { ticket: { ticket_id: string } }
+    await runtime.idle()
+    return runtime.store.tickets.get(result.ticket.ticket_id)!
+  }
+  const a = await accept(alpha, 'Alpha work'), b = await accept(beta, 'Beta work')
+  expect(a.execution?.chain).toBe(alpha.id)
+  const envA = runtime.sessionEnvironment(`worker-${a.id}`), envB = runtime.sessionEnvironment(`worker-${b.id}`)
+  // A's PATH starts at its project's shims and then its chain's; B's starts at its chain's and never names A's project.
+  expect(envA.PATH!.split(':').slice(0, 2)).toEqual([workerProjectBin(directory, alpha.id), workerBin(directory, alpha.id)])
+  expect(envB.PATH!.split(':')[0]).toBe(workerBin(directory, beta.id))
+  expect(envB.PATH).not.toContain(workerProjectBin(directory, alpha.id))
+  expect(envA.GIT_CONFIG_GLOBAL).toBe(workerGitConfig(directory, alpha.id))
+  expect(envB.GIT_CONFIG_GLOBAL).toBe(workerGitConfig(directory, beta.id))
+  // The prepare command of each ticket reads the same environment, its own project's included.
+  const prepared = (ticketId: string) => subprocess.spawn.mock.calls.map(([spec]) => spec as { argv: string[]; env?: Record<string, string> })
+    .filter(spec => spec.argv[0] === 'sh' && spec.env?.DSH_SUPERAGENT_TICKET === ticketId).at(-1)!.env!
+  expect(prepared(a.id).PATH!.split(':').slice(0, 2)).toEqual([workerProjectBin(directory, alpha.id), workerBin(directory, alpha.id)])
+  expect(prepared(b.id).PATH).not.toContain(workerProjectBin(directory, alpha.id))
+  expect(prepared(a.id).DSH_SUPERAGENT_BLOCKED_COMMANDS).toBe('installation-cli foo')
+  expect(prepared(b.id).DSH_SUPERAGENT_BLOCKED_COMMANDS).toBe('installation-cli')
+  const variables = (ticketId: string) => Object.fromEntries(runtime.ticketEnvironment(runtime.store.tickets.get(ticketId)!).map(variable => [variable.key, variable.value]))
+  expect(variables(a.id).DSH_SUPERAGENT_BLOCKED_COMMANDS).toBe('installation-cli foo')
+  expect(variables(b.id).DSH_SUPERAGENT_BLOCKED_COMMANDS).toBe('installation-cli')
+  // A subagent of the worker, direct or deeper, gets the worker's environment rather than the deployment's default.
+  agents.set('child-alpha', { id: 'child-alpha', status: 'running', session: { header: { parentSession: `worker-${a.id}` } } } as never)
+  agents.set('grandchild-alpha', { id: 'grandchild-alpha', status: 'running', session: { header: { parentSession: 'child-alpha' } } } as never)
+  expect(runtime.sessionEnvironment('child-alpha').PATH).toBe(envA.PATH)
+  expect(runtime.sessionEnvironment('grandchild-alpha').PATH).toBe(envA.PATH)
+  expect(runtime.sessionEnvironment(runtime.masterId).PATH!.split(':')[0]).toBe(workerBin(directory))
+  // Changing A's list rewrites only A's shims; B's directory and environment stay exactly as they were.
+  await runtime.projects.update(alpha.id, { blockedCommands: ['bar'] })
+  expect(readdirSync(workerProjectBin(directory, alpha.id))).toEqual(['bar'])
+  expect(existsSync(workerProjectBin(directory, beta.id))).toBe(false)
+  expect(runtime.sessionEnvironment(`worker-${b.id}`).PATH).toBe(envB.PATH)
+  expect(readdirSync(join(directory, `worker-bin-${beta.id}`)).sort()).toEqual(['gh', 'installation-cli', 'lark-cli'])
+  // Clearing the list drops A's project directory from PATH; the commands workers need can never be blocked.
+  await expect(runtime.projects.update(alpha.id, { blockedCommands: ['gh'] })).rejects.toMatchObject({ code: 'projectBlockedWorkerCommand' })
+  await runtime.projects.update(alpha.id, { blockedCommands: [] })
+  expect(existsSync(workerProjectBin(directory, alpha.id))).toBe(false)
+  expect(runtime.sessionEnvironment(`worker-${a.id}`).PATH!.split(':')[0]).toBe(workerBin(directory, alpha.id))
+  // A deployment-level addition reaches both projects' chains without rewriting a project's own directory.
+  await runtime.settings.save('executor', { ...runtime.store.settings().executor, blockedCommands: ['installation-cli', 'extra-cli'] },
+    runtime.store.blockRevision('executor'), 'panel')
+  for (const id of [alpha.id, beta.id]) expect(readdirSync(join(directory, `worker-bin-${id}`)).sort()).toEqual(['extra-cli', 'gh', 'installation-cli', 'lark-cli'])
+  expect(variables(b.id).DSH_SUPERAGENT_BLOCKED_COMMANDS).toBe('installation-cli extra-cli')
   } finally {
     // Later tests count the prepare spawns they make, so this one leaves the mock as it found it.
     subprocess.spawn.mockClear()

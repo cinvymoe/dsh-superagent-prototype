@@ -1,9 +1,10 @@
 /**
- * Process environment and CLI shims that bind git, gh, and lark-cli to the deployment's accounts and block disallowed commands.
+ * Process environment and CLI shims that bind git, gh, and lark-cli to the deployment's accounts and block disallowed
+ * commands, one chain's and one local project's at a time.
  * Variables read by workers avoid `KEY|PASSWORD|SECRET|TOKEN` in their names because DSH strips credential-shaped variables from child environments.
  * Provides default-path guardrails rather than an OS-level security boundary, as workers run under the operator's OS user.
  */
-import { lstat, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readdir, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises'
 import { realpathSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import type { SubprocessOutputReader, SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
@@ -21,6 +22,14 @@ export const commandName = (name: string): boolean => /^[A-Za-z0-9._-]+$/.test(n
 /** A chain's command shims and isolated git configuration. */
 export interface WorkerPaths { bin: string; gitconfig: string }
 /**
+ * The commands a worker of one project may not call: the deployment's list, then the project's own, without duplicates.
+ * The commands workers need stay callable even if a stored list names one, so a project can only add to the deployment's
+ * bottom line and never take from it.
+ */
+export function effectiveBlockedCommands(deployment: readonly string[], project: readonly string[] = []): string[] {
+  return [...new Set([...deployment, ...project])].filter(name => !WORKER_COMMANDS.includes(name))
+}
+/**
  * The worker environment files of one chain. The deployment's primary chain keeps the installation-wide paths; every other
  * chain gets its own `worker-bin-<chain>` and `worker-gitconfig-<chain>` beside them, so two chains never share a `gh` shim
  * or a github.com credential helper.
@@ -32,6 +41,13 @@ export function workerPaths(stateDir: string, chain?: string): WorkerPaths {
 }
 export const workerBin = (stateDir: string, chain?: string): string => workerPaths(stateDir, chain).bin
 export const workerGitConfig = (stateDir: string, chain?: string): string => workerPaths(stateDir, chain).gitconfig
+/**
+ * The shim directory of one local project's extra blocked commands. It sits before the chain's directory on a worker's
+ * PATH, so only that project's Tickets fail the call while every other project, chain and deployment command stays as it
+ * was. It is separate from `worker-bin-<chain>` because a project owns a chain whose id is the project's, and both
+ * directories may hold a command of the same name.
+ */
+export const workerProjectBin = (stateDir: string, project: string): string => join(stateDir, `worker-bin-project-${project}`)
 const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`
 const gitQuote = (value: string): string => `"${value.replace(/[\\"]/g, char => `\\${char}`)}"`
 export const credentialHelper = (cli: string): string => `!${shellQuote(cli)} auth git-credential`
@@ -44,11 +60,14 @@ export function withoutDirectory(path: string, dir: string): string {
   return path.split(delimiter).filter(entry => !sameDirectory(entry, dir)).join(delimiter)
 }
 
-/** The explicit environment of a worker command: worker shims first, the isolated git configuration, and no interactive git prompts. */
-export function workerEnvironment(stateDir: string, path: string, chain?: string): Record<string, string> {
+/**
+ * The explicit environment of a worker command: the project's shim directory (when it has one), the chain's shims, the
+ * isolated git configuration, and no interactive git prompts.
+ */
+export function workerEnvironment(stateDir: string, path: string, chain?: string, project?: string): Record<string, string> {
   const paths = workerPaths(stateDir, chain)
   return {
-    PATH: [paths.bin, path].join(delimiter),
+    PATH: [project ? workerProjectBin(stateDir, project) : undefined, paths.bin, path].filter(entry => entry !== undefined).join(delimiter),
     GIT_CONFIG_GLOBAL: paths.gitconfig,
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_ASKPASS: '',
@@ -122,35 +141,61 @@ export async function writeEnvironment(deployment: WorkerDeployment, blockedComm
   for (const [chain, target] of workerTargets(deployment)) await writeChain(deployment.stateDir, chain, target, deployment.feishu, blockedCommands)
 }
 
-/** Writes one chain's shims and git configuration, and removes the shims of commands it no longer blocks. */
-async function writeChain(stateDir: string, chain: string | undefined, target: WorkerTarget, feishu: Deployment['feishu'],
-  blockedCommands: readonly string[]): Promise<void> {
-  const { github } = target
-  const { bin: dir, gitconfig } = workerPaths(stateDir, chain)
+/** One shim file: the command name it answers to and the shell body after the shebang and marker. */
+interface Shim { name: string; body: string }
+const failBody = (message: string): string => `echo ${shellQuote(message)} >&2\nexit 1`
+
+/**
+ * Writes `shims` into `dir`, replacing the ones dsh-superagent wrote there and removing the shims it wrote earlier that
+ * the list no longer holds. Workers may be running concurrently: each shim is written to a temp file and atomically
+ * renamed, so no command ever resolves past the directory. A file dsh-superagent did not write stops the write.
+ */
+async function syncShims(dir: string, shims: readonly Shim[]): Promise<void> {
   await mkdir(dir, { recursive: true })
   const before = await readdir(dir)
   for (const name of before) { const file = join(dir, name); if (!await written(file)) throw new SetupError('foreignFile', { file }) }
-  // Workers may be running concurrently: write each shim to a temp file and atomically rename it so no command ever resolves past the shim directory.
   const kept = new Set<string>()
-  const shim = async (name: string, body: string): Promise<void> => {
+  for (const { name, body } of shims) {
     const temporary = join(dir, `.${name}.${process.pid}.tmp`)
     await writeFile(temporary, `#!/bin/sh\n${MARKER}\n${body}\n`, { mode: 0o755 })
     await rename(temporary, join(dir, name))
     kept.add(name)
   }
+  for (const name of before) if (!kept.has(name)) await unlink(join(dir, name))
+}
+
+/**
+ * Writes one local project's blocked-command shims, and removes the ones it no longer blocks. The directory holds only
+ * these commands; the project's chain keeps the `gh`, `lark-cli` and deployment-level shims a worker also reads. A project
+ * with no extra commands keeps no directory, so the state directory lists one only for the projects that add any.
+ */
+export async function writeProjectCommands(stateDir: string, project: string, blockedCommands: readonly string[]): Promise<void> {
+  const dir = workerProjectBin(stateDir, project)
+  const names = effectiveBlockedCommands(blockedCommands)
+  // Nothing to write and nothing left from an earlier list: skip creating a directory a worker would only read past.
+  if (!names.length && !await lstat(dir).then(entry => entry.isDirectory(), () => false)) return
+  await syncShims(dir, names.map(name => ({ name, body: failBody(`${name} is blocked in this project; use gh, which acts as the agent's account.`) })))
+  // A list cleared to nothing leaves no directory, so the state directory lists one only for projects that add a command.
+  if (!names.length) await rmdir(dir).catch(() => { /* Another writer put something back; the shims are gone either way. */ })
+}
+
+/** Writes one chain's shims and git configuration, and removes the shims of commands it no longer blocks. */
+async function writeChain(stateDir: string, chain: string | undefined, target: WorkerTarget, feishu: Deployment['feishu'],
+  blockedCommands: readonly string[]): Promise<void> {
+  const { github } = target
+  const { bin: dir, gitconfig } = workerPaths(stateDir, chain)
   const withoutShims = [
     `self=${shellQuote(dir)}`, 'rest=', 'IFS=:', 'set -f',
     'for entry in $PATH; do [ "$entry" = "$self" ] || rest="${rest:+$rest:}$entry"; done',
     'set +f', 'unset IFS', 'PATH=$rest', 'export PATH',
   ].join('\n')
   const run = (program: string): string => `${withoutShims}\nexec ${shellQuote(program)} "$@"`
-  const fail = (message: string): string => `echo ${shellQuote(message)} >&2\nexit 1`
-  await shim('gh', run(github.cli))
-  await shim('lark-cli', feishu ? run(feishu.cli) : fail('lark-cli is unavailable: this installation has no Feishu bot.'))
-  for (const name of new Set(blockedCommands.filter(name => !WORKER_COMMANDS.includes(name)))) {
-    await shim(name, fail(`${name} is blocked in this installation; use gh, which acts as ${github.login}.`))
-  }
-  for (const name of before) if (!kept.has(name)) await unlink(join(dir, name))
+  await syncShims(dir, [
+    { name: 'gh', body: run(github.cli) },
+    { name: 'lark-cli', body: feishu ? run(feishu.cli) : failBody('lark-cli is unavailable: this installation has no Feishu bot.') },
+    ...effectiveBlockedCommands(blockedCommands).map(name => ({ name,
+      body: failBody(`${name} is blocked in this installation; use gh, which acts as ${github.login}.`) })),
+  ])
   await own(gitconfig, [
     MARKER,
     // Make git refuse to commit without an explicit identity set by the worker instead of guessing from the operator's OS user.

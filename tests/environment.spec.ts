@@ -1,12 +1,12 @@
 import { execFile, execFileSync, spawn } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SENSITIVE_ENV_PATTERN, type SubprocessRuntime } from '@deepseek-ai/dsh-subprocess'
-import { GIT_LOCATION, agentVariables, credentialHelper, runAsWorker, verifyDirectory, withoutDirectory, workerBin, workerEnvironment,
-  workerGitConfig, writeEnvironment } from '../src/infra/environment.ts'
+import { GIT_LOCATION, agentVariables, credentialHelper, effectiveBlockedCommands, runAsWorker, verifyDirectory, withoutDirectory, workerBin,
+  workerEnvironment, workerGitConfig, workerProjectBin, writeEnvironment, writeProjectCommands } from '../src/infra/environment.ts'
 import { CliError } from '../src/infra/commands.ts'
 import { testDeployment } from './fixtures/deployment.ts'
 import { gitEnv } from './fixtures/git.ts'
@@ -68,6 +68,49 @@ describe('worker shims', () => {
     await writeEnvironment(testDeployment({ stateDir: dir }), [])
     expect(readdirSync(workerBin(dir)).sort()).toEqual(['gh', 'lark-cli'])
     expect(readFileSync(workerGitConfig(dir), 'utf8')).toContain('Written by dsh-superagent')
+  })
+})
+
+describe('project blocked commands', () => {
+  it('fails a command only in the project that blocks it, with the project directory before the chain directory', async () => {
+    const real = join(dir, 'real')
+    program(join(real, 'foo'), 'echo real-foo')
+    await writeEnvironment(testDeployment({ stateDir: dir }), ['installation-cli'])
+    await writeProjectCommands(dir, 'p-a', ['foo'])
+    await writeProjectCommands(dir, 'p-b', [])
+    const envA = workerEnv(workerEnvironment(dir, real, undefined, 'p-a'))
+    // A project without blocked commands gets no project directory, as the Runtime passes none for it.
+    const envB = workerEnv(workerEnvironment(dir, real))
+    expect(workerEnvironment(dir, real, undefined, 'p-b').PATH!.split(':')[0]).toBe(workerProjectBin(dir, 'p-b'))
+    // Only the project that blocks it gets the project directory on PATH, ahead of its chain's shims.
+    expect(envA.PATH!.split(':').slice(0, 2)).toEqual([workerProjectBin(dir, 'p-a'), workerBin(dir)])
+    expect(envB.PATH!.split(':')[0]).toBe(workerBin(dir))
+    // A's worker shell fails `foo`; B's runs the real command, and the deployment's list reaches both.
+    await expect(exec('foo', [], { env: envA })).rejects.toMatchObject({ code: 1,
+      stderr: 'foo is blocked in this project; use gh, which acts as the agent\'s account.\n' })
+    expect((await exec('foo', [], { env: envB })).stdout).toBe('real-foo\n')
+    for (const env of [envA, envB]) {
+      await expect(exec('installation-cli', [], { env })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('installation-cli is blocked in this installation') })
+    }
+  })
+  it('rewrites only the named project\'s shims, and removes the commands its list no longer holds', async () => {
+    await writeEnvironment(testDeployment({ stateDir: dir }), [])
+    await writeProjectCommands(dir, 'p-a', ['foo'])
+    await writeProjectCommands(dir, 'p-b', ['bar'])
+    const bBefore = readFileSync(join(workerProjectBin(dir, 'p-b'), 'bar'), 'utf8')
+    await writeProjectCommands(dir, 'p-a', ['baz'])
+    expect(readdirSync(workerProjectBin(dir, 'p-a'))).toEqual(['baz'])
+    expect(readFileSync(join(workerProjectBin(dir, 'p-b'), 'bar'), 'utf8')).toBe(bBefore)
+    expect(readdirSync(workerProjectBin(dir, 'p-b'))).toEqual(['bar'])
+  })
+  it('never blocks the commands workers need, and refuses a foreign file in a project directory', async () => {
+    expect(effectiveBlockedCommands(['rm', 'gh'], ['curl', 'git', 'lark-cli', 'rm'])).toEqual(['rm', 'curl'])
+    // A project that adds no blockable command keeps no directory at all.
+    await writeProjectCommands(dir, 'p-a', ['gh', 'git', 'lark-cli'])
+    expect(existsSync(workerProjectBin(dir, 'p-a'))).toBe(false)
+    await writeProjectCommands(dir, 'p-a', ['foo'])
+    writeFileSync(join(workerProjectBin(dir, 'p-a'), 'notes'), 'notes\n')
+    await expect(writeProjectCommands(dir, 'p-a', ['foo'])).rejects.toThrow(`${join(workerProjectBin(dir, 'p-a'), 'notes')} was not written by dsh-superagent`)
   })
 })
 

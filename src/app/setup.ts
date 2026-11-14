@@ -3,15 +3,20 @@ import type { Context } from '@deepseek-ai/cordis'
 import { UserError } from '../core/index.ts'
 import { GithubConfigSchema, SETUP_FIELDS, normalizeGithubConfig, resolveDeployment, resolveFeishuBot, workerProbe, type Deployment,
   type Machine } from '../deployment.ts'
-import { agentVariables, verifyEnvironment, withoutDirectory, workerBin, workerEnvironment, writeEnvironment } from '../infra/environment.ts'
+import { agentVariables, verifyEnvironment, withoutDirectory, workerBin, workerEnvironment, writeEnvironment, writeProjectCommands } from '../infra/environment.ts'
 import type { Settings, SettingsBlock } from '../policy.ts'
 import { SetupError, type SetupProblem } from '../setup.ts'
+
+/** The stored blocked commands of one local project, which setup writes into that project's shim directory. */
+export interface ProjectCommands { id: string; blockedCommands?: readonly string[] }
 
 export interface SetupHost {
   readonly context: Context
   readonly machine: Machine
   readonly lifetime: AbortSignal
   restart(): void
+  /** Every local project, whose extra blocked commands get their own shim directory. */
+  projects?(): readonly ProjectCommands[]
 }
 
 const setupFields = (settings: Settings) =>
@@ -47,12 +52,12 @@ export class Setup {
   /** Explicit environment for worker commands and worker shells. */
   get workerEnvironment(): Record<string, string> { return workerEnvironment(this.host.machine.stateDir, this.path) }
   /** Explicit environment for worker commands and worker shells of a chain, or of the deployment's primary chain. */
-  environmentFor(chain?: string): Record<string, string> { return this.environmentOf(this.resolved, chain) }
-  /** The worker environment of `chain` under `deployment`, which may be the one being resolved. */
-  private environmentOf(deployment: Deployment | undefined, chain?: string): Record<string, string> {
+  environmentFor(chain?: string, project?: string): Record<string, string> { return this.environmentOf(this.resolved, chain, project) }
+  /** The worker environment of `chain` and of `project`'s shim directory, which may be the deployment being resolved. */
+  private environmentOf(deployment: Deployment | undefined, chain?: string, project?: string): Record<string, string> {
     // A chain that startup has not resolved yet keeps the primary chain's environment until the restart that resolves it.
     const other = chain !== undefined && deployment !== undefined && chain !== deployment.chain && deployment.chains?.[chain] ? chain : undefined
-    return workerEnvironment(this.host.machine.stateDir, this.path, other)
+    return workerEnvironment(this.host.machine.stateDir, this.path, other, project)
   }
   get deployment(): Deployment {
     if (!this.resolved) throw new Error(`dsh-superagent is waiting for setup: ${this.problem?.detail ?? 'setup has not run'}`)
@@ -87,6 +92,10 @@ export class Setup {
   async blockCommands(blocked: readonly string[]): Promise<void> {
     if (this.resolved) await writeEnvironment(this.resolved, blocked)
   }
+  /** Rewrites only `project`'s shim directory, leaving every other project's shims as they are. */
+  async projectCommands(project: ProjectCommands): Promise<void> {
+    await writeProjectCommands(this.host.machine.stateDir, project.id, project.blockedCommands ?? [])
+  }
   /** Probes CLIs the way worker shells run them, using `stateDir` as `cwd` since it exists even before the repository clone is valid. */
   private probe() {
     const { context, machine, lifetime } = this.host
@@ -108,6 +117,9 @@ export class Setup {
       throw new SetupError('environmentFailed', { output: error instanceof Error ? error.message : String(error) })
     }
     await writeEnvironment(resolved, settings.executor.blockedCommands).catch(machineProblem)
+    // A project's own shim directory sits before its chain's, so it is written for every stored project, also one whose
+    // chain a later save has yet to resolve; a list cleared since the last start loses its shims here.
+    for (const project of this.host.projects?.() ?? []) await this.projectCommands(project).catch(machineProblem)
     await verifyEnvironment(resolved, context.subprocess, lifetime, chain => this.environmentOf(resolved, chain)).catch(machineProblem)
     return resolved
   }
