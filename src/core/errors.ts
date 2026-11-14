@@ -85,6 +85,8 @@ export const USER_ERRORS = {
   questionNoSession: ['refused', 'The Ticket has not started its worker Session yet; ask once it has run'],
   questionNotFailed: ['refused', 'Only a failed question can be retried'],
   questionLimit: ['refused', 'A requirement keeps at most {max} questions'],
+  answerText: ['refused', 'A discussion answer needs text'],
+  answerNotFailed: ['refused', 'Only a failed answer can be retried'],
 } as const satisfies Record<string, readonly ['missing' | 'refused', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
 

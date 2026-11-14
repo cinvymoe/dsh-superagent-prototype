@@ -29,6 +29,7 @@ import { decisionList, search, threadDetail, threadList } from './views/threads.
 import { executorLoad, ticketDetail, ticketList } from './views/tickets.ts'
 import type { LocalIssues } from './local.ts'
 import type { Discussions } from './discussions.ts'
+import type { Answers } from './answers.ts'
 import { QUESTION_CHARS, type LocalQuestions } from './local-questions.ts'
 import type { Projects } from './projects.ts'
 import type { Checkout } from './checkout.ts'
@@ -50,6 +51,7 @@ export interface HttpHost {
   readonly masterId: string
   readonly local: LocalIssues
   readonly discussions: Discussions
+  readonly answers: Pick<Answers, 'retry'>
   readonly localQuestions: LocalQuestions
   readonly projects: Projects
   /** The checkout dsh-superagent runs from, read only. */
@@ -258,6 +260,11 @@ function routes(runtime: HttpHost): Routes {
       const discussion = runtime.discussions.comment(params.id, input.text)
       if (!discussion) throw new RouteError(404, 'Local discussion not found')
       return { discussion }
+    },
+    'POST local/discussions/:id/answers/:answerId/retry': ({ params }) => {
+      const answer = runtime.answers.retry(params.id, params.answerId)
+      if (!answer) throw new RouteError(404, 'Local answer not found')
+      return { discussion: runtime.discussions.get(params.id) }
     },
     'POST local/discussions/:id/close': ({ params }) => {
       const discussion = runtime.discussions.close(params.id)

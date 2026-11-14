@@ -38,7 +38,7 @@ Source, Thread, Eval, Mandate and Subscription form the core domain; the rest su
 
 A person is not a domain concept. A Trigger carries its actor's identifier as the Source gives it. An allowed list is a Source's part of the Policy, in that Source's identities. That one person has accounts on several Sources is prompt text that the agents read when they need it.
 
-A local project's panel keeps two kinds of work record, each on its own Thread. A requirement (`q-…`) is a submitted piece of work; a discussion (`d-…`) is a conversation before any work is authorized. A discussion is not a requirement record: it keeps only its own text and messages, and it creates at most one requirement, which a person does explicitly and which links the two records. A discussion's message is an ordinary human Trigger and enters Eval, whose accept gives its Ticket `mode: 'discuss'`; a requirement's gives `mode: 'align'`.
+A local project's panel keeps two kinds of work record, each on its own Thread. A requirement (`q-…`) is a submitted piece of work; a discussion (`d-…`) is a conversation before any work is authorized. A discussion is not a requirement record: it keeps only its own text and messages, and it creates at most one requirement, which a person does explicitly and which links the two records. A discussion's message is an ordinary human Trigger, kept for its Thread's timeline, and Eval never evaluates that Thread: the discussion's own read-only Answerer Session answers it, and no Ticket, Assignment or Mandate comes from it. A requirement's message does enter Eval, whose accept gives its Ticket `mode: 'align'`.
 
 The Executor, with its Sessions and directories, is outside the domain and connects through Assignments.
 

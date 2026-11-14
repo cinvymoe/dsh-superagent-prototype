@@ -35,6 +35,8 @@ import { Checkout } from './checkout.ts'
 import { Prepare } from './prepare.ts'
 import { LocalIssues } from './local.ts'
 import { Discussions } from './discussions.ts'
+import { Answers } from './answers.ts'
+import { Answerer } from './answerer.ts'
 import { LocalQuestions } from './local-questions.ts'
 import { Questions } from './questions.ts'
 import { Projects } from './projects.ts'
@@ -81,6 +83,7 @@ export class Runtime extends Service implements SourceHost {
   readonly passes: Passes
   readonly local: LocalIssues
   readonly discussions: Discussions
+  readonly answers: Answers
   readonly localQuestions: LocalQuestions
   readonly projects: Projects
   readonly checkout: Checkout
@@ -188,7 +191,14 @@ export class Runtime extends Service implements SourceHost {
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
-      this.discussions = new Discussions({ store, receive: trigger => this.passes.receive(trigger) })
+      this.discussions = new Discussions({ store, receive: trigger => this.passes.receive(trigger),
+        answer: (discussion, text, triggerId) => { this.answers.accept(discussion, text, triggerId) } })
+      // A discussion answers in its own read-only Session, in the project's own checkout when it names one, never in a worker slot.
+      this.answers = new Answers({ discussions: this.discussions, lifetime: this.lifetime,
+        answerer: new Answerer({ sessions, workspace: discussion =>
+          store.get(KV.local.project(discussion.project))?.worktreeRoot || join(machine.stateDir, 'discussions', discussion.id),
+        lifetime: this.lifetime }),
+        warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       this.local = new LocalIssues({ store, stateDir: machine.stateDir, discussions: this.discussions,
         receive: trigger => this.passes.receive(trigger) })
       // Asking is answered in the background, so a request never waits for a forked Session; a stop leaves the question `asked`.
@@ -327,6 +337,7 @@ export class Runtime extends Service implements SourceHost {
     if (this.closing()) return
     this.executor.resume()
     this.localQuestions.resume()
+    this.answers.resume()
     this.passes.start()
     this.effects.start()
     this.runtimeHealth.set({ state: 'ready', detail: 'Orchestrator is ready', at: now() })
@@ -335,7 +346,8 @@ export class Runtime extends Service implements SourceHost {
     const runtime = this
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
-      discussions: this.discussions, localQuestions: this.localQuestions, projects: this.projects, checkout: this.checkout, prepare: this.prepare,
+      discussions: this.discussions, answers: this.answers, localQuestions: this.localQuestions, projects: this.projects,
+      checkout: this.checkout, prepare: this.prepare,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
@@ -352,7 +364,8 @@ export class Runtime extends Service implements SourceHost {
       const ids = [this.masterId, ...this.store.tickets.list().map(ticket => workerSessionId(ticket.id))]
       const agents = ids.map(id => this.ctx.agents.get(id as SessionId)).filter((agent): agent is Agent => agent !== undefined)
       for (const agent of agents) agent.cancel({ kind: 'user' }, { keepInbox: true })
-      await Promise.allSettled([passes, this.effects.drain(), this.localQuestions.stop(), ...agents.map(agent => agent.whenIdle())])
+      await Promise.allSettled([passes, this.effects.drain(), this.localQuestions.stop(), this.answers.stop(),
+        ...agents.map(agent => agent.whenIdle())])
       // The workers' jobs and subagents stop too: their ends would start worker turns without the tool limits released below.
       await this.executor.shutdown()
       this.executor.dispose()

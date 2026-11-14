@@ -50,6 +50,8 @@ export interface Api {
   'POST local/discussions': { body: { body: string; project: string; author?: string }; response: { discussion: LocalDiscussion } }
   'GET local/discussions/:id': { response: { discussion: LocalDiscussion; project: LocalProjectView | null; thread: ThreadDetailView; replies: Receipt[] } }
   'POST local/discussions/:id/comments': { body: { text: string }; response: { discussion: LocalDiscussion } }
+  /** Queue one failed answer again; the discussion record carries the answer's new state. */
+  'POST local/discussions/:id/answers/:answerId/retry': { response: { discussion: LocalDiscussion | undefined } }
   'POST local/discussions/:id/close': { response: { discussion: LocalDiscussion } }
   // Local requirement responses carry the HTTP view (`LocalIssueView`), whose `slicesFinished` is derived per read.
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }

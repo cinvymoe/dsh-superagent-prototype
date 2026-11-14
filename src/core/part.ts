@@ -55,9 +55,14 @@ export abstract class EnginePart {
       this.repo.triggers.saveDisposition(triggerId, { ...disposition, acked: [...disposition.acked ?? [], ticketId] })
     }
   }
-  /** Queue a Trigger on its primary Thread for the next Eval, unless it waits there already or an Eval holds it. */
+  /**
+   * Queue a Trigger on its primary Thread for the next Eval, unless it waits there already or an Eval holds it. A local
+   * discussion Thread never reaches Eval: its messages stay ordinary Triggers for the discussion timeline, are answered by
+   * that discussion's Answerer, and only a person's Create Issue action starts a requirement on its own Thread.
+   */
   protected queueForEval(trigger: Trigger): boolean {
     const primary = this.thread(trigger.threads[0]!)
+    if (primary.ref.source === 'local' && primary.ref.id.startsWith('d-')) return false
     if (primary.pending.includes(trigger.id) || primary.evaluating?.triggerIds.includes(trigger.id)) return false
     primary.pending.push(trigger.id)
     this.repo.threads.save(primary)

@@ -1,11 +1,11 @@
 /** The discussion pages of the current project: start a discussion, list them, and read one before creating a requirement. */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Receipt } from '../app/store.ts'
-import { projectRepositories, type LocalDiscussion } from '../sources/local-format.ts'
-import { usePoll, type ThreadPageView, type TriggerRow } from './api.ts'
+import { projectRepositories, type LocalAnswer, type LocalDiscussion } from '../sources/local-format.ts'
+import { usePoll } from './api.ts'
 import { Button, Icon, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
-import { actorName, errorText, type T } from './text.ts'
+import { errorText, type T } from './text.ts'
 import { MarkdownLite, PageHead, Section, When } from './widgets.tsx'
 
 /** The tag of a discussion's own state, apart from whether it already created a requirement. */
@@ -16,16 +16,21 @@ const stateTag = (t: T, discussion: LocalDiscussion) => discussion.state === 'cl
 const linkTag = (t: T, discussion: LocalDiscussion) => discussion.issueId
   ? <Tag tone="info">{t('discussion.linked')}</Tag> : <Tag tone="neutral">{t('discussion.unlinked')}</Tag>
 
-/** One message of a discussion: a human Trigger, or the agent's sent reply to it. */
-type DiscussionEvent = { at: string; kind: 'trigger'; trigger: TriggerRow } | { at: string; kind: 'reply'; reply: Receipt }
+/** One message of a discussion with its answer, a reply an older discussion already recorded, or a message recorded before answers were. */
+type Exchange = { at: string; kind: 'answer'; answer: LocalAnswer } | { at: string; kind: 'reply'; reply: Receipt }
+  | { at: string; kind: 'trigger'; text: string }
 
-/** The messages of a discussion's Thread, newest first, with the original text left to the body card above them. */
-function events(discussion: LocalDiscussion, thread: ThreadPageView, replies: Receipt[]): DiscussionEvent[] {
-  const original = discussion.body || discussion.title
-  const skipped = thread.timeline.findIndex(trigger => trigger.text === original)
+/**
+ * The exchange of a discussion, newest first. A message that predates recorded answers still shows its text from the
+ * Thread, and an older discussion's sent replies still show, so nothing written on the Thread disappears.
+ */
+function exchange(discussion: LocalDiscussion, replies: Receipt[], triggers: { id: string; text: string; at: string }[] = []): Exchange[] {
+  const answered = new Set((discussion.answers ?? []).map(answer => answer.triggerId))
   return [
-    ...thread.timeline.flatMap((trigger, index) => index === skipped ? [] : [{ at: trigger.at, kind: 'trigger' as const, trigger }]),
+    ...(discussion.answers ?? []).map(answer => ({ at: answer.at, kind: 'answer' as const, answer })),
     ...replies.filter(reply => reply.status === 'sent').map(reply => ({ at: reply.sentAt ?? '', kind: 'reply' as const, reply })),
+    ...triggers.filter(trigger => !answered.has(trigger.id) && trigger.text !== discussion.body)
+      .map(trigger => ({ at: trigger.at, kind: 'trigger' as const, text: trigger.text })),
   ].sort((a, b) => b.at.localeCompare(a.at))
 }
 
@@ -105,10 +110,12 @@ export function DiscussionDetail({ id }: { id: string }) {
     if (!text || busy) return
     await act(async () => { await call('POST local/discussions/:id/comments', { id, body: { text } }); setComment('') })
   }
+  const retry = (answerId: string) => act(async () => {
+    await call('POST local/discussions/:id/answers/:answerId/retry', { id, answerId })
+  })
   if (error) return <p className="dt-error" role="alert">{error.message}</p>
   if (!discussion) return <p className="dt-hint">{t('loading')}</p>
-  const thread = data.thread
-  const shown = events(discussion, thread, data.replies)
+  const shown = exchange(discussion, data.replies, data.thread?.timeline ?? [])
   return <>
     <PageHead title={discussion.title} back={{ label: t('discussion.back'), onClick: () => navigate({ page: 'discussions' }, true) }}>
       <span className="dt-hint">{t('discussion.detail')}</span>{stateTag(t, discussion)}{linkTag(t, discussion)}
@@ -135,14 +142,37 @@ export function DiscussionDetail({ id }: { id: string }) {
           <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
             disabled={busy || !comment.trim()}>{t('discussion.comment')}</Button></div>
         </form>
-        {shown.length === 0 && <p className="dt-hint">{t('discussion.noMessages')}</p>}
-        <ul className="dt-list dt-timeline">{shown.map((event, index) => <li key={index} className="dt-row dt-event">
-          <div className="dt-row-main">
-            <div className="dt-row-meta">{event.kind === 'trigger' ? actorName(t, event.trigger.actor) : t('discuss.agent')}
-              <When at={event.at} />{event.kind === 'reply' && <Tag tone="info">{t('discuss.agent')}</Tag>}</div>
-            <MarkdownLite text={event.kind === 'trigger' ? event.trigger.text : event.reply.text} />
-          </div>
-        </li>)}</ul>
+        <p className="dt-hint">{t('discussion.eachMessage')}</p>
+        {shown.length === 0 && <p className="dt-hint">{t('discussion.unanswered')}</p>}
+        <ul className="dt-list dt-timeline">{shown.map((item, index) => item.kind === 'trigger'
+          ? <li key={`trigger-${index}`} className="dt-row dt-event">
+            <div className="dt-row-main">
+              <div className="dt-row-meta">{t('discuss.person')}<When at={item.at} /><Tag tone="neutral">{t('discussion.unanswered')}</Tag></div>
+              <MarkdownLite text={item.text} />
+            </div>
+          </li>
+          : item.kind === 'reply'
+          ? <li key={`reply-${index}`} className="dt-row dt-event">
+            <div className="dt-row-main">
+              <div className="dt-row-meta">{t('discuss.agent')}<When at={item.at} /><Tag tone="info">{t('discuss.agent')}</Tag></div>
+              <MarkdownLite text={item.reply.text} />
+            </div>
+          </li>
+          : <li key={item.answer.id} className="dt-row dt-event">
+            <div className="dt-row-main">
+              <div className="dt-row-meta">{t('discuss.person')}<When at={item.answer.at} />
+                {item.answer.state === 'answered' ? <Tag tone="success">{t('discuss.agent')}</Tag>
+                  : item.answer.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
+                  : <Tag tone="neutral">{item.answer.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>}</div>
+              <MarkdownLite text={item.answer.text} />
+              {item.answer.answer !== undefined && <div className="dt-answer">
+                <MarkdownLite text={item.answer.answer} /></div>}
+              {item.answer.state === 'failed' && <div className="dt-actions">
+                <p className="dt-hint">{item.answer.failure?.message}</p>
+                <Button variant="ghost" size="sm" disabled={busy}
+                  onClick={() => { void retry(item.answer.id) }}>{t('discussion.retry')}</Button></div>}
+            </div>
+          </li>)}</ul>
       </Section>
 
       <div className="dt-actions">

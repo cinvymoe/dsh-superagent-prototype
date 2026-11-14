@@ -125,6 +125,28 @@ export interface LocalQuestion {
 }
 
 /**
+ * One answer a discussion's Answerer produced for a human message, recorded on the discussion record. A discussion never
+ * reaches Eval, so this record is the only trace of the answer: no Trigger, Decision, Ticket or Assignment follows it.
+ */
+export interface LocalAnswer {
+  id: string
+  discussionId: string
+  /** The Thread Trigger of the human message this answer replies to. */
+  triggerId: string
+  /** The message text, kept so the panel can show the exchange without reading the Thread. */
+  text: string
+  at: string
+  state: 'queued' | 'answering' | 'answered' | 'failed'
+  /** The Answerer Session that answered it, `answerer-<discussion id>`. */
+  sessionId?: string
+  /** The answer text, once one was read from the Answerer Session. */
+  answer?: string
+  answeredAt?: string
+  /** Why the answer failed, so a person may retry it; absent unless it is `failed`. */
+  failure?: { reason: string; message: string }
+}
+
+/**
  * A discussion held on its own Thread before any requirement exists. Its thread key is `local:<id>`, and the `d-` id
  * prefix keeps it apart from a requirement's `q-` id, so the two record kinds never share a Thread.
  */
@@ -140,6 +162,8 @@ export interface LocalDiscussion {
   createdAt: string
   updatedAt: string
   state: 'open' | 'closed'
+  /** Its messages and the Answerer's answers, oldest first; the Thread Trigger of each message keeps the timeline. */
+  answers?: LocalAnswer[]
 }
 
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */

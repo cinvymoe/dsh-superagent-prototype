@@ -18,6 +18,7 @@ import { RetryHealth } from './retry-health.ts'
 import { initializeRoleModel, roleModel, workerRole } from './role-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
+import type { LocalDiscussion } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import { KV } from '../kv.ts'
 import type { RegisterTool, Tool } from './tools/tool.ts'
@@ -95,6 +96,8 @@ export class Sessions {
   private readonly agentDelivery: AgentDelivery
   /** Decorated agents mapped to their registered disposers and skill scope until the agent is disposed or `Sessions.dispose()` runs. */
   private readonly bindings = new Map<Agent, SessionBinding>()
+  /** Answerer Sessions, by Session id, so decoration gives them the discussion prompt and read tools instead of a worker's. */
+  private readonly answerers = new Map<string, LocalDiscussion>()
   private readonly retryHealth = new RetryHealth()
   private readonly ctx: Context
   /** Registers ordered `relay` and `notice` effect handlers that deliver to the main Session. */
@@ -125,7 +128,8 @@ export class Sessions {
     ctx.inject(['agentPresets'], child => {
       child.on('agent-preset/selected', (sessionId, preset) => {
         const ticketId = ticketOfSession(sessionId), agent = ctx.agents.get(sessionId as SessionId)
-        const ours = sessionId === this.host.masterId ? ROUTER_PRESET : ticketId && this.host.store.tickets.get(ticketId) ? WORKER_PRESET : undefined
+        const ours = sessionId === this.host.masterId ? ROUTER_PRESET
+          : this.answerers.has(sessionId) || ticketId && this.host.store.tickets.get(ticketId) ? WORKER_PRESET : undefined
         if (!ours || preset === ours || !agent) return
         const presets = child.get('agentPresets') as { select(agent: Agent, preset: string): Promise<string> }
         presets.select(agent, ours).catch(() => {})
@@ -135,9 +139,14 @@ export class Sessions {
       if (status === 'idle' && !this.host.closing()) { this.retryHealth.clear(agent.id); this.updateModelHealth() }
     })
   }
-  /** Resolves or creates session `id` in workspace `cwd`, initializes its role model, decorates it with prompts/skills/tools, sets `danger-full-access` permissions, and renames it to `title`. */
-  async ensure(id: string, cwd: string, title: string, role: 'orchestrator' | 'worker'): Promise<Agent> {
+  /**
+   * Resolves or creates session `id` in workspace `cwd`, initializes its role model, decorates it with prompts/skills/tools,
+   * sets `danger-full-access` permissions, and renames it to `title`. An `answerer` marks the Session as a discussion's own
+   * Answerer, which is decorated read-only and never holds a Ticket.
+   */
+  async ensure(id: string, cwd: string, title: string, role: 'orchestrator' | 'worker', answerer?: LocalDiscussion): Promise<Agent> {
     const ctx = this.ctx
+    if (answerer) this.answerers.set(id, answerer)
     let result = await ctx.sessionController.resolveAgent(id as SessionId)
     if ('error' in result && result.error.code === 'session/not-found') {
       const workspace = await ctx.workspaceRegistry.create(cwd)
@@ -148,11 +157,16 @@ export class Sessions {
     }
     if ('error' in result) throw result.error
     const settings = this.host.store.settings()
-    await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? roleModel(settings, 'main') : roleModel(settings, workerRole(this.ticketFor(id))))
+    await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? roleModel(settings, 'main')
+      : roleModel(settings, answerer ? 'aligner' : workerRole(this.ticketFor(id))))
     await this.decorate(result.agent)
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })
     return result.agent
+  }
+  /** Resolves or creates one discussion's Answerer Session in its own workspace, decorated read-only under the discussion's prompt. */
+  async ensureAnswerer(id: string, cwd: string, title: string, discussion: LocalDiscussion): Promise<Agent> {
+    return await this.ensure(id, cwd, title, 'worker', discussion)
   }
   /**
    * Decorates a Session forked from a Ticket's worker Session so it answers one question about that Ticket: the answer
@@ -266,7 +280,8 @@ export class Sessions {
     const host = this.host
     const master = agent.id === host.masterId
     const ticket = master ? undefined : this.ticketOf(agent)
-    if (!master && !ticket) { this.limitSubagent(agent); return }
+    const discussion = master ? undefined : this.answerers.get(agent.id)
+    if (!master && !ticket && !discussion) { this.limitSubagent(agent); return }
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     this.retryHealth.restore(agent.id, agent.session.snapshotEvents())
@@ -279,7 +294,7 @@ export class Sessions {
       // A slice worker is told to run the execution strategy its Ticket pinned; any other worker implements directly.
       const strategy = current?.plan && resolveExecutionStrategy(current.plan, this.executionServices())
       const composed = master ? host.prompts.compose(version.config, 'orchestrator', current ? host.environment(current) : undefined)
-        : current?.mode === 'discuss' ? host.prompts.composeDiscuss(version.config, host.environment(current))
+        : discussion ? host.prompts.composeDiscuss(version.config, [])
         : current?.mode === 'align' ? host.prompts.composeAlign(version.config, host.environment(current))
         : strategy ? host.prompts.composeExecute(version.config, strategy.mode, host.environment(current))
         : host.prompts.compose(version.config, 'worker', current ? host.environment(current) : undefined)
@@ -296,9 +311,12 @@ export class Sessions {
     // Bail out if the agent was disposed while awaiting the skill scope.
     if (this.bindings.get(agent) !== binding) return
     const register = this.registerTool(agent, binding)
-    for (const tool of host.tools(agent, ticket)) register(tool.name, tool.description, tool.schema, tool.execute)
+    if (!discussion) for (const tool of host.tools(agent, ticket)) register(tool.name, tool.description, tool.schema, tool.execute)
     if (master) {
       binding.disposers.push(...this.mainTools(agent, binding), agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
+    } else if (discussion) {
+      // The discussion Answerer reads the workspace and nothing else; the whitelist, not the permission, is the boundary.
+      binding.disposers.push(...this.answerOnly(agent))
     } else {
       // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
       binding.disposers.push(...this.workOnly(agent, ticket!, binding))
@@ -431,6 +449,15 @@ export class Sessions {
   }
   /** The host services execution strategies run on: whether this host registered the feature-exec service. */
   private executionServices(): ExecutionServices { return { featureExec: this.ctx.get('featureExec') !== undefined } }
+  /** Restricts an Answerer Session to the read-only tools, failing when this host does not provide them. */
+  private answerOnly(agent: Agent): (() => void)[] {
+    const parent = scopeParentOf(agent)
+    // The aligner's own plugin switches narrow the read-only whitelist; a switch it disables removes its tool, not `read`.
+    const enabled = new Set(roleTools('aligner', this.host.store.settings().agents))
+    const allow = ANSWER_TOOLS.filter(name => enabled.has(name) && agent.ctx.tools.get(name, parent))
+    if (!allow.includes('read')) throw new Error('dsh-superagent needs the discussion Answerer\'s read tool, which this host does not provide')
+    return [agent.ctx.tools.restrict({ allow })]
+  }
   /**
    * A subagent of an Executor Session, or of one of its subagents, which runs under DSH's `standard` preset with the worker's
    * permissions, gets the same work tools as the worker, and none once the worker's ticket ended. Any other agent is left as
@@ -479,6 +506,7 @@ export class Sessions {
   }
   /** Releases registrations for `agent` in reverse order (LIFO); disposing its skill scope releases its skills as well. */
   private release(agent: Agent): void {
+    this.answerers.delete(agent.id)
     const binding = this.bindings.get(agent)
     if (!binding) return
     this.bindings.delete(agent)
