@@ -111,7 +111,8 @@ export class Runtime extends Service implements SourceHost {
     try {
       const report = (error: unknown) => { ctx.logger.warn('dsh-superagent: %s', String(error)) }
       const store = opened = this.store = new Store(join(machine.stateDir, 'orchestrator.sqlite'), report)
-      const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart })
+      const setup = this.setup = new Setup({ context: ctx, machine, lifetime: this.lifetime, restart,
+        projects: () => this.local.projects() })
       // The panel's pull and build runs the service script in this checkout, against the chain whose code repository a remote names.
       this.prepare = new Prepare({ checkout: this.checkout, directory: packageRoot(), script: packagePath('scripts', 'dsh-superagent'),
         logDir: join(machine.stateDir, 'prepare'),
@@ -151,7 +152,7 @@ export class Runtime extends Service implements SourceHost {
         } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
         lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment,
-        workerEnvironment: () => setup.workerEnvironment, environmentFor: chain => setup.environmentFor(chain),
+        workerEnvironment: () => setup.workerEnvironment, environmentForTicket: ticket => this.environmentForTicket(ticket),
         deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,
         worktreeRoot: ticket => this.ticketProject(ticket)?.worktreeRoot,
         repliedTo: trigger => repliedTo({ store, sources }, trigger) })
@@ -190,7 +191,7 @@ export class Runtime extends Service implements SourceHost {
         answers: new Questions({ context: ctx, store, sessions, lifetime: this.lifetime }), lifetime: this.lifetime,
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       this.projects = new Projects({ store, local: this.local, settings: this.settings, configured: () => setup.configured(),
-        deploymentFor: chain => setup.deploymentFor(chain) })
+        deploymentFor: chain => setup.deploymentFor(chain), refreshProject: project => setup.projectCommands(project) })
       this.sourceDeps = { store, engine, outbox, commands, sources, get ready() { return runtime.ready },
         get deployment() { return setup.deployment }, configured: () => setup.configured(),
         get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem }, receive: trigger => passes.receive(trigger) }
@@ -234,12 +235,30 @@ export class Runtime extends Service implements SourceHost {
     const chain = sourceTrigger(this, ticket)?.meta.chain
     return typeof chain === 'string' ? chain : undefined
   }
-  /** The worker environment of a Session: the chain of the ticket it executes, or the deployment's primary chain. */
+  /**
+   * The worker environment of a Session: the project and chain shims of the ticket it executes. A subagent Session, direct
+   * or deeper, inherits the environment of the worker Session it was started from, so it reads the same PATH; a Session
+   * outside any ticket, such as the main Session, gets the deployment's primary chain.
+   */
   sessionEnvironment(sessionId?: string): Record<string, string> {
-    const ticketId = sessionId?.startsWith('worker-') ? sessionId.slice('worker-'.length) : undefined
     // A Session outliving a failed setup still gets the primary environment rather than an error from an unresolved deployment.
-    const ticket = ticketId && this.setup.configured() ? this.store.tickets.get(ticketId) : undefined
-    return this.setup.environmentFor(ticket ? this.ticketDeployment(ticket).chain : undefined)
+    const ticket = this.setup.configured() ? this.sessionTicket(sessionId) : undefined
+    return ticket ? this.environmentForTicket(ticket) : this.setup.environmentFor()
+  }
+  /** The ticket whose worker Session is `sessionId` or one of its subagent descendants, if any. */
+  private sessionTicket(sessionId?: string): Ticket | undefined {
+    const seen = new Set<string>()
+    for (let id: string | undefined = sessionId; id !== undefined && !seen.has(id); id = this.ctx.agents.get(id as SessionId)?.session.header.parentSession) {
+      seen.add(id)
+      if (id.startsWith('worker-')) return this.store.tickets.get(id.slice('worker-'.length))
+    }
+    return undefined
+  }
+  /** Explicit environment for a ticket's worker shell and prepare command: its project's shims before its chain's. */
+  environmentForTicket(ticket: Ticket): Record<string, string> {
+    const project = this.ticketProject(ticket)
+    const projectId = project?.blockedCommands?.length ? project.id : undefined
+    return this.setup.environmentFor(this.ticketDeployment(ticket).chain, projectId)
   }
   /**
    * The deployment a ticket executes under: the chain of its local project, or its chain's configured deployment.
@@ -264,7 +283,8 @@ export class Runtime extends Service implements SourceHost {
     const trigger = sourceTrigger(this, ticket)
     const { sources } = this
     const deployment = this.ticketDeployment(ticket)
-    return ticketEnvironment({ deployment, sources, settings: this.store.settings(), ticket, ...trigger ? { trigger } : {} })
+    return ticketEnvironment({ deployment, sources, settings: this.store.settings(), ticket, project: this.ticketProject(ticket),
+      ...trigger ? { trigger } : {} })
   }
   checkSetup(): void { this.setup.check() }
   receive(trigger: Trigger): ReceiveResult { return this.passes.receive(trigger) }

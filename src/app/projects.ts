@@ -16,6 +16,8 @@ export interface ProjectsHost {
   configured?(): boolean
   /** The deployment of one chain, whose account the panel shows beside a project. */
   deploymentFor?(chain?: string): Deployment
+  /** Rewrite only this project's blocked-command shims after its record changed. */
+  refreshProject?(project: LocalProject): Promise<void>
 }
 
 /** The editable project fields; `cli` is not a project field but the GitHub CLI written to the project's chain row. */
@@ -166,6 +168,9 @@ export class Projects {
       this.host.store.delete(KV.local.project(project.id))
       throw error
     }
+    // The project's own shim directory is written here rather than at a restart, so a new project's blocked commands
+    // apply to its next Ticket and no other project's shims are touched.
+    if (project.blockedCommands?.length) await this.host.refreshProject?.(project)
     return project
   }
 
@@ -185,6 +190,7 @@ export class Projects {
         ...this.prepare(input, project), ...this.blockedCommands(input, project) }, project)
       const updated = local.patchProject(project, fields)
       local.putProject(updated)
+      if (this.commandsChanged(project, updated)) await this.host.refreshProject?.(updated)
       return updated
     }
     const merged: LocalProjectFields = {
@@ -216,7 +222,13 @@ export class Projects {
       await this.host.settings.save('source:github', { enabled, config: { ...config, chains: config.chains } }, revision, 'panel').catch(() => {})
       throw error
     }
+    if (this.commandsChanged(project, updated)) await this.host.refreshProject?.(updated)
     return updated
+  }
+
+  /** Whether a project's own blocked-command list differs from the one it had, so only that project's shims need a rewrite. */
+  private commandsChanged(before: LocalProject, after: LocalProject): boolean {
+    return (before.blockedCommands ?? []).join(' ') !== (after.blockedCommands ?? []).join(' ')
   }
 
   /**
