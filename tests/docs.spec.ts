@@ -266,8 +266,8 @@ describe('discussion documentation', () => {
   it('states the discuss Ticket mode and its answering session in the execution document', () => {
     const execution = prose('docs/003-execution.md')
     expect(execution).toContain('A Ticket\'s `mode` says how its worker works')
-    expect(execution).toContain('a discussion Thread (`local:d-…`) gives `discuss`')
-    expect(execution).toContain('A discussion session answers on its discussion\'s Thread and is not the work')
+    expect(execution).toContain('a discussion Thread (`local:d-…`) never reaches Eval, so it gives no Ticket at all')
+    expect(execution).toContain('A discussion is answered by its own Session')
     expect(execution).toContain('reads the discussion guide instead of the alignment guide')
     expect(execution).toContain('receives no `orchestrator_align`')
   })
@@ -281,9 +281,9 @@ describe('discussion documentation', () => {
   })
   it('names the discussion modules, prompts and test rows in the architecture document', () => {
     const architecture = prose('docs/007-architecture.md')
-    expect(architecture).toContain('`localTicketMode`')
+    expect(architecture).toContain('`Answers`')
     expect(architecture).toContain('`composeDiscuss`')
-    expect(architecture).toContain('A discuss Ticket (`mode: \'discuss\'`) answers only')
+    expect(architecture).toContain('A discussion\'s Answerer Session answers only')
     expect(architecture).toContain('The Discussions tab between Overview and New requirement')
     expect(architecture).toContain('`prompts/discuss.md`')
   })

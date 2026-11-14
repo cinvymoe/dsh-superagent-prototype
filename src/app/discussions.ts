@@ -10,6 +10,11 @@ export interface DiscussionsHost {
   readonly store: Pick<Store, 'get' | 'set' | 'delete' | 'keys'>
   /** Delivers a Trigger to the Engine, exactly as a requirement's own messages are delivered. */
   receive(trigger: Trigger): ReceiveResult
+  /**
+   * Hands one human message to the discussion's Answerer. The Engine never evaluates a discussion Thread, so this is what
+   * makes the discussion answer; `triggerId` is the Thread Trigger the message was stored as.
+   */
+  answer?(discussion: LocalDiscussion, text: string, triggerId: string): void
   now?(): string
 }
 
@@ -35,6 +40,9 @@ export class Discussions {
 
   get(id: string): LocalDiscussion | undefined { return this.host.store.get(KV.local.discussion(id)) }
 
+  /** Write a discussion record back, the way the Answering queue records its answers on it. */
+  put(discussion: LocalDiscussion): void { this.host.store.set(KV.local.discussion(discussion.id), discussion) }
+
   /** The Thread every message about this discussion belongs to. */
   thread(id: string): string { return localThreadKey(id) }
 
@@ -52,12 +60,14 @@ export class Discussions {
     const discussion: LocalDiscussion = { id, title, body, author: input.author?.trim() || LOCAL_ACTOR, project: input.project,
       createdAt: at, updatedAt: at, state: 'open' }
     this.host.store.set(KV.local.discussion(id), discussion)
-    try { this.host.receive(localTrigger({ discussion, text: body, at, id: key('local-trigger', id, at) })) }
+    const triggerId = key('local-trigger', id, at)
+    try { this.host.receive(localTrigger({ discussion, text: body, at, id: triggerId })) }
     catch (error) {
       // A delivery the Engine refused leaves no half-created discussion behind.
       this.host.store.delete(KV.local.discussion(id))
       throw error
     }
+    this.host.answer?.(discussion, body, triggerId)
     return discussion
   }
 
@@ -83,7 +93,9 @@ export class Discussions {
     const at = this.clock()
     const updated: LocalDiscussion = { ...discussion, updatedAt: at }
     this.host.store.set(KV.local.discussion(id), updated)
-    this.host.receive(localTrigger({ discussion: updated, text: text.trim(), at, id: key('local-trigger', id, at, text) }))
+    const triggerId = key('local-trigger', id, at, text)
+    this.host.receive(localTrigger({ discussion: updated, text: text.trim(), at, id: triggerId }))
+    this.host.answer?.(updated, text.trim(), triggerId)
     return updated
   }
 

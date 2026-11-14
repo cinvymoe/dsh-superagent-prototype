@@ -72,6 +72,7 @@
 .dt-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .dt-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .dt-timeline-form { margin-bottom: 8px; }
+.dt-answer { padding: 10px 12px; border-left: 3px solid var(--dsw-alias-border-l4); border-radius: 0 12px 12px 0; background: var(--dsw-alias-bg-layer-2); }
 .dt-event { padding: 12px 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .dt-event:last-child { border-bottom: 0; }
 .dt-event.dt-highlight { background: var(--dsw-alias-interactive-bg-hover); border-radius: 8px; padding-inline: 8px; margin-inline: -8px; }
@@ -138,6 +139,7 @@
 div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 16px; min-width: 0; }
 .dt-card-head { display: flex; align-items: center; gap: 12px; min-height: 28px; }
+.dt-result { padding: 12px 14px; border-radius: 12px; background: var(--dsw-alias-bg-layer-2); }
 .dt-card-head .dt-row-main { flex: 1 1 0; min-width: 64px; }
 .dt-card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Alignment rounds: the current round reads as the card's body, earlier rounds as one collapsed disclosure row each. */

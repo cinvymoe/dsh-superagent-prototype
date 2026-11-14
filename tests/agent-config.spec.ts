@@ -157,19 +157,16 @@ it('applies an aligner\'s own plugin switches to its alignment and discussion Se
   const alignAllow = h.restrictions.get(`worker-${align.ticket.ticket_id}`)!.at(-1)!
   expect(alignAllow).not.toContain('read_image')
   expect(alignAllow).toContain('bash')
-  // A discussion Session reuses the aligner's model and plugins, and has no alignment tool.
+  // A discussion's Answerer reuses the aligner's model and switches: read-only, narrowed to the aligner's own plugins, no alignment tool.
   const discussion = h.runtime.discussions.create({ body: 'Discuss the split', project: project.id })
-  await h.runtime.idle()
-  llm.resolveCallConfig.mockClear()
-  const discuss = await h.route({ kind: 'accept', trigger_id: h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 1)[0]!.id,
-    title: 'Discuss the split', worktree_name: 'discuss-split', acknowledgement: '收到，先讨论。' }) as { ticket: { ticket_id: string } }
-  await h.runtime.idle()
-  const discussSession = `worker-${discuss.ticket.ticket_id}`
+  const answerer = `answerer-${discussion.id}`
+  await vi.waitFor(() => expect(h!.agents.get(answerer)?.status).toBe('running'))
   expect(llm.resolveCallConfig).toHaveBeenCalledWith(alignerModel)
-  const discussAllow = h.restrictions.get(discussSession)!.at(-1)!
-  expect(discussAllow).not.toContain('read_image')
-  expect(discussAllow).toContain('bash')
-  expect(h.tools.get(discussSession)!.has('orchestrator_align')).toBe(false)
+  const answererAllow = h.restrictions.get(answerer)!.at(-1)!
+  expect(answererAllow).not.toContain('read_image')
+  expect(answererAllow).toContain('read')
+  expect(answererAllow).not.toContain('bash')
+  expect(h.tools.get(answerer)!.has('orchestrator_align')).toBe(false)
   const work = await h.acceptedTicket(feishu('2', '@bot 修一下回归'))
   expect(h.restrictions.get(work.sessionId)!.at(-1)).toContain('read_image')
 })

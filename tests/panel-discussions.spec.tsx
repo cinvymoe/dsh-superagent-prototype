@@ -4,7 +4,7 @@
 import { expect, it } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, all, click, type, text, at, tab } from './fixtures/panel.tsx'
-import { localDiscussion, localDiscussionComment, localIssue, server } from './fixtures/panel-server.ts'
+import { localDiscussion, localDiscussionAnswer, localDiscussionComment, localIssue, server } from './fixtures/panel-server.ts'
 
 usePanel()
 
@@ -73,19 +73,18 @@ it('starts a discussion from the list and opens it', async () => {
 
 it('reads one discussion with its messages newest first, the follow-up box above them, and posts a comment', async () => {
   server.localProjects = [PROJECT]
-  const talk = localDiscussion('Layout talk', 'The body of the talk', PROJECT.id, 'd-talk')
-  server.localDiscussions = [talk]
+  const base = localDiscussion('Layout talk', 'The body of the talk', PROJECT.id, 'd-talk')
   // The fake clock posts new comments on 2026-09-24, so the seeded messages are older and stay in a stable order.
-  server.localDiscussionComments = { 'd-talk': [localDiscussionComment(talk, 'First remark', '2026-09-20T00:00:01Z'),
-    localDiscussionComment(talk, 'Second remark', '2026-09-21T00:00:02Z')] }
-  server.localDiscussionReplies = { 'd-talk': [{ id: 'r-1', channel: { source: 'local', thread: 'local:d-talk', address: { discussion: 'd-talk' } },
-    text: 'The agent answer', kind: 'reply', status: 'sent', sentAt: '2026-09-22T00:00:03Z' }] }
+  server.localDiscussions = [{ ...base, answers: [
+    localDiscussionAnswer(base, 'First remark', '2026-09-20T00:00:01Z'),
+    localDiscussionAnswer(base, 'Second remark', '2026-09-21T00:00:02Z')] }]
   at({ page: 'discussions', id: 'd-talk' })
   await mount()
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Layout talk')
   expect(text()).toContain('The body of the talk')
   expect(text()).toContain(zh['discussion.detail'])
-  expect(messages()).toEqual(['The agent answer', 'Second remark', 'First remark'])
+  // Each message carries the Answerer's reply under it, newest exchange first.
+  expect(messages()).toEqual(['Second remark', 'Answer to Second remark', 'First remark', 'Answer to First remark'])
   // The follow-up box sits above the list, so a submitted comment lands first, directly under it.
   expect(precedes(area(zh['discussion.commentPlaceholder']), all('.dt-timeline')[0]!)).toBe(true)
   await type(area(zh['discussion.commentPlaceholder']), 'A third remark')
@@ -169,4 +168,15 @@ it('shows the discussion pages in English as well', async () => {
   expect(text()).toContain(en['discussion.detail'])
   expect(text()).toContain(en['discussion.messages'])
   expect(all('#dt-page button').some(item => item.textContent?.trim() === en['discussion.createIssue'])).toBe(true)
+})
+
+it('still shows a message written before answers were recorded', async () => {
+  server.localProjects = [PROJECT]
+  const base = localDiscussion('Old talk', 'Old body', PROJECT.id, 'd-old')
+  server.localDiscussions = [base]
+  server.localDiscussionComments = { 'd-old': [localDiscussionComment(base, 'An older remark', '2026-09-19T00:00:00Z')] }
+  at({ page: 'discussions', id: 'd-old' })
+  await mount()
+  // The body is shown once above the timeline; the message recorded before answers existed still shows there.
+  expect(messages()).toEqual(['An older remark'])
 })

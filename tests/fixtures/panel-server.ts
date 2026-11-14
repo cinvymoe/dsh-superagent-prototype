@@ -25,7 +25,7 @@ import { feishuKind } from '../../src/sources/feishu.ts'
 import { githubKind } from '../../src/sources/github.ts'
 import type { Health } from '../../src/sources/host.ts'
 import type { SourceKind } from '../../src/sources/kind.ts'
-import type { LocalDiscussion, LocalIssue } from '../../src/sources/local-format.ts'
+import type { LocalAnswer, LocalDiscussion, LocalIssue } from '../../src/sources/local-format.ts'
 import { testDeployment } from './deployment.ts'
 
 export const MEMBER = 'ou_alice'
@@ -82,6 +82,10 @@ const localThread = (issue: LocalIssue, extra: TriggerRow[] = [], dispatched = f
 /** A discussion record the fixture serves; `id` stays stable per fixture scenario. */
 export const localDiscussion = (title: string, body = '', project = 'p-fixture', id = 'd-fixture'): LocalDiscussion =>
   ({ id, title, body, author: 'local', project, createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z', state: 'open' })
+/** One message of a discussion with the Answerer's reply, as the host records it; `extra` overrides its state. */
+export const localDiscussionAnswer = (discussion: LocalDiscussion, text: string, at: string,
+  extra: Partial<LocalAnswer> = {}): LocalAnswer => ({ id: `an-${at}`, discussionId: discussion.id, triggerId: `t-${at}`, text, at,
+  state: 'answered', sessionId: `answerer-${discussion.id}`, answer: `Answer to ${text}`, answeredAt: at, ...extra })
 /** A human message on a discussion's own thread. */
 export const localDiscussionComment = (discussion: LocalDiscussion, text: string, at: string): TriggerRow => ({
   ...localTrigger(discussion), id: `local-discussion-comment-${at}`, at, text, preview: text })
@@ -561,9 +565,21 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (!discussion) return refuse(404, 'Local discussion not found')
     const posted = server.localDiscussionComments[params.id] ?? []
     const at = new Date(Date.UTC(2026, 8, 24, 0, 0, posted.length)).toISOString()
-    const next = { ...discussion, updatedAt: at }
+    const text = String(body.text).trim()
+    const next = { ...discussion, updatedAt: at,
+      answers: [...discussion.answers ?? [], localDiscussionAnswer(discussion, text, at)] }
     server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
-    server.localDiscussionComments = { ...server.localDiscussionComments, [params.id]: [...posted, localDiscussionComment(next, String(body.text).trim(), at)] }
+    server.localDiscussionComments = { ...server.localDiscussionComments, [params.id]: [...posted, localDiscussionComment(next, text, at)] }
+    return { discussion: next }
+  } },
+  'POST local/discussions/:id/answers/:answerId/retry': { answer: ({ params }) => {
+    const discussion = server.localDiscussions.find(item => item.id === params.id)
+    if (!discussion) return refuse(404, 'Local discussion not found')
+    const answers = discussion.answers ?? []
+    if (!answers.some(answer => answer.id === params.answerId)) return refuse(404, 'Local answer not found')
+    const next = { ...discussion, answers: answers.map(answer => answer.id === params.answerId
+      ? { ...answer, state: 'queued' as const, failure: undefined } : answer) }
+    server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
     return { discussion: next }
   } },
   'POST local/discussions/:id/close': { answer: ({ params }) => {

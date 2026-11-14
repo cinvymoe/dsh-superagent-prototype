@@ -2,11 +2,12 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Discussions } from '../src/app/discussions.ts'
 import { LocalIssues } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
 import type { Trigger } from '../src/core/index.ts'
+import { KV } from '../src/kv.ts'
 import type { LocalDiscussion } from '../src/sources/local-format.ts'
 import { startRuntime, type Host } from './fixtures/host.ts'
 
@@ -131,7 +132,7 @@ describe('the discussion records', () => {
   })
 })
 
-describe('the discussion sessions', () => {
+describe('the discussion answers', () => {
   let h: Host
   let project: { id: string }
   beforeEach(async () => {
@@ -140,43 +141,70 @@ describe('the discussion sessions', () => {
   })
   afterEach(async () => { await h.stop() })
 
-  /** The id of the first human message on a local record's thread. */
-  const firstTrigger = (recordId: string) => h.runtime.store.read.threadTriggers(`local:${recordId}`, 1)[0]!.id
-  /** Accept a local discussion's first message and return its discuss Ticket. */
-  const acceptDiscussion = async (discussionId: string) => {
-    await h.runtime.idle()
-    const result = await h.route({ kind: 'accept', trigger_id: firstTrigger(discussionId), title: 'Discuss the split',
-      worktree_name: 'discuss-split', acknowledgement: '收到，先讨论。' }) as { ticket: { ticket_id: string } }
-    await h.runtime.idle()
-    return h.runtime.store.tickets.get(result.ticket.ticket_id)!
+  /** Let the discussion's Answerer say `answer`, as its model would, and end its turn. */
+  const settle = async (discussionId: string, answer = 'The answer') => {
+    const sessionId = `answerer-${discussionId}`
+    await vi.waitFor(() => expect(h.agents.get(sessionId)?.status).toBe('running'))
+    const agent = h.agents.get(sessionId)!
+    const list = h.events.get(sessionId)!
+    list.push({ type: 'assistant/message', seq: (list.at(-1)?.seq ?? -1) + 1,
+      data: { message: { content: [{ type: 'text', text: answer }] } } } as never)
+    agent.status = 'idle'
+    h.ctx.emit('agent/status', { agent, status: 'idle' } as never)
+    await h.runtime.answers.idle()
   }
 
-  it('accepts a discussion message as a discuss Ticket with the discussion prompt and no align tool', async () => {
+  it('answers a discussion message in its own read-only Session, with no Ticket, Eval or Decision', async () => {
     const discussion = h.runtime.discussions.create({ body: 'How should discussion and issue creation split?', project: project.id })
-    const before = h.runtime.store.tickets.list().length
-    const ticket = await acceptDiscussion(discussion.id)
-    expect(ticket.mode).toBe('discuss')
-    // The message made one Ticket for the discussion, never a plan slice.
-    expect(h.runtime.store.tickets.list()).toHaveLength(before + 1)
-    expect(h.runtime.store.tickets.list().filter(item => item.plan)).toEqual([])
-    const sessionId = `worker-${ticket.id}`
-    // The Session answers on the discussion Thread: it reads the discussion guide and has no way to publish an alignment.
-    expect(h.tools.get(sessionId)!.has('orchestrator_align')).toBe(false)
-    expect(h.tools.get(sessionId)!.has('orchestrator_report')).toBe(true)
-    const prompt = h.sections.get(sessionId)!.text({})
-    expect(prompt).toContain('## discussion')
-    expect(prompt).not.toContain('## requirement alignment')
+    await settle(discussion.id, 'Split the records; the Threads already differ.')
+    // The message is an ordinary human Trigger on the discussion's own Thread.
+    expect(h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 1)).toHaveLength(1)
+    // Nothing of the Engine follows it: no Eval waits on the Thread and no Ticket exists.
+    expect(h.runtime.store.threads.get(`local:${discussion.id}`)?.pending).toEqual([])
+    expect(h.runtime.store.threads.get(`local:${discussion.id}`)?.evaluating).toBeUndefined()
+    expect(h.runtime.store.tickets.list()).toEqual([])
+    // The answer sits on the discussion record, produced by its own Session.
+    expect(h.runtime.discussions.get(discussion.id)!.answers).toMatchObject([{ discussionId: discussion.id, state: 'answered',
+      text: 'How should discussion and issue creation split?', answer: 'Split the records; the Threads already differ.',
+      sessionId: `answerer-${discussion.id}` }])
+    // That Session is read-only and cannot publish an alignment.
+    expect(h.restrictions.get(`answerer-${discussion.id}`)!.at(-1)).toEqual(['read', 'read_image', 'glob', 'grep'])
+    expect(h.tools.get(`answerer-${discussion.id}`)!.has('orchestrator_align')).toBe(false)
   })
 
-  it('keeps a further discussion message on the same Ticket and dispatches no slice Tickets', async () => {
+  it('answers a discussion written before answers were recorded once answers resume', async () => {
+    const id = 'd-legacy'
+    const at = '2026-11-14T00:00:00.000Z'
+    h.runtime.store.set(KV.local.discussion(id), {
+      id, title: 'Legacy question', body: 'Legacy question', author: 'local', project: project.id,
+      createdAt: at, updatedAt: at, state: 'open',
+    })
+    h.runtime.answers.resume()
+    await settle(id, 'Answered after the upgrade')
+    expect(h.runtime.discussions.get(id)!.answers).toMatchObject([{ state: 'answered', answer: 'Answered after the upgrade' }])
+  })
+
+  it('answers every later message in the same Session, still without a Ticket', async () => {
     const discussion = h.runtime.discussions.create({ body: 'First thought', project: project.id })
-    const ticket = await acceptDiscussion(discussion.id)
-    expect(h.runtime.discussions.comment(discussion.id, ' One more thought ')).toMatchObject({ id: discussion.id })
-    await h.runtime.idle()
-    // The comment reached the live discuss Ticket instead of starting another Ticket or a slice of its own.
-    expect(h.runtime.store.tickets.list()).toHaveLength(1)
-    expect(h.runtime.store.tickets.list().filter(item => item.plan)).toEqual([])
-    expect(h.runtime.store.tickets.get(ticket.id)!.inputs.some(input => input.kind === 'trigger')).toBe(true)
+    await settle(discussion.id, 'First answer')
+    h.runtime.discussions.comment(discussion.id, ' One more thought ')
+    await settle(discussion.id, 'Second answer')
+    expect(h.runtime.discussions.get(discussion.id)!.answers!.map(answer => [answer.text, answer.answer]))
+      .toEqual([['First thought', 'First answer'], ['One more thought', 'Second answer']])
+    expect(h.runtime.store.tickets.list()).toEqual([])
+  })
+
+  it('records a failed answer a person may retry without leaving the Thread evaluated', async () => {
+    const discussion = h.runtime.discussions.create({ body: 'Answer this', project: project.id })
+    // The turn ends with no assistant text, which is a failure the panel offers to retry.
+    await settle(discussion.id, '')
+    const failed = h.runtime.discussions.get(discussion.id)!.answers![0]!
+    expect(failed.state).toBe('failed')
+    expect(failed.failure?.reason).toBe('empty-answer')
+    h.runtime.answers.retry(discussion.id, failed.id)
+    await settle(discussion.id, 'Retried answer')
+    expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'Retried answer' })
+    expect(h.runtime.store.tickets.list()).toEqual([])
   })
 })
 

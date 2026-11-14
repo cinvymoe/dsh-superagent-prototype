@@ -134,17 +134,23 @@ describe('eval', () => {
     expect(() => h.decide(first, { kind: 'ignore', reason: 'chatter' })).toThrow('has finished or a later eval replaced it')
     expect(h.decide(second, { kind: 'ignore', reason: 'chatter' })).toMatchObject({ kind: 'ignore', evalId: second.evalId })
   })
-  it('gives a local discussion Thread a discuss Ticket and a local requirement Thread an align one, with no plan', () => {
+  it('never sends a local discussion Thread to Eval, and gives a local requirement Thread an align Ticket with no plan', () => {
     const local = { source: 'local', id: 'local' }
     const gate = { gate: () => ({ admissible: true as const, strength: 'explicit' as const, basis: { via: 'listed' as const } }) }
-    for (const [thread, mode] of [['d-00000001', 'discuss'], ['q-00000001', 'align']] as const) {
-      const h = harness(gate)
-      h.engine.receive(trigger('1', { source: 'local', actor: local, threads: [{ source: 'local', id: thread }] })); h.pump()
-      const decision = h.decide(h.requests.at(-1)!, { kind: 'accept', title: 'x', scope: 'x', reason: 'x' })
-      h.settle()
-      expect(h.repo.tickets.get(decision.ticketId!)?.mode).toBe(mode)
-      expect(h.repo.tickets.list().filter(ticket => ticket.plan)).toEqual([])
-    }
+    // A discussion message is a Trigger on its own Thread, and the Engine never evaluates that Thread.
+    const discussion = harness(gate)
+    discussion.engine.receive(trigger('1', { source: 'local', actor: local, threads: [{ source: 'local', id: 'd-00000001' }] }))
+    discussion.pump()
+    expect(discussion.requests).toEqual([])
+    expect(discussion.repo.triggers.get('1')?.id).toBe('1')
+    expect(discussion.repo.threads.get('local:d-00000001')?.evaluating).toBeUndefined()
+    // A requirement's Thread still reaches Eval, and its Ticket is an alignment, which takes no plan.
+    const requirement = harness(gate)
+    requirement.engine.receive(trigger('1', { source: 'local', actor: local, threads: [{ source: 'local', id: 'q-00000001' }] })); requirement.pump()
+    const decision = requirement.decide(requirement.requests.at(-1)!, { kind: 'accept', title: 'x', scope: 'x', reason: 'x' })
+    requirement.settle()
+    expect(requirement.repo.tickets.get(decision.ticketId!)?.mode).toBe('align')
+    expect(requirement.repo.tickets.list().filter(ticket => ticket.plan)).toEqual([])
   })
   it('records an accept with its ticket, subscriptions and acknowledgement together, or none of them', async () => {
     const h = harness({}, { prepareTicket: () => { throw new Error('No directory for the ticket') } })
