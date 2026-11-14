@@ -5,6 +5,7 @@ import { alignmentRounds, currentAlignment, projectRepositories, requirementExec
   type LocalIssue, type LocalIssueView } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
 import { Button, DisclosureRow, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
+import { SourceDiscussion, useDiscussionPrefill } from './discussions.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
@@ -117,11 +118,13 @@ const executionTag = (t: T, issue: LocalIssue) =>
   <Tag tone={requirementExecutionMode(issue) === 'feature-exec' ? 'info' : 'neutral'}>{executionLabel(t, issue)}</Tag>
 
 /** New-requirement page: the current project's head and one description field; each submission becomes a Thread. */
-export function NewRequirementPage() {
+export function NewRequirementPage({ discussion: discussionId }: { discussion?: string } = {}) {
   const { t, call, notify, navigate, project } = usePanel()
   const { projects } = usePanelData()
-  const active = projects.find(item => item.id === project) ?? projects[0]
   const [description, setDescription] = useState('')
+  // A page opened from a discussion seeds its box once with that discussion's text, which stays fully editable.
+  const source = useDiscussionPrefill(discussionId, setDescription)
+  const active = projects.find(item => item.id === (source?.project ?? project)) ?? projects[0]
   const [images, setImages] = useState<ChosenImage[]>([])
   const [busy, setBusy] = useState(false)
   const picker = useRef<HTMLInputElement>(null)
@@ -155,6 +158,7 @@ export function NewRequirementPage() {
     setBusy(true)
     try {
       const { issue } = await call('POST local/issues', { body: { body: text, project: active.id,
+        ...(source ? { discussion: source.id } : {}),
         ...(images.length ? { images: images.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}) } })
       setDescription('')
       setImages([])
@@ -164,6 +168,9 @@ export function NewRequirementPage() {
   return <>
     <PageHead back={false} title={active ? active.name : t('discuss.new')}>
       <span className="dt-hint">{t('discuss.newSubtitle')}</span>
+      {source && <span className="dt-hint">{t('discussion.prefill', { title: source.title })}</span>}
+      {source && <Button variant="outline" size="sm" icon={<Icon name="message" size={14} />}
+        onClick={() => navigate({ page: 'discussions', id: source.id })}>{t('discussion.openDiscussion')}</Button>}
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
       {active?.missingChain && <span className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
@@ -377,6 +384,7 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
           <span className="dt-mono">{issue.id}</span>{data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}
             {data.project.worktreeRoot ? ` · ${data.project.worktreeRoot}` : ''}</span>}
           {data.project?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: data.project.bot })}</span>}</div>
+        {issue.discussionId && <div className="dt-actions"><SourceDiscussion id={issue.discussionId} /></div>}
         {issue.body && <MarkdownLite text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
         <RequirementImages issue={issue} />

@@ -4,6 +4,7 @@ import type { SearchView } from './api.ts'
 import { Button, Dot, Icon, Input, Modal, SegmentedTabs } from './controls.tsx'
 import type { DeploymentForm } from './deployment.tsx'
 import { NewRequirementPage, RequirementDetail, RequirementList } from './discuss.tsx'
+import { DiscussionDetail, DiscussionList } from './discussions.tsx'
 import { EvalStatus } from './eval.tsx'
 import { ExecutionStatus } from './execution.tsx'
 import { ticketMark } from './marks.ts'
@@ -149,7 +150,8 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
   const page = (() => {
     switch (route.page) {
       case 'overview': return <OverviewPage />
-      case 'newRequirement': return <NewRequirementPage />
+      case 'discussions': return route.id !== undefined ? <DiscussionDetail key={route.id} id={route.id} /> : <DiscussionList />
+      case 'newRequirement': return <NewRequirementPage discussion={route.discussion} />
       case 'requirements': return route.id !== undefined
         ? <RequirementDetail key={route.id} id={route.id} filter={route.query?.filter ?? 'pending'} />
         : route.edit ? <ProjectFormPage key={route.edit} edit={route.edit} />
@@ -193,6 +195,7 @@ export function App({ t, openSession, deploymentForm }: AppProps) {
     switch (tab) {
       case 'settings': return settingsRoute(lastSettingsGroup(current))
       case 'overview': return { page: 'overview' as const }
+      case 'discussions': return { page: 'discussions' as const }
       case 'newRequirement': return { page: 'newRequirement' as const }
       case 'requirements': return { page: 'requirements' as const }
       case 'source': return { page: 'source' as const }

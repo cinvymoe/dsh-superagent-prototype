@@ -153,6 +153,8 @@ export interface PanelServer {
   localDiscussions: LocalDiscussion[]
   /** Human messages posted into a discussion's thread, oldest first, keyed by discussion id. */
   localDiscussionComments: Record<string, TriggerRow[]>
+  /** Sent agent replies shown on a discussion's thread, keyed by discussion id. */
+  localDiscussionReplies: Record<string, Receipt[]>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
 worktreeRoot?: string; prepare?: string; blockedCommands?: string[]; cli?: string; bot?: string; missingChain?: string;
     createdAt: string; updatedAt: string }[]
@@ -370,7 +372,8 @@ function initial(): PanelServer {
       defaults: defaultPrompts(), parts: Object.entries(builtInParts()).map(([key, part]) => ({ key, ...part, base: builtInBase(part.text) })),
       defaultChanged: [], revisions: [{ ...defaults, changed: [] }], sessions: [], notificationPending: false, next_offset: null },
     tickets: { open: [ticketSummary()], ended: [ended] }, ticketDetails: { t1: ticketDetail() }, localIssues: [],
-    issueSlicesFinished: new Set(), localComments: {}, localReplies: {}, dispatchedIssues: new Set(), localDiscussions: [], localDiscussionComments: {},
+    issueSlicesFinished: new Set(), localComments: {}, localReplies: {}, dispatchedIssues: new Set(), localDiscussions: [],
+    localDiscussionComments: {}, localDiscussionReplies: {},
     localProjects: [],
     threads: [threadSummary()], threadPages: threadPage,
     person: [ticketSummary({ attention: { id: 'q1', question: '需要确认按钮颜色' }, note: { text: '需要确认按钮颜色', error: false }, reply },
@@ -551,7 +554,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (!discussion) return refuse(404, 'Local discussion not found')
     return { discussion, project: server.localProjects.find(project => project.id === discussion.project) ?? null,
       thread: server.threadPages(`local:${params.id}`, {}) ?? localDiscussionThread(discussion, server.localDiscussionComments[params.id] ?? []),
-      replies: [] }
+      replies: server.localDiscussionReplies[params.id] ?? [] }
   } },
   'POST local/discussions/:id/comments': { body: true, answer: ({ params, body }) => {
     const discussion = server.localDiscussions.find(item => item.id === params.id)
@@ -583,14 +586,32 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     const description = (body.body ?? '').trim()
     const title = body.title?.trim() || (description.split('\n').find((line: string) => line.trim()) ?? '').trim()
       .replace(/\s+/g, ' ').slice(0, 200)
+    // A requirement made from a discussion keeps that link, and the discussion records the one requirement it created.
+    const discussion = body.discussion === undefined ? undefined
+      : server.localDiscussions.find(item => item.id === body.discussion)
+    if (body.discussion !== undefined && !discussion) {
+      return refuse(400, 'Unknown local discussion', { code: 'unknownDiscussion', values: { discussion: body.discussion } })
+    }
+    if (discussion?.issueId !== undefined) {
+      return refuse(400, 'The discussion already created a requirement',
+        { code: 'discussionLinked', values: { discussion: discussion.id, issue: discussion.issueId } })
+    }
+    if (discussion && discussion.project !== body.project) {
+      return refuse(400, 'The discussion belongs to another project', { code: 'discussionProject', values: { project: discussion.project } })
+    }
     // Echo the submitted image metadata: a stable id, the original name and media type, and the decoded byte count.
     const images = (body.images ?? []).map((image, index) => ({
       id: `img-${index + 1}`, name: image.name, mediaType: image.mediaType,
       bytes: Buffer.from(image.data.replace(/^data:[^;,]*;base64,/i, ''), 'base64').length,
     }))
-    const issue = { ...localIssue(title, description, body.project), ...(images.length ? { images } : {}) }
-    server.localIssues = [issue, ...server.localIssues]
-    return { issue: issueView(issue) }
+    const created = { ...localIssue(title, description, body.project), ...(discussion ? { discussionId: discussion.id } : {}),
+      ...(images.length ? { images } : {}) }
+    if (discussion) {
+      const linked = { ...discussion, issueId: created.id }
+      server.localDiscussions = server.localDiscussions.map(item => item.id === discussion.id ? linked : item)
+    }
+    server.localIssues = [created, ...server.localIssues]
+    return { issue: issueView(created) }
   } },
   'GET local/issues/:id': { answer: ({ params }) => {
     const issue = server.localIssues.find(item => item.id === params.id)

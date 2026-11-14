@@ -1,0 +1,41 @@
+# C4 · panel discussions Before/After captures
+
+Slice: `C4` of alignment issue `q-8f89280c` — the Discussions tab managed apart from the Requirements tab.
+Viewport 1440x1100, light theme, zh-CN, `/usr/bin/chromium` headless through Playwright; the same panel clip
+(`x=280, width=1160`) and the same seeded project (`Widgets`) in both runs.
+
+## Revisions
+
+- Before: `origin/main` at `ef6c0562` (merge of PR #64, the C4 baseline), built with `pnpm build`; isolated DSH profile
+  `c4disc-before`, webserver `10.126.126.6:3155`, stateDir `/root/.dsh/state/c4disc-before`.
+- After: this ticket's working tree on `agent/slice-c869b1722f52` (base `ef6c0562`), built with `pnpm build`; isolated DSH
+  profile `c4disc-after`, webserver `10.126.126.6:3156`, stateDir `/root/.dsh/state/c4disc-after`.
+- Both profiles used the same repository chain (`cinvymoe/dsh-superagent-prototype → cinvymoe/dsh-superagent-prototype`)
+  and no live GitHub/Feishu state; the GitHub Source polls no live work and no credentials are shown.
+
+## Seed
+
+- Before: three requirement records, because before the split a discussion was a requirement record — the talk
+  "把讨论和创建需求分开管理" with one human message, "需求列表显示来源讨论" with one human message, and the closed
+  "旧版讨论入口".
+- After: three discussion records in their own record family — the open talk with one human comment, the discussion
+  "需求列表显示来源讨论" that already created the requirement `q-c6d8c99a`, and the closed "旧版讨论入口". The
+  requirement created from a discussion was made with `POST local/issues` carrying the discussion id.
+
+## Captures
+
+| File | Scenario |
+| --- | --- |
+| `before-requirements-list.png` | Baseline Requirements list: the page tabs are 概览 / 新建需求 / 需求列表 / …, with no Discussions tab; the discussion text is a requirement row. |
+| `before-requirement-detail.png` | Baseline requirement detail: the discussion text and its human message live on the requirement page; there is no source-discussion link because no discussion record exists. |
+| `before-new-requirement.png` | Baseline New requirement page: one blank description box. |
+| `after-discussions-list.png` | The new 讨论 tab between 概览 and 新建需求; the current project's discussions newest first with state, linked-requirement mark and created time, and the inline New discussion box. |
+| `after-discussion-detail.png` | Discussion detail: body once, the newest-first message timeline with the follow-up box above it, and the Create Issue / Close discussion actions. |
+| `after-new-requirement-prefilled.png` | Create Issue opens the New requirement page prefilled from the discussion (text stays editable) with the back link to the discussion. |
+| `after-requirement-source-discussion.png` | Requirement detail shows 来源讨论：需求列表显示来源讨论 and links back to that discussion. |
+| `after-requirements-list.png` | The same Requirements list as the baseline: the Discussions tab now sits between Overview and New requirement. |
+
+The after captures were taken from this working tree before the commit; the code under capture is the change this PR
+delivers. Seed and capture scripts were run outside the repository (`/tmp/c4disc-seed*.py`, `/tmp/c4disc-shot.py`).
+
+Command exit status: 0.

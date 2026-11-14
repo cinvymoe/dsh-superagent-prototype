@@ -45,7 +45,7 @@ it('returns to the exact page after a remount of the main panel', async () => {
 
 it('shows domain terms in the interface language only and lists both languages in the (?) glossary', async () => {
   await mount(en)
-  expect(all('[role="tab"]').map(tab => tab.textContent)).toEqual(['Overview', 'New requirement', 'Requirements', 'Source', 'Trigger', 'Eval',
+  expect(all('[role="tab"]').map(tab => tab.textContent)).toEqual(['Overview', 'Discussions', 'New requirement', 'Requirements', 'Source', 'Trigger', 'Eval',
     'Execution', 'Settings'])
   await click('Glossary')
   const dialog = document.querySelector('[role="dialog"]')!
