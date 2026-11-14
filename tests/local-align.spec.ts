@@ -558,7 +558,7 @@ describe('project repository chains', () => {
   const chains = (): Chain[] => h.runtime.store.settings().sources.github!.config.chains as Chain[]
   /** The project rows the panel's `GET local/projects` answers with, including the derived bot CLI and account. */
   const projects = async () => (await h.api('GET', 'local/projects')).body.projects as { id: string; name: string; chain?: string
-    intakeRepository?: string; codeRepository?: string; repository?: string; cli?: string; bot?: string }[]
+    intakeRepository?: string; codeRepository?: string; repository?: string; cli?: string; bot?: string; missingChain?: string }[]
   const create = async (name: string, intakeRepository: string, codeRepository: string, cli?: string) => {
     const answer = await h.api('POST', 'local/projects', { name, intakeRepository, codeRepository, ...(cli ? { cli } : {}) })
     expect(answer.status).toBe(200)
@@ -702,6 +702,43 @@ describe('project repository chains', () => {
     expect(refused.body).toMatchObject({ code: 'chainIntakeTaken', values: { chain: 'default', repository: 'acme/other' } })
     // The refused save stored nothing.
     expect(h.runtime.store.settings().sources.github!.config).toEqual(next.value.config)
+  })
+
+  it('marks a project whose GitHub chain the Source no longer holds, lists it, and leaves every setting untouched', async () => {
+    const at = '2026-11-14T03:24:25.245Z'
+    // The current deployment shape: the superagent project names its own chain, while the Source holds only default.
+    h.runtime.local.putProject({ id: 'p-0d3a3830', name: 'superagent', chain: 'p-0d3a3830',
+      intakeRepository: 'cinvymoe/dsh-superagent-prototype', codeRepository: 'cinvymoe/dsh-superagent-prototype', createdAt: at, updatedAt: at })
+    h.runtime.local.putProject({ id: 'p-bac24269', name: 'rust_crane', chain: 'default', intakeRepository: 'acme/widgets',
+      codeRepository: 'acme/widgets', createdAt: '2026-11-12T06:21:47.197Z', updatedAt: '2026-11-12T06:21:47.197Z' })
+    const settingsBefore = h.runtime.store.settings()
+    const revisionBefore = h.runtime.store.blockRevision('source:github')
+    const listed = await projects()
+    const gone = listed.find(row => row.id === 'p-0d3a3830')!
+    // The project carries the missing-chain marker with the chain id, and its other fields still read normally.
+    expect(gone).toMatchObject({ id: 'p-0d3a3830', name: 'superagent', chain: 'p-0d3a3830', missingChain: 'p-0d3a3830',
+      intakeRepository: 'cinvymoe/dsh-superagent-prototype', codeRepository: 'cinvymoe/dsh-superagent-prototype' })
+    expect(gone.missingChain).toBe(gone.chain)
+    // A project whose chain the Source still holds is untouched.
+    expect(listed.find(row => row.id === 'p-bac24269')).not.toHaveProperty('missingChain')
+    // The health summary lists exactly that project, with its chain id.
+    const overview = await h.api('GET', 'overview')
+    expect((overview.body.problems as { kind: string }[]).filter(problem => problem.kind === 'project-chain-missing'))
+      .toEqual([{ kind: 'project-chain-missing', project: { id: 'p-0d3a3830', name: 'superagent' }, chain: 'p-0d3a3830' }])
+    // Reading both views changes no project and no Source setting.
+    expect(h.runtime.store.settings()).toEqual(settingsBefore)
+    expect(h.runtime.store.blockRevision('source:github')).toBe(revisionBefore)
+    // With the chain back in the Source configuration the marker and the health entry both disappear.
+    const settings = h.runtime.store.settings()
+    const github = settings.sources.github!.config as { chains: Chain[] }
+    h.runtime.store.saveSettings({ ...settings, sources: { ...settings.sources, github: { ...settings.sources.github!,
+      config: { ...github, chains: [...github.chains, { id: 'p-0d3a3830', intakeRepository: 'cinvymoe/dsh-superagent-prototype',
+        codeRepository: 'cinvymoe/dsh-superagent-prototype' }] } } } })
+    const consistent = await projects()
+    expect(consistent.find(row => row.id === 'p-0d3a3830')).not.toHaveProperty('missingChain')
+    expect(consistent.find(row => row.id === 'p-bac24269')).not.toHaveProperty('missingChain')
+    const after = await h.api('GET', 'overview')
+    expect((after.body.problems as { kind: string }[]).filter(problem => problem.kind === 'project-chain-missing')).toEqual([])
   })
 
   it('executes a project ticket through the project\'s own chain', async () => {

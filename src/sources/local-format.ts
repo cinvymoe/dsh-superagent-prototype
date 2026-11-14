@@ -50,6 +50,11 @@ export interface LocalProjectView extends LocalProject {
   cli?: string
   /** Account that CLI is signed in to, as setup resolved it; absent until setup has resolved the chain. */
   bot?: string
+  /**
+   * The chain id this project names that the GitHub Source configuration does not hold. Its Tickets then execute with
+   * another chain's identity, so the panel marks the project instead of letting the fallback look configured.
+   */
+  missingChain?: string
 }
 
 /** One task slice produced by the alignment stage of a local requirement. */

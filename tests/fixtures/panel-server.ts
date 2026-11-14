@@ -138,7 +138,8 @@ export interface PanelServer {
   /** Requirements whose confirmed alignment already dispatched tickets, so their execution mode is read-only. */
   dispatchedIssues: Set<string>
   localProjects: { id: string; name: string; chain?: string; intakeRepository?: string; codeRepository?: string; repository?: string;
-    worktreeRoot?: string; prepare?: string; blockedCommands?: string[]; cli?: string; bot?: string; createdAt: string; updatedAt: string }[]
+worktreeRoot?: string; prepare?: string; blockedCommands?: string[]; cli?: string; bot?: string; missingChain?: string;
+    createdAt: string; updatedAt: string }[]
   /** When set, the create-requirement route refuses with this JSON error (and creates nothing). */
   refuseIssueCreate?: { status: 400; error: string; code: string; values: Record<string, string> }
   /** When set, a project write naming this CLI is refused with the setup problem the host would report. */
@@ -275,6 +276,9 @@ const overviewView = (): ApiResponse<'GET overview'> => {
         && !name.startsWith('sync:') && name !== 'evals')
         .map(([name, item]) => ({ kind: 'runtime-error' as const, name, detail: item.detail })),
       ...Object.values(server.settings.policy.sources).some(part => part.allowed.length) ? [] : [{ kind: 'no-allowed' as const }],
+      // A project whose GitHub chain is missing from the Source configuration is listed but never repaired.
+      ...server.localProjects.filter(project => project.missingChain).map(project => ({ kind: 'project-chain-missing' as const,
+        project: { id: project.id, name: project.name }, chain: project.missingChain! })),
       ...server.failing.map(outgoing => ({ kind: 'outgoing' as const, outgoing }))],
     person: server.person, executor: { running: 2, queued: 0, maxWorkers: server.settings.executor.maxWorkers, idle: 1 },
     flow: { received: 12, filtered: 2, triggers: 10, judged: 5, accepted: 1, evaluating: 0,

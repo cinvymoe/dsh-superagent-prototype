@@ -157,3 +157,16 @@ it('says when no Source is on, an Eval is past its deadline or a message keeps f
   await click('评估超时未决定：#9 迟迟未决')
   expect(server.requests.some(request => request.path.startsWith('threads/github:9'))).toBe(true)
 })
+
+it('lists a project whose GitHub chain is missing and opens the Source settings without writing anything', async () => {
+  server.localProjects = [{ id: 'p-gone', name: 'Superagent', chain: 'p-gone', missingChain: 'p-gone',
+    intakeRepository: 'acme/intake', codeRepository: 'acme/project', createdAt: '2026-09-23T00:00:00Z', updatedAt: '2026-09-23T00:00:00Z' }]
+  await mount()
+  const title = zh['problemProjectChain'].replace('{project}', 'Superagent').replace('{chain}', 'p-gone')
+  expect(text()).toContain(title)
+  expect(text()).toContain(zh['problemProjectChainHint'])
+  // The row only opens the GitHub Source settings; it never saves a setting.
+  await click(find(title, '.dt-att-what button'))
+  expect(tab(zh['tab.settings']).getAttribute('aria-selected')).toBe('true')
+  expect(server.requests.filter(request => request.method === 'PUT' && request.path.startsWith('settings'))).toEqual([])
+})

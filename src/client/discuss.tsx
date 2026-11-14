@@ -166,6 +166,8 @@ export function NewRequirementPage() {
       <span className="dt-hint">{t('discuss.newSubtitle')}</span>
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
+      {active?.missingChain && <span className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
+        { chain: active.missingChain })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
       {active?.prepare && <span className="dt-mono" title={active.prepare}>{t('discuss.projectPrepareSet')}</span>}
       {!!active?.blockedCommands?.length && <span className="dt-mono">{t('discuss.projectBlockedCommandsValue',
@@ -231,6 +233,8 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
       <span className="dt-hint">{t('discuss.listSubtitle')}</span>
       {active && <span className="dt-mono">{projectRepositories(active)}</span>}
       {active?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: active.bot })}</span>}
+      {active?.missingChain && <span className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
+        { chain: active.missingChain })}</span>}
       {active?.worktreeRoot && <span className="dt-mono">{active.worktreeRoot}</span>}
       {active?.prepare && <span className="dt-mono" title={active.prepare}>{t('discuss.projectPrepareSet')}</span>}
       {!!active?.blockedCommands?.length && <span className="dt-mono">{t('discuss.projectBlockedCommandsValue',
@@ -275,6 +279,8 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/issues/:id', { id }), [id])
   const [comment, setComment] = useState('')
+  // One answer draft per Ticket: a requirement can wait on several Tickets at once, and each answer is its own comment.
+  const [answers, setAnswers] = useState<Record<string, string>>({})
   const [reason, setReason] = useState('')
   const [rejecting, setRejecting] = useState(false)
   // The linked Ticket whose Ask composer is open, and its draft: one composer at a time, closed by cancel or submit.
@@ -292,6 +298,17 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
     const text = comment.trim()
     if (!text) return
     await act(async () => { await call('POST local/issues/:id/comments', { id, body: { text } }); setComment('') })
+  }
+  // A question from a Ticket is answered through the same human comment path as the follow-up box: the Engine routes
+  // that Trigger to the subscribed Ticket and the answer joins this requirement's message timeline.
+  const answerSubmit = async (event: FormEvent, ticketId: string) => {
+    event.preventDefault()
+    const text = (answers[ticketId] ?? '').trim()
+    if (!text || busy) return
+    await act(async () => {
+      await call('POST local/issues/:id/comments', { id, body: { text } })
+      setAnswers(current => ({ ...current, [ticketId]: '' }))
+    })
   }
   // A question is about one linked Ticket: the host records it as asked and answers it in the background, and only the
   // requirement record changes, so the page re-reads that record to let the answer appear in the timeline on its poll.
@@ -326,6 +343,9 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   const earlier = rounds.slice(0, -1).reverse()
   // A requirement that already produced Tickets keeps the execution mode they were dispatched under.
   const dispatched = data!.thread.tickets.length > 0
+  // Every Ticket parked in the person/answer stage is a question this page must be able to answer, since a local
+  // Channel has no external page and the generic comment box alone does not say which Ticket the reply belongs to.
+  const waiting = data!.thread.tickets.filter(ticket => ticket.stage === 'person' && ticket.action === 'answer')
   const timeline = data!.thread.timeline
   const replies = data!.replies.filter(reply => reply.status === 'sent')
   // The requirement card above already shows the submitted text, so its original Trigger is left out of the timeline
@@ -361,6 +381,20 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
         <RequirementImages issue={issue} />
       </section>
+
+      {/* A waiting Ticket is the page's call to action: the question and its answer box sit above the alignment proposal. */}
+      {waiting.map(ticket => <section key={ticket.id} className="dt-card">
+        <div className="dt-card-head"><span className="dt-card-title">{t('discuss.waitingAnswer', { title: ticket.title })}</span></div>
+        {ticket.attention && <MarkdownLite text={ticket.attention.question} />}
+        <form className="dt-form" onSubmit={event => { void answerSubmit(event, ticket.id) }}>
+          <textarea className="dt-textarea" rows={3} maxLength={20000} value={answers[ticket.id] ?? ''}
+            placeholder={t('discuss.answerPlaceholder')} aria-label={t('discuss.answerPlaceholder')}
+            onChange={event => { const text = event.target.value
+              setAnswers(current => ({ ...current, [ticket.id]: text })) }} />
+          <div className="dt-actions"><Button type="submit" variant="primary" size="sm" icon={<Icon name="message" size={14} />}
+            disabled={busy || !(answers[ticket.id] ?? '').trim()}>{t('discuss.answerSubmit')}</Button></div>
+        </form>
+      </section>)}
 
       <section className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.alignment')}</span>{statusTag(t, current)}</div>

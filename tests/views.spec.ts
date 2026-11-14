@@ -152,8 +152,9 @@ it('does not show a follow-up that reached a ticket as waiting for an Eval, thou
 })
 
 const load = { running: 0, queued: 0 }
-const problems = (host: ReturnType<typeof views>, health: Parameters<typeof overview>[1] = {}) =>
-  overview(host, health, 'v1', load).problems
+const problems = (host: ReturnType<typeof views>, health: Parameters<typeof overview>[1] = {},
+  missingChains: Parameters<typeof overview>[5] = []) =>
+  overview(host, health, 'v1', load, undefined, missingChains).problems
 
 it('lists an Eval past its deadline, and as dsh-superagent\'s own errors only parts no Source or Policy sync reports', () => {
   const host = views()
@@ -173,6 +174,16 @@ it('lists an Eval past its deadline, and as dsh-superagent\'s own errors only pa
   expect(found.filter(item => item.kind === 'runtime-error')).toEqual([{ kind: 'runtime-error', name: 'relay', detail: 'relay failing' },
     { kind: 'runtime-error', name: 'reply', detail: 'reply failing' }])
   expect(found.filter(item => item.kind === 'source-error').map(item => item.source.health.name)).toEqual(['feishu', 'history'])
+})
+
+it('lists a project whose GitHub chain the Source no longer holds, and changes no setting', () => {
+  const host = views()
+  const settings = store.settings()
+  const found = problems(host, {}, [{ id: 'p-gone', name: 'Superagent', chain: 'p-0d3a3830' }])
+  expect(found).toContainEqual({ kind: 'project-chain-missing', project: { id: 'p-gone', name: 'Superagent' }, chain: 'p-0d3a3830' })
+  // A consistent configuration adds no such problem.
+  expect(problems(host).map(item => item.kind)).not.toContain('project-chain-missing')
+  expect(store.settings()).toEqual(settings)
 })
 
 it('says no Source runs when every Source is off, and states a Source missing or off', () => {

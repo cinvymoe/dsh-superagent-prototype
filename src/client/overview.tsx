@@ -37,6 +37,9 @@ function ProblemLine({ problem, onChanged }: { problem: Problem; onChanged: () =
         message={t('resumeProcessingConfirm')}
         onConfirm={async () => { await call('POST executor/pause', { body: { paused: false } }); await onChanged() }} />)
     case 'runtime-error': return row(t('problemRuntime', { name: valueLabel(t, 'health', problem.name) }), raw(problem.detail), undefined)
+    case 'project-chain-missing': return row(t('problemProjectChain', { project: problem.project.name, chain: problem.chain }),
+      undefined, settingsRoute('source', { source: 'github' }), t('problemProjectChainHint'), go(t('actionOpenSources'),
+        settingsRoute('source', { source: 'github' })))
     case 'source-error': {
       const health = problem.source.health
       return row(t('sourceError', { source: localized(t, problem.source.title) }), health.code ? worded(healthText(t, health))
