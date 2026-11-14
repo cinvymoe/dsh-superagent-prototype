@@ -144,7 +144,11 @@ export class Runtime extends Service implements SourceHost {
         tools: (agent, ticket) => ticket ? executorTools(this.toolHost, ticket) : mainTools(this.toolHost, agent) })
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
-        sourceHost: this, setup, requestPass: () => { this.passes.request() } })
+        sourceHost: this, setup, requestPass: () => { this.passes.request() },
+        // A save of the GitHub chains must keep every project's chain and every intake repository unique; `projects` is set below.
+        guardSource: (id, current, candidate) => {
+          if (id === 'github') this.projects.guardSource(current.sources.github?.config, candidate.sources.github?.config)
+        } })
       this.executor = new DshExecutor({ context: ctx, get engine() { return runtime.engine }, store, effects, health: board.claim('worker'), machine,
         lifetime: this.lifetime, sessions, closing: () => this.closing(), paused: () => this.paused(), environment,
         workerEnvironment: () => setup.workerEnvironment, deploymentFor: chain => setup.deploymentFor(chain), deploymentForTicket: ticket => this.ticketDeployment(ticket), sourceLink: link,

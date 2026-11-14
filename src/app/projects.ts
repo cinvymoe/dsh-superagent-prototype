@@ -14,6 +14,12 @@ export interface ProjectsHost {
   readonly settings: Pick<Settings, 'block' | 'save'>
 }
 
+/** The chains a stored GitHub Source configuration holds, read leniently so a guard never throws on an old shape. */
+function configuredChains(config: unknown): GithubChain[] {
+  const parsed = GithubConfigSchema.safeParse(normalizeGithubConfig(config))
+  return parsed.success ? parsed.data.chains : []
+}
+
 /**
  * Owns the project ↔ GitHub chain association: a new project appends one chain whose id is the project id, and an edit
  * updates only that project's chain. Repository access is checked by `Settings.save` before anything is stored, so an
@@ -36,9 +42,46 @@ export class Projects {
 
   /** The stored GitHub chains, read without requiring the Source to be installed, for startup binding. */
   private chains(): GithubChain[] {
-    const config = this.host.store.settings().sources.github?.config
-    const parsed = GithubConfigSchema.safeParse(normalizeGithubConfig(config ?? {}))
-    return parsed.success ? parsed.data.chains : []
+    return configuredChains(this.host.store.settings().sources.github?.config)
+  }
+
+  /**
+   * Guard a GitHub Source save before it is written. A chain a project uses may not disappear from the list, because
+   * that would silently cut the project off from its intake repository: deleting and renaming (changing its id) are both
+   * refused with the project that owns it. Two chains may not receive Issues from the same repository, which would accept
+   * every requirement twice; that check also covers a save made outside the project form.
+   */
+  guardSource(current: unknown, candidate: unknown): void {
+    const before = configuredChains(current), after = configuredChains(candidate)
+    const saved = new Set(after.map(chain => chain.id))
+    for (const project of this.host.local.projects()) {
+      if (!project.chain || saved.has(project.chain) || !before.some(chain => chain.id === project.chain)) continue
+      throw new UserError('projectChainInUse', { chain: project.chain, project: project.name })
+    }
+    for (let index = 0; index < after.length; index++) {
+      const chain = after[index]!
+      const conflict = after.slice(0, index).find(other => this.sameRepository(this.intakeOf(other), this.intakeOf(chain)))
+      if (conflict) throw this.intakeTaken(this.intakeOf(chain), conflict)
+    }
+  }
+
+  /** The repository a chain receives Issues from; a blank intake repository uses its code repository. */
+  private intakeOf(chain: GithubChain): string { return chain.intakeRepository || chain.codeRepository }
+
+  /** Whether two repository names denote the same GitHub repository, which is case-insensitive. */
+  private sameRepository(left: string, right: string): boolean { return left.toLowerCase() === right.toLowerCase() }
+
+  /** Refuse `repository` when a chain other than `except` already receives Issues from it. */
+  private assertIntakeFree(repository: string, chains: readonly GithubChain[], except?: string): void {
+    const conflict = chains.find(chain => chain.id !== except && this.sameRepository(this.intakeOf(chain), repository))
+    if (conflict) throw this.intakeTaken(repository, conflict)
+  }
+
+  /** The refusal for a taken intake repository, naming the project that owns the chain when one does. */
+  private intakeTaken(repository: string, chain: GithubChain): UserError {
+    const owner = this.host.local.projects().find(project => project.chain === chain.id)
+    return owner ? new UserError('projectIntakeTaken', { repository, project: owner.name })
+      : new UserError('chainIntakeTaken', { repository, chain: chain.id })
   }
 
   /** Save the GitHub Source block with `chains`, reusing the loaded revision so a concurrent edit is a conflict. */
@@ -51,10 +94,13 @@ export class Projects {
     const fields = this.host.local.validateProject(input)
     const project = this.host.local.draftProject(fields)
     const { block, config, enabled } = this.source()
+    const row = this.row(project)
+    // Refuse a second chain for an occupied intake repository before writing anything; the record below stays removable.
+    this.assertIntakeFree(this.intakeOf(row), config.chains)
     // The project record exists before the chain does so a failed chain save can remove it again, leaving no artifact.
     this.host.local.putProject(project)
     try {
-      await this.save(block, enabled, config, [...config.chains, this.row(project)])
+      await this.save(block, enabled, config, [...config.chains, row])
     } catch (error) {
       this.host.store.delete(KV.local.project(project.id))
       throw error
@@ -91,6 +137,8 @@ export class Projects {
     const { block, config, enabled } = this.source()
     const existing = config.chains.find(chain => chain.id === target)
     const row = this.row({ id: target, intakeRepository: fields.intakeRepository, codeRepository: fields.codeRepository }, existing?.cli)
+    // Only this project's row changes; an occupied intake repository named by another chain is refused before the save.
+    this.assertIntakeFree(this.intakeOf(row), config.chains, target)
     const chains = existing ? config.chains.map(chain => chain.id === target ? row : chain) : [...config.chains, row]
     await this.save(block, enabled, config, chains)
     const updated = local.patchProject(project, { ...fields, chain: target })
