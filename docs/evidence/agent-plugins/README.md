@@ -49,3 +49,8 @@ Both builds completed with exit 0.
   the addable list versus required tools and the `image`, `web`, `skills`, `todo` and `subagents` plugin switches.
 
 No credentials, private Feishu content or Session transcripts are in the captures.
+
+## Verification
+
+`pnpm check` (typecheck, the full Vitest suite and the tsdown build) passed on the After tree: 70 files / 1474 tests, build
+complete. `check.log` is its output.
