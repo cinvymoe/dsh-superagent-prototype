@@ -124,6 +124,24 @@ export interface LocalQuestion {
   error?: string
 }
 
+/**
+ * A discussion held on its own Thread before any requirement exists. Its thread key is `local:<id>`, and the `d-` id
+ * prefix keeps it apart from a requirement's `q-` id, so the two record kinds never share a Thread.
+ */
+export interface LocalDiscussion {
+  id: string
+  title: string
+  body: string
+  author: string
+  /** Project the discussion belongs to; every discussion names one, and a later requirement keeps it. */
+  project: string
+  /** The requirement a person made from this discussion; absent until then, and a discussion has at most one. */
+  issueId?: string
+  createdAt: string
+  updatedAt: string
+  state: 'open' | 'closed'
+}
+
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */
 export interface LocalIssue {
   id: string
@@ -132,6 +150,8 @@ export interface LocalIssue {
   author: string
   /** Project that binds this requirement to one execution repository. */
   project?: string
+  /** The discussion this requirement was made from; absent when a person submitted it directly. */
+  discussionId?: string
   /** Images attached when the requirement was submitted; absent when there are none. */
   images?: LocalImage[]
   /**

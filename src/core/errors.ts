@@ -71,6 +71,7 @@ export const USER_ERRORS = {
   chainIntakeTaken: ['refused', 'Intake repository {repository} is already used by chain {chain}'],
   projectChainInUse: ['refused', 'Chain {chain} is in use by project {project}; change that project\'s chain through its form instead'],
   issueEmpty: ['refused', 'A requirement needs a description'],
+  discussionEmpty: ['refused', 'A discussion needs a description'],
   issueImageCount: ['refused', 'A requirement accepts at most {max} images'],
   issueImageName: ['refused', 'A requirement image needs its original file name'],
   issueImageType: ['refused', 'Image {name} must be a PNG, JPEG, WebP or GIF image'],

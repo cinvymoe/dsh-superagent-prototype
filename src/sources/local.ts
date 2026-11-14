@@ -3,28 +3,37 @@ import { z } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Trigger } from '../core/index.ts'
 import type { SourceKind } from './kind.ts'
-import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalIssue } from './local-format.ts'
+import { LOCAL_ACTOR, LOCAL_SOURCE, type LocalDiscussion, type LocalIssue } from './local-format.ts'
 
 export { LOCAL_ACTOR, LOCAL_SOURCE } from './local-format.ts'
-export type { LocalAlignment, LocalIssue, LocalProject, LocalSlice } from './local-format.ts'
+export type { LocalAlignment, LocalDiscussion, LocalIssue, LocalProject, LocalSlice } from './local-format.ts'
 
-/** Thread ID and key used by every message about one local issue. */
-export function localThreadId(issueId: string): string { return issueId }
-export function localThreadKey(issueId: string): string { return `${LOCAL_SOURCE}:${issueId}` }
+/** Thread ID and key used by every message about one local record; its id keeps a requirement (`q-`) and a discussion (`d-`) apart. */
+export function localThreadId(recordId: string): string { return recordId }
+export function localThreadKey(recordId: string): string { return `${LOCAL_SOURCE}:${recordId}` }
 
-/** Build the Trigger that submits an issue or posts a comment into its Thread. */
-export function localTrigger(input: { issue: LocalIssue; text: string; at: string; id: string }): Trigger {
+/** What a local Trigger is about: a requirement, or a discussion that has no requirement yet. */
+export type LocalRecord = { issue: LocalIssue } | { discussion: LocalDiscussion }
+
+/**
+ * Build the Trigger that submits a local record or posts a comment into its Thread. A requirement's Trigger carries its
+ * project; a discussion's also names the discussion, so a Session reading the message can tell what it is discussing.
+ */
+export function localTrigger(input: LocalRecord & { text: string; at: string; id: string }): Trigger {
+  const record = 'issue' in input ? input.issue : input.discussion
+  const discussion = 'discussion' in input
   return {
     id: input.id,
     source: LOCAL_SOURCE,
-    threads: [{ source: LOCAL_SOURCE, id: localThreadId(input.issue.id) }],
-    actor: { source: LOCAL_SOURCE, id: input.issue.author || LOCAL_ACTOR },
+    threads: [{ source: LOCAL_SOURCE, id: localThreadId(record.id) }],
+    actor: { source: LOCAL_SOURCE, id: record.author || LOCAL_ACTOR },
     human: true,
     addressed: 'direct',
     at: input.at,
     text: input.text,
-    channel: { source: LOCAL_SOURCE, thread: localThreadKey(input.issue.id), address: { issue: input.issue.id } },
-    meta: input.issue.project ? { project: input.issue.project } : {},
+    channel: { source: LOCAL_SOURCE, thread: localThreadKey(record.id),
+      address: discussion ? { discussion: record.id } : { issue: record.id } },
+    meta: { ...record.project ? { project: record.project } : {}, ...discussion ? { discussion: record.id } : {} },
   }
 }
 
