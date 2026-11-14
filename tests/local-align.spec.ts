@@ -483,6 +483,110 @@ describe('project worktree roots', () => {
   })
 })
 
+/** A local project's own prepare command replaces the Execution setting; each project's Tickets prepare independently. */
+describe('project prepare commands', () => {
+  /** Every prepare command (`sh -c`) the executor spawned, in order. */
+  const prepareRuns = () => h.subprocess.spawn.mock.calls.map(([spec]) => spec as { argv: string[]; cwd: string; env?: Record<string, string> })
+    .filter(spec => spec.argv[0] === 'sh')
+  /** Sets the Execution prepare command, which the harness runs in the selected root. */
+  const prepareCommand = (command: string): void => {
+    const settings = h.runtime.store.settings()
+    h.runtime.store.saveSettings({ ...settings, executor: { ...settings.executor, prepare: command } })
+  }
+  /** Accepts a local issue's first message as an execution ticket and waits for its launch. */
+  const accept = async (issueId: string): Promise<Ticket> => {
+    const result = await h.route({ kind: 'accept', trigger_id: firstTrigger(h, issueId), title: 'Execute the requirement',
+      worktree_name: 'fix-local', acknowledgement: '收到。' }) as { ticket: { ticket_id: string } }
+    await h.runtime.idle()
+    return h.runtime.store.tickets.get(result.ticket.ticket_id)!
+  }
+
+  it('prepares each project with its own command and root, independently of the other project', async () => {
+    const first = root(), second = root()
+    prepareCommand('prepare the deployment')
+    const alpha = h.runtime.local.createProject({ name: 'Alpha', repository: 'acme/alpha', worktreeRoot: first, prepare: 'prepare alpha' })
+    const beta = h.runtime.local.createProject({ name: 'Beta', repository: 'acme/beta', worktreeRoot: second, prepare: 'prepare beta' })
+    const alphaTicket = await accept(h.runtime.local.create({ title: 'Alpha requirement', project: alpha.id }).id)
+    const betaTicket = await accept(h.runtime.local.create({ title: 'Beta requirement', project: beta.id }).id)
+    // A's directory and command belong to A, B's to B; neither takes the Execution setting instead.
+    expect(alphaTicket.execution?.directory).toBe(join(first, alphaTicket.execution!.name))
+    expect(betaTicket.execution?.directory).toBe(join(second, betaTicket.execution!.name))
+    expect(prepareRuns()).toEqual([
+      expect.objectContaining({ argv: ['sh', '-c', 'prepare alpha'], cwd: first,
+        env: expect.objectContaining({ DSH_SUPERAGENT_DIR: alphaTicket.execution!.directory, DSH_SUPERAGENT_GITHUB_REPOSITORY: 'acme/alpha' }) }),
+      expect.objectContaining({ argv: ['sh', '-c', 'prepare beta'], cwd: second,
+        env: expect.objectContaining({ DSH_SUPERAGENT_DIR: betaTicket.execution!.directory, DSH_SUPERAGENT_GITHUB_REPOSITORY: 'acme/beta' }) }),
+    ])
+    expect(h.agents.has(`worker-${alphaTicket.id}`)).toBe(true)
+    expect(h.agents.has(`worker-${betaTicket.id}`)).toBe(true)
+  })
+
+  it('uses the Execution prepare command when a project sets none, and for a GitHub or Feishu ticket with no project', async () => {
+    prepareCommand('prepare the deployment')
+    const projectRoot = root()
+    const plain = h.runtime.local.createProject({ name: 'Plain', repository: 'acme/plain', worktreeRoot: projectRoot })
+    h.runtime.local.createProject({ name: 'Own command', repository: 'acme/own', prepare: 'prepare the project' })
+    const ticket = await accept(h.runtime.local.create({ title: 'Plain requirement', project: plain.id }).id)
+    expect(prepareRuns().at(-1)).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare the deployment'], cwd: projectRoot }))
+    expect(ticket.execution?.worktreeRoot).toBe(projectRoot)
+    // A Feishu ticket carries no project, so it keeps the default root and the Execution command.
+    const { ticket: feishuTicket } = await h.acceptedTicket(feishu('11', '@bot 修 feishu'))
+    expect(feishuTicket.execution?.directory).toBe(join(h.directory, 'work', feishuTicket.execution!.name))
+    expect(feishuTicket.execution).not.toHaveProperty('worktreeRoot')
+    expect(prepareRuns().at(-1)).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare the deployment'], cwd: join(h.directory, 'work') }))
+  })
+
+  it('keeps an accepted ticket\'s root and leaves the other project untouched when one project\'s environment changes', async () => {
+    prepareCommand('prepare the deployment')
+    const first = root(), second = root(), moved = root()
+    const alpha = h.runtime.local.createProject({ name: 'Alpha', repository: 'acme/alpha', worktreeRoot: first, prepare: 'prepare alpha' })
+    const beta = h.runtime.local.createProject({ name: 'Beta', repository: 'acme/beta', worktreeRoot: second, prepare: 'prepare beta' })
+    const accepted = await accept(h.runtime.local.create({ title: 'Alpha requirement', project: alpha.id }).id)
+    const execution = { ...accepted.execution! }
+    // Editing only A's environment leaves the accepted ticket's root as it was accepted.
+    const updated = await h.api('PUT', `local/projects/${alpha.id}`, { worktreeRoot: moved, prepare: 'prepare alpha again' })
+    expect(updated.status).toBe(200)
+    expect(h.runtime.store.tickets.get(accepted.id)!.execution).toEqual(execution)
+    // A new ticket of A uses A's new root and command, while B's next ticket keeps B's own.
+    const next = await accept(h.runtime.local.create({ title: 'Alpha again', project: alpha.id }).id)
+    expect(next.execution?.directory).toBe(join(moved, next.execution!.name))
+    const betaTicket = await accept(h.runtime.local.create({ title: 'Beta requirement', project: beta.id }).id)
+    const alphaRun = prepareRuns().find(run => run.env?.DSH_SUPERAGENT_TICKET === next.id)!
+    const beforeEdit = prepareRuns().find(run => run.env?.DSH_SUPERAGENT_TICKET === accepted.id)!
+    const betaRun = prepareRuns().find(run => run.env?.DSH_SUPERAGENT_TICKET === betaTicket.id)!
+    expect(beforeEdit).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare alpha'], cwd: first }))
+    expect(alphaRun).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare alpha again'], cwd: moved }))
+    expect(betaRun).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare beta'], cwd: second }))
+    expect(h.runtime.store.tickets.get(accepted.id)!.execution).toEqual(execution)
+  })
+
+  it('fails only the project whose command fails, with its output, and retries after that command is fixed', async () => {
+    const first = root(), second = root()
+    prepareCommand('prepare the deployment')
+    const alpha = h.runtime.local.createProject({ name: 'Alpha', repository: 'acme/alpha', worktreeRoot: first, prepare: 'prepare alpha' })
+    const beta = h.runtime.local.createProject({ name: 'Beta', repository: 'acme/beta', worktreeRoot: second, prepare: 'prepare beta' })
+    h.hooks.fail = command => command === 'prepare alpha' ? 'fatal: no such clone /srv/alpha' : undefined
+    const failed = await accept(h.runtime.local.create({ title: 'Alpha requirement', project: alpha.id }).id)
+    const prepared = await accept(h.runtime.local.create({ title: 'Beta requirement', project: beta.id }).id)
+    expect(failed.assignments.at(-1)!.report).toMatchObject({ state: 'failed' })
+    expect(failed.assignments.at(-1)!.report!.summary).toContain('The prepare command failed: fatal: no such clone /srv/alpha')
+    expect(h.agents.has(`worker-${failed.id}`)).toBe(false)
+    expect(prepared.assignments.at(-1)).toMatchObject({ state: 'running' })
+    expect(h.agents.has(`worker-${prepared.id}`)).toBe(true)
+    // Fixing only A's command, then retrying its ticket, prepares only that ticket again.
+    await h.runtime.projects.update(alpha.id, { prepare: 'prepare alpha fixed' })
+    h.hooks.fail = undefined
+    const before = prepareRuns().length
+    h.runtime.engine.retryTicket(failed.id)
+    await h.runtime.idle()
+    const current = h.runtime.store.tickets.get(failed.id)!
+    expect(current.assignments.at(-1)).toMatchObject({ state: 'running' })
+    expect(existsSync(join(first, current.execution!.name))).toBe(true)
+    expect(prepareRuns().slice(before)).toEqual([expect.objectContaining({ argv: ['sh', '-c', 'prepare alpha fixed'], cwd: first })])
+    expect(h.agents.has(`worker-${failed.id}`)).toBe(true)
+  })
+})
+
 it('stores requirement images, returns their metadata and serves the bytes back with no caching', async () => {
   const submitted = await h.api('POST', 'local/issues', { title: 'With a screenshot', project: project.id,
     images: [{ name: 'shot.png', mediaType: 'image/png', data: PNG.toString('base64') }] })
