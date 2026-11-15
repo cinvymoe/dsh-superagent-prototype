@@ -12,6 +12,7 @@
 [data-platform='darwin'] .dt-page .dt-head { padding-top: var(--dsh-frame-top-clearance, 0px); }
 .dt-title { margin: 0; font-size: 15px; line-height: 22px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .dt-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.dt-page-link { flex: none; width: 28px; padding: 0; }
 .dt-page .dt-tabs { overflow-x: auto; display: flex; gap: 20px; max-width: none; padding: 0; border-radius: 0; background: none; border-bottom: 0.5px solid var(--dsw-alias-border-l3); }
 /* Project chips above the page tabs; the strip scrolls and the More menu keeps every project reachable when it overflows. */
 .dt-project-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
@@ -150,6 +151,11 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-result-actions { flex-direction: column; align-items: stretch; }
 .dt-result-actions .dt-btn { width: 100%; }
 .dt-requirement-modal, .dt-discussion-modal { width: min(560px, 100%); }
+/* The Answerer's question card: one card to answer, options as buttons, free text under them. */
+.dt-ask-card { border-color: var(--dsw-alias-brand-primary); }
+.dt-ask-list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.dt-ask-item { display: flex; flex-direction: column; gap: 6px; }
+.dt-ask-question { margin: 0; font-weight: 600; font-size: 14px; line-height: 22px; }
 @media (max-width: 900px) {
   .dt-discussion { grid-template-columns: minmax(0, 1fr); }
   .dt-discussion-side { position: static; order: -1; }

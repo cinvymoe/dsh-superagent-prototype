@@ -4,10 +4,36 @@ import { join } from 'node:path'
 import { key, UserError, type ReceiveResult, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, type LocalDiscussion, type LocalHandoff, type LocalImage, type LocalImageInput } from '../sources/local-format.ts'
+import { LOCAL_ACTOR, type LocalAsk, type LocalDiscussion, type LocalHandoff, type LocalImage,
+  type LocalImageInput, type LocalReply } from '../sources/local-format.ts'
 import { discussionImagePath, discussionImagesDir, storeDiscussionImages } from './local-images.ts'
 import { requirementTitle } from './local.ts'
 import type { Store } from './store.ts'
+
+/** The most questions one ask may hold, so the panel card stays answerable in one read. */
+export const ASK_QUESTIONS = 3
+/** The most options one question may offer; a person may still write a different answer. */
+export const ASK_OPTIONS = 4
+
+/** The questions an Answerer asks, as it writes them: their ids are assigned here, in order. */
+export interface LocalAskInput {
+  questions: { question: string; options?: string[] }[]
+}
+
+/** One person's answer to one question of an ask, as the panel posts it. */
+export interface LocalReplyInput {
+  questionId: string
+  text: string
+}
+
+/**
+ * The message a person's answers come back as: every question with its answer, so the Answerer reads both together and the
+ * timeline shows what was decided without opening the card.
+ */
+function askText(ask: LocalAsk): string {
+  const replies = new Map((ask.replies ?? []).map(reply => [reply.questionId, reply.text]))
+  return [`Answers to ${ask.id}:`, ...ask.questions.map((question, index) => `${index + 1}. ${question.question} → ${replies.get(question.id) ?? '(no answer)'}`)].join('\n')
+}
 
 export interface DiscussionsHost {
   readonly store: Pick<Store, 'get' | 'set' | 'delete' | 'keys' | 'threads'>
@@ -167,6 +193,52 @@ export class Discussions {
     const lines = images.map(image =>
       `- ${discussionImagePath(this.state(), discussion.id, image)} (${image.mediaType}, ${image.bytes} bytes)`)
     return text ? `${text}\n\nImages:\n${lines.join('\n')}` : `Images:\n${lines.join('\n')}`
+  }
+
+  /**
+   * Record the questions the Answerer wants answered before it can settle the discussion. One ask is open at a time, so a
+   * second is refused while the person has not answered the first: the panel never shows two cards that must be read
+   * together. Only the discussion record is written; the Engine sees neither the ask nor its answers.
+   */
+  ask(id: string, input: LocalAskInput): LocalAsk | undefined {
+    const discussion = this.get(id)
+    if (!discussion) return undefined
+    const open = (discussion.asks ?? []).find(ask => ask.state === 'open')
+    if (open) throw new UserError('discussionAsking', { discussion: id, ask: open.id })
+    const questions = input.questions.slice(0, ASK_QUESTIONS).flatMap((item, index) => {
+      const question = item.question.trim()
+      if (!question) return []
+      const options = (item.options ?? []).map(option => option.trim()).filter(Boolean).slice(0, ASK_OPTIONS)
+      return [{ id: `q${index + 1}`, question, ...(options.length ? { options } : {}) }]
+    })
+    if (questions.length === 0) throw new UserError('discussionAskEmpty', { discussion: id })
+    const at = this.clock()
+    const ask: LocalAsk = { id: `ask-${key('local-ask', id, at, String((discussion.asks ?? []).length)).slice(0, 8)}`, questions, at, state: 'open' }
+    this.put({ ...discussion, asks: [...(discussion.asks ?? []), ask], updatedAt: at })
+    return ask
+  }
+
+  /**
+   * Record the person's answers to an ask and return the message that carries them back into the discussion. Answers to a
+   * question that was not asked are dropped, and a second submission of the same ask returns what was already recorded, so a
+   * double click neither asks again nor loses an answer.
+   */
+  answer(id: string, askId: string, replies: LocalReplyInput[]): { discussion: LocalDiscussion; ask: LocalAsk; text: string; recorded: boolean } | undefined {
+    const discussion = this.get(id)
+    const ask = (discussion?.asks ?? []).find(item => item.id === askId)
+    if (!discussion || !ask) return undefined
+    if (ask.state === 'answered') return { discussion, ask, text: askText(ask), recorded: false }
+    const answered: LocalReply[] = replies.flatMap(reply => {
+      const asked = ask.questions.find(question => question.id === reply.questionId)
+      const text = reply.text.trim()
+      return asked && text ? [{ questionId: asked.id, text }] : []
+    })
+    if (answered.length === 0) throw new UserError('discussionReplyEmpty', { ask: ask.id })
+    const at = this.clock()
+    const settled: LocalAsk = { ...ask, state: 'answered', answeredAt: at, replies: answered }
+    const updated: LocalDiscussion = { ...discussion, asks: (discussion.asks ?? []).map(item => item.id === ask.id ? settled : item), updatedAt: at }
+    this.put(updated)
+    return { discussion: updated, ask: settled, text: askText(settled), recorded: true }
   }
 
   /**

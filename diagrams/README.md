@@ -17,6 +17,7 @@
 | [004 提示词](../docs/004-prompts.md) | [prompt-assembly](./prompt-assembly.html) | 团队段 → 内置段 → 技能 → 角色组装 → 版本 |
 | [005 面板](../docs/005-panel.md) | [panel-ia](./panel-ia.html) · [requirement-lifecycle](./requirement-lifecycle.html) · [discussion-to-requirement](./discussion-to-requirement.html) · [discussion-routing](./discussion-routing.html) | 四层漏斗；需求的状态；讨论如何变成需求；Router 的 discuss 决策与交给对齐 |
 | [006 部署](../docs/006-deployment.md) | [deployment-topology](./deployment-topology.html) · [trust-boundaries](./trust-boundaries.html) | 一个进程与一个状态目录；唯一授权路径与被拒绝的旁路 |
+| [006 部署](../docs/006-deployment.md) | [project-isolation](./project-isolation.html) | 项目隔离的边界：进程里只有一份的东西 vs 一个项目自己的东西 |
 | [007 持久化](../docs/007-architecture.md) | [schema-core](./schema-core.html) · [schema-queues](./schema-queues.html) | 五张编排表；四张队列 / 收据表 |
 | [007 依赖规则](../docs/007-architecture.md) | [module-dependencies](./module-dependencies.html) | core 不外出、Sources 看不见胶水层 |
 | [008 新增 Source](../docs/008-cookbook.md) | [source-onboarding](./source-onboarding.html) | 作者 / SourceContext / Engine 三条泳道 |
@@ -30,8 +31,18 @@
 [![讨论有一条可选的先谈之路](./discussion-routing.png)](./discussion-routing.html)
 
 - 单文件 HTML：[`discussion-routing.html`](./discussion-routing.html)（内联 SVG + 三张说明卡）。
-- 讲三处改动：① Router 可以在本地需求上选 `mode=discuss`，只开讨论、不建 Ticket；② Answerer 的等待跟随会话输出（2 分钟静默 / 30 分钟上限，此前是 120 秒总预算）；③ 人点 **Give to alignment** 才建该需求唯一的 align 工单，结论作为 routing note 交给 Aligner。
+- 讲三处改动：① Router 可以在本地需求上选 `mode=discuss`，只开讨论、不建 Ticket；② Answerer 的等待跟随会话输出（2 分钟静默 / 30 分钟上限，此前是 120 秒总预算），需要人拍板时还可以用 `discussion_ask` 留一张 1–3 问的卡，人答完作为一条讨论消息回来；③ 人点 **Give to alignment** 才建该需求唯一的 align 工单，结论作为 routing note 交给 Aligner。
 - 画布：`doc-wide` 1280×720；coral 只标本次改动的三处，其余是既有环节。
+
+## 图 0e：项目隔离的边界（2026-11-15）
+
+[![两个圈：进程里只有一份的东西，和一个项目自己的东西](./project-isolation.png)](./project-isolation.html)
+
+- 单文件 HTML：[`project-isolation.html`](./project-isolation.html)（内联 SVG + 三张说明卡）。
+- 外层圈是「全局 · 一个进程 · 一个 SQLite」：Engine 与数据库、Router 主会话、设置 / 策略 / 提示词、并发槽位——每个项目共用一份。
+- 内层圈是两个项目各自的所有物：仓库链 · worktreeRoot · prepare · blockedCommands，以及它自己的需求、讨论与工单。
+- coral 只标缺口：设置与槽位仍没有项目维度（`SettingsSchema` 只有六个全局块），所以「一个项目一套图里的配置」目前只做到执行面。
+- 画布：`doc-wide` 1280×720；判据写在图底——一个项目的配置改动会不会改变另一个项目的行为。
 
 ## 图 0：编辑版总览（2026-11-10 重设计）
 

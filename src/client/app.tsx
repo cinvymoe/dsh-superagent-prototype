@@ -12,8 +12,8 @@ import { GLOSSARY, GLOSSARY_VALUES, en, zh, type DshSuperagentKey } from './loca
 import { OverviewPage } from './overview.tsx'
 import { PanelProvider, usePanel, usePanelData } from './provider.tsx'
 import { ProjectBar, ProjectFormPage } from './projects.tsx'
-import { HOME, TABS, initialLocation, lastSettingsGroup, remember, routeLabel, settingsRoute, type Location, type Route,
-  type Tab } from './route.ts'
+import { HOME, TABS, initialLocation, lastSettingsGroup, permalink, reflect, remember, routeLabel, settingsRoute,
+  type Location, type Route, type Tab } from './route.ts'
 import { SettingsPage } from './settings.tsx'
 import { SourceStatus } from './source.tsx'
 import { actorName, errorText, reasonLabel, valueLabel, type T, readableMarkers } from './text.ts'
@@ -101,7 +101,7 @@ function SearchResults({ result, query, onClose }: { result: SearchView; query: 
   </div>
 }
 
-function Header({ masterId }: { masterId: string | undefined }) {
+function Header({ masterId, href }: { masterId: string | undefined; href: string }) {
   const { t, call, openSession, notify } = usePanel()
   const [glossary, setGlossary] = useState(false)
   const [query, setQuery] = useState('')
@@ -136,13 +136,15 @@ function Header({ masterId }: { masterId: string | undefined }) {
         onClick={() => setGlossary(true)} />
       <Button variant="outline" size="sm" icon={<Icon name="session" size={14} />} disabled={!masterId}
         onClick={() => { if (masterId) openSession(masterId).catch(failure => notify(errorText(failure))) }}>{t('openMaster')}</Button>
+      <a className="dt-btn dt-btn-ghost dt-btn-sm dt-page-link" href={href} target="_blank" rel="noopener noreferrer"
+        aria-label={t('openPage')} title={t('openPage')}><span className="dt-btn-icon"><Icon name="external" size={14} /></span></a>
     </div>
     <Glossary open={glossary} onClose={() => setGlossary(false)} />
   </header>
 }
 
 function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab: Tab) => void; deploymentForm: DeploymentForm }) {
-  const { t } = usePanel()
+  const { t, project } = usePanel()
   const { state, error, reload } = usePanelData()
   // Keep the active tab scrolled into view on narrow screens when routes change via links.
   useEffect(() => { document.getElementById(`dt-tab-${route.page}`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }) }, [route.page])
@@ -168,7 +170,7 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
   })()
   return <div className="dt-page">
     <div className="dt-column">
-      <Header masterId={state?.masterId} />
+      <Header masterId={state?.masterId} href={permalink(route, project)} />
       {error && state && <p className="dt-error" role="status">{error.message}</p>}
       <ProjectBar route={route} />
       <SegmentedTabs className="dt-tabs" label={t('pagesLabel')} value={route.page} onChange={openTab}
@@ -181,7 +183,10 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
 /** Root panel component managing route history and shared panel state. */
 export function App({ t, openSession, deploymentForm }: AppProps) {
   const [location, setLocation] = useState(initialLocation)
-  useEffect(() => { remember(location) }, [location])
+  // The address bar mirrors the page so it can be copied or opened in a new tab; leaving the panel clears those
+  // parameters again, which keeps a plain refresh away from the panel behaving exactly as before.
+  useEffect(() => { remember(location); reflect(location) }, [location])
+  useEffect(() => () => { reflect(undefined) }, [])
   // Preserve the last opened settings group and the current project across navigation.
   const move = useCallback((next: (current: Location) => Pick<Location, 'route' | 'stack'>) =>
     setLocation(current => ({ ...current, ...next(current), group: lastSettingsGroup(current) })), [])

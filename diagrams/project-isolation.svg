@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="project-isolation-title project-isolation-desc" id="project-isolation-root">
+        <title id="project-isolation-title">项目隔离的边界：哪些配置在进程里只有一份</title>
+        <desc id="project-isolation-desc">嵌套图：外层是全局作用域，含唯一的 Engine 与 SQLite、单个 Router 主会话、单份设置与提示词、全局并发槽位；内层是两个项目各自的作用域，只有仓库链与目录命令、以及需求讨论工单数据按项目分开，设置与槽位尚未下沉。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #project-isolation-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #project-isolation-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #project-isolation-root .container { max-width: 1360px; margin: 0 auto; }
+      #project-isolation-root .header-eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.75rem; }
+      #project-isolation-root .subtitle { font-size: 1rem; line-height: 1.6; color: var(--color-muted); max-width: 84ch; }
+      #project-isolation-root .diagram-container { width: 100%; overflow-x: auto; background: var(--color-paper-2); border: 1px solid var(--color-rule); border-radius: 8px; padding: 1.25rem; }
+      #project-isolation-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #project-isolation-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #project-isolation-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #project-isolation-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #project-isolation-root .d-zone { font-family: var(--font-mono); font-size: 8px; font-weight: 500; letter-spacing: 0.14em; }
+      #project-isolation-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #project-isolation-root .card-header { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.7rem; }
+      #project-isolation-root .card-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+      #project-isolation-root .card-dot.coral { background: var(--color-accent); }
+      #project-isolation-root .card-dot.ink { background: var(--color-ink); }
+      #project-isolation-root .card-dot.muted { background: var(--color-soft); }
+      @media print {
+#project-isolation-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="project-isolation-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ outer ring: the process ============ -->
+        <rect x="40" y="88" width="1200" height="224" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.015" stroke-opacity="0.30"/>
+        <rect x="56" y="80" width="300" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="64" y="91" class="d-zone" fill="#4f5d75">全局 · 一个进程 · 一个 SQLite</text>
+
+        <!-- node: engine -->
+        <rect x="64" y="120" width="268" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="120" width="268" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="72" y="130" width="46" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="95" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">ENGINE</text>
+        <text x="80" y="164" class="d-name" fill="#2d3142">Engine · SQLite</text>
+        <text x="80" y="186" class="d-sub" fill="#5a6580">唯一状态写入者，所有项目同一个库</text>
+        <text x="80" y="206" class="d-mono" fill="#5a6580">orchestrator.sqlite · 单库单事务</text>
+        <text x="80" y="226" class="d-mono" fill="#5a6580">effects / outbox 一条队列</text>
+        <text x="80" y="250" class="d-mono" fill="#bf4520">项目在这里没有分区键</text>
+
+        <!-- node: router -->
+        <rect x="356" y="120" width="268" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="356" y="120" width="268" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="364" y="130" width="46" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="387" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">ROUTER</text>
+        <text x="372" y="164" class="d-name" fill="#2d3142">Router · 主会话</text>
+        <text x="372" y="186" class="d-sub" fill="#5a6580">一个会话同时研判所有项目</text>
+        <text x="372" y="206" class="d-mono" fill="#5a6580">master-id · settings.eval.model</text>
+        <text x="372" y="226" class="d-mono" fill="#5a6580">上下文按 Thread 混在一起</text>
+        <text x="372" y="250" class="d-mono" fill="#bf4520">没有按项目开新会话</text>
+
+        <!-- node: config (coral tag = the gap) -->
+        <rect x="648" y="120" width="268" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="648" y="120" width="268" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="656" y="130" width="52" height="12" rx="2" fill="none" stroke="#bf4520" stroke-width="0.8" stroke-opacity="0.60"/>
+        <text x="682" y="139" class="d-tag" fill="#bf4520" text-anchor="middle">CONFIG</text>
+        <text x="664" y="164" class="d-name" fill="#2d3142">设置 · 策略 · 提示词</text>
+        <text x="664" y="186" class="d-sub" fill="#5a6580">单份 revision，没有项目维度</text>
+        <text x="664" y="206" class="d-mono" fill="#5a6580">settings: policy / eval / executor</text>
+        <text x="664" y="226" class="d-mono" fill="#5a6580">agents · prompts · paused</text>
+        <text x="664" y="250" class="d-mono" fill="#bf4520">缺 projects[&lt;id&gt;] 覆盖层</text>
+
+        <!-- node: pool -->
+        <rect x="940" y="120" width="268" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="940" y="120" width="268" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="948" y="130" width="38" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="967" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">POOL</text>
+        <text x="956" y="164" class="d-name" fill="#2d3142">并发槽位</text>
+        <text x="956" y="186" class="d-sub" fill="#5a6580">全局先到先得，项目之间互相排队</text>
+        <text x="956" y="206" class="d-mono" fill="#5a6580">maxWorkers 3 · answerer 2</text>
+        <text x="956" y="226" class="d-mono" fill="#5a6580">一个项目的大批工单会占满它</text>
+        <text x="956" y="250" class="d-mono" fill="#bf4520">没有按项目的配额</text>
+
+        <!-- ============ inner ring: one project ============ -->
+        <rect x="40" y="348" width="1200" height="272" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.025" stroke-opacity="0.45"/>
+        <rect x="56" y="340" width="420" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="64" y="351" class="d-zone" fill="#4f5d75">项目作用域 · 已经按项目分开的部分</text>
+
+        <!-- project A -->
+        <rect x="64" y="384" width="560" height="212" rx="8" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="80" y="376" width="120" height="16" rx="2" fill="#ffffff"/>
+        <text x="88" y="387" class="d-zone" fill="#4f5d75">项目 A</text>
+
+        <rect x="88" y="412" width="512" height="84" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
+        <text x="104" y="434" class="d-name" fill="#2d3142">执行配置</text>
+        <text x="104" y="454" class="d-sub" fill="#5a6580">仓库链 · worktreeRoot · prepare · 额外 blockedCommands</text>
+        <text x="104" y="474" class="d-mono" fill="#5a6580">project.chain / worktreeRoot / prepare / blockedCommands</text>
+
+        <rect x="88" y="504" width="512" height="76" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
+        <text x="104" y="526" class="d-name" fill="#2d3142">项目数据</text>
+        <text x="104" y="546" class="d-sub" fill="#5a6580">需求 · 讨论 · 工单（ticket.plan 指向哪个需求）</text>
+        <text x="104" y="566" class="d-mono" fill="#5a6580">local-issue: · local-discussion: · 按 project 过滤</text>
+
+        <!-- project B -->
+        <rect x="656" y="384" width="560" height="212" rx="8" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="672" y="376" width="120" height="16" rx="2" fill="#ffffff"/>
+        <text x="680" y="387" class="d-zone" fill="#4f5d75">项目 B</text>
+
+        <rect x="680" y="412" width="512" height="84" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
+        <text x="696" y="434" class="d-name" fill="#2d3142">执行配置</text>
+        <text x="696" y="454" class="d-sub" fill="#5a6580">同上的四个字段，各项目互不影响</text>
+        <text x="696" y="474" class="d-mono" fill="#5a6580">chain · worktreeRoot · prepare · blockedCommands</text>
+
+        <rect x="680" y="504" width="512" height="76" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
+        <text x="696" y="526" class="d-name" fill="#2d3142">项目数据</text>
+        <text x="696" y="546" class="d-sub" fill="#5a6580">需求 · 讨论 · 工单，与项目 A 完全隔开</text>
+        <text x="696" y="566" class="d-mono" fill="#5a6580">同一套表，不同 project 值</text>
+
+        <!-- ============ the gap, said once ============ -->
+        <text x="64" y="660" class="d-annot" fill="#bf4520">缺口：设置、槽位与 Router 会话都只有一份——目标是把它们挪进每个项目的圈里。</text>
+        <text x="64" y="686" class="d-mono" fill="#5a6580">判据：一个项目的配置改动，是否可能改变另一个项目的行为？现在会；这就是还没隔离的部分。</text>
+      </svg>

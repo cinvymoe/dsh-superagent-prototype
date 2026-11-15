@@ -165,6 +165,36 @@ export interface LocalHandoff {
   at: string
 }
 
+/** One question an Answerer put to the person in the panel: what it needs settled before it can conclude. */
+export interface LocalAskQuestion {
+  /** Stable id within one ask, `q1`, `q2`, …; a reply names the question it answers. */
+  id: string
+  question: string
+  /** The choices the panel offers as buttons; a person may still write a different answer. */
+  options?: string[]
+}
+
+/** One answer a person gave to a question of an ask. */
+export interface LocalReply {
+  questionId: string
+  text: string
+}
+
+/**
+ * The questions an Answerer asked in the panel, and the person's answers once given. Asking is how a discussion settles
+ * what the repository cannot answer; it is a panel record only, so the Engine never sees it and no Ticket, Decision or
+ * Trigger is created by it.
+ */
+export interface LocalAsk {
+  id: string
+  questions: LocalAskQuestion[]
+  at: string
+  state: 'open' | 'answered'
+  /** The person's answers, each naming its question; absent until the ask is answered. */
+  replies?: LocalReply[]
+  answeredAt?: string
+}
+
 /**
  * A discussion held on its own Thread. Its thread key is `local:<id>`, and the `d-` id prefix keeps it apart from a
  * requirement's `q-` id, so the two record kinds never share a Thread. The Router opens one about a requirement when the
@@ -189,6 +219,11 @@ export interface LocalDiscussion {
   images?: LocalImage[]
   /** Its messages and the Answerer's answers, oldest first; the Thread Trigger of each message keeps the timeline. */
   answers?: LocalAnswer[]
+  /**
+   * The questions the Answerer put to the person here, oldest first. One is open at a time, so the panel shows at most one
+   * card to answer; asking creates no Trigger and no Ticket.
+   */
+  asks?: LocalAsk[]
   /** Set once a person hands its conclusion to the Aligner; absent while the discussion is only being answered. */
   handoff?: LocalHandoff
 }

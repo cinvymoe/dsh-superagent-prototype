@@ -17,6 +17,7 @@ import type { DshExecutor } from '../executor/dsh.ts'
 import type { Health } from '../sources/host.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import type { Sessions } from './sessions.ts'
+import type { LocalDiscussion } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
 import type { TextCache } from './cache.ts'
 import type { LinkTarget, ViewHost } from './views/records.ts'
@@ -61,6 +62,11 @@ export interface HttpHost {
   dispatchPlan(issueId: string): Ticket[]
   /** Hand a discussion's conclusion to the requirement's Aligner, returning the alignment ticket it started or reused. */
   handOffDiscussion(discussionId: string): Ticket
+  /**
+   * Records a person's answers to the questions the discussion's Answerer asked, and posts them into the discussion as one
+   * message so the Answerer's next turn reads question and answer together.
+   */
+  answerDiscussionAsk(discussionId: string, askId: string, replies: { questionId: string; text: string }[]): LocalDiscussion
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
   /** Resolved deployment; throws if read while waiting for setup (`!configured()`). */
@@ -278,6 +284,11 @@ function routes(runtime: HttpHost): Routes {
     'POST local/discussions/:id/handoff': ({ params }) => {
       const ticket = runtime.handOffDiscussion(params.id)
       return { ticket: { id: ticket.id, title: ticket.title, mode: ticket.mode }, discussion: runtime.discussions.get(params.id) }
+    },
+    // The person answered the questions the Answerer put on the panel card; their answers become the discussion's message.
+    'POST local/discussions/:id/asks/:askId/reply': async ({ params, body }) => {
+      const input = z.object({ answers: z.array(z.object({ questionId: z.string().min(1), text: z.string().trim().min(1).max(2_000) })).min(1).max(3) }).parse(await body())
+      return { discussion: runtime.answerDiscussionAsk(params.id, params.askId, input.answers) }
     },
     'POST local/discussions/:id/close': ({ params }) => {
       const discussion = runtime.discussions.close(params.id)

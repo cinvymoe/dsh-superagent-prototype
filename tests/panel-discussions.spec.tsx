@@ -5,7 +5,7 @@ import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, all, click, type, text, at, tab, settle } from './fixtures/panel.tsx'
-import { localDiscussion, localDiscussionAnswer, localDiscussionComment, localIssue, server } from './fixtures/panel-server.ts'
+import { localAsk, localDiscussion, localDiscussionAnswer, localDiscussionComment, localIssue, server } from './fixtures/panel-server.ts'
 
 usePanel()
 
@@ -128,6 +128,34 @@ it('hands a requirement\'s discussion conclusion to the Aligner from its result 
   expect(text()).toContain(zh['discussion.handoffTo'].replace('{ticket}', 't-align-d-handoff'))
   expect(all('button').some(item => item.textContent?.trim() === zh['discussion.handoff'])).toBe(false)
   expect(all('button').some(item => item.textContent?.trim() === zh['discussion.handedOff'])).toBe(true)
+})
+
+it("puts the Answerer's questions on one card and sends the person's answers back as one message", async () => {
+  const talk = localDiscussion('Design the layout', 'Design the layout\n\nDetails', PROJECT.id, 'd-ask')
+  server.localProjects = [PROJECT]
+  server.localDiscussions = [{ ...talk, updatedAt: '2026-09-24T00:00:00Z', asks: [localAsk('ask-1')] }]
+  at({ page: 'discussions', id: 'd-ask' })
+  await mount()
+  // One card holds every question the Answerer put, with its proposed answers as buttons and a field for another one.
+  const card = document.querySelector('.dt-ask-card')!
+  expect(card.textContent).toContain(zh['discussion.ask'])
+  expect(card.textContent).toContain(zh['discussion.askOpen'])
+  expect(card.textContent).toContain('Which layout should the panel keep?')
+  expect(card.textContent).toContain('May the delete button stay?')
+  const send = button(zh['discussion.askSend'])
+  expect(send.disabled).toBe(true)
+  await click(button('Two columns'))
+  await type(all('.dt-ask-item input')[1] as HTMLInputElement, 'Only while it is about no requirement')
+  expect(button(zh['discussion.askSend']).disabled).toBe(false)
+  await click(button(zh['discussion.askSend']))
+  // Both answers travel back as one discussion message, so the Answerer answers once.
+  const posted = server.requests.find(request => request.path === 'local/discussions/d-ask/asks/ask-1/reply')
+  expect(posted?.method).toBe('POST')
+  expect(posted?.body).toMatchObject({ answers: [
+    { questionId: 'q1', text: 'Two columns' },
+    { questionId: 'q2', text: 'Only while it is about no requirement' }] })
+  // An answered card leaves the page.
+  expect(document.querySelector('.dt-ask-card')).toBeNull()
 })
 
 it('deletes an unlinked discussion after a confirmation that carries its title and returns to the list', async () => {

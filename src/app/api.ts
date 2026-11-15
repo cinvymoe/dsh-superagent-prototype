@@ -54,6 +54,7 @@ export interface Api {
   'POST local/discussions/:id/answers/:answerId/retry': { response: { discussion: LocalDiscussion | undefined } }
   /** Hand the discussion's conclusion to the requirement's Aligner; the discussion keeps its answers and stays open. */
   'POST local/discussions/:id/handoff': { response: { ticket: { id: string; title: string; mode?: 'work' | 'align' }; discussion: LocalDiscussion | undefined } }
+  'POST local/discussions/:id/asks/:askId/reply': { body: { answers: { questionId: string; text: string }[] }; response: { discussion: LocalDiscussion } }
   'POST local/discussions/:id/close': { response: { discussion: LocalDiscussion } }
   /** Delete a discussion that created no requirement; a linked one is refused with `discussionRequirement`. */
   'DELETE local/discussions/:id': { response: { deleted: true } }
