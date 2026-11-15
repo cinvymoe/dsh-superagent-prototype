@@ -1,6 +1,7 @@
 /**
- * Validation and file storage of the images a local record attaches, under `<stateDir>/local-images/`: a requirement's
- * under `<issue id>/`, and a discussion's — every message's alike — under `discussions/<discussion id>/`.
+ * Validation and file storage of the images a local record attaches, under `<stateDir>/local-images/`: a requirement's and
+ * each of its follow-up messages' under `<issue id>/`, and a discussion's — every message's alike — under
+ * `discussions/<discussion id>/`.
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -111,4 +112,13 @@ export function storeRequirementImages(stateDir: string, issueId: string, inputs
 export function storeDiscussionImages(stateDir: string, discussionId: string, messageKey: string,
   inputs: readonly LocalImageInput[]): LocalImage[] {
   return storeImages(discussionImagesDir(stateDir, discussionId), ['discussion', discussionId, messageKey], inputs)
+}
+
+/**
+ * Validate and store the images one human follow-up message attached, under the requirement's own directory. `triggerId`
+ * keeps different messages' images apart; nothing is written when one of the images is refused.
+ */
+export function storeIssueCommentImages(stateDir: string, issueId: string, triggerId: string,
+  inputs: readonly LocalImageInput[]): LocalImage[] {
+  return storeImages(requirementImagesDir(stateDir, issueId), ['issue-comment', issueId, triggerId], inputs)
 }

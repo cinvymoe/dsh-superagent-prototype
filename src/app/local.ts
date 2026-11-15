@@ -9,7 +9,7 @@ import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
 import { alignmentRounds, currentAlignment, LOCAL_ACTOR, LOCAL_SOURCE, requirementExecutionMode, type LocalAlignment, type LocalDiscussion, type LocalImage, type LocalImageInput, type LocalIssue, type LocalIssueView, type LocalProject, type LocalSlice } from '../sources/local-format.ts'
 import type { Store } from './store.ts'
-import { requirementImagePath, requirementImagesDir, storeRequirementImages } from './local-images.ts'
+import { requirementImagePath, requirementImagesDir, storeIssueCommentImages, storeRequirementImages } from './local-images.ts'
 
 export interface LocalIssuesHost {
   readonly store: Pick<Store, 'get' | 'set' | 'delete' | 'keys' | 'read' | 'tickets' | 'triggers' | 'threads'>
@@ -272,7 +272,6 @@ export class LocalIssues {
     return discussion
   }
 
-  /** The submitted text plus one absolute path per image, so a worker can read the image the person attached. */
   /** The text a discussion about this requirement starts with: its description, with the images it names. */
   discussionBody(id: string): string {
     const issue = this.get(id)
@@ -280,28 +279,54 @@ export class LocalIssues {
     return this.requirementText(issue, issue.body)
   }
 
+  /** The submitted text plus one absolute path per image, so a worker can read the image the person attached. */
   private requirementText(issue: LocalIssue, text: string): string {
-    const images = issue.images ?? []
-    const lines = images.map(image => `- ${requirementImagePath(this.host.stateDir, issue.id, image)} (${image.mediaType}, ${image.bytes} bytes)`)
-    return images.length ? `${text}\n\nImages:\n${lines.join('\n')}` : text
+    return this.withImages(issue, text, issue.images ?? [])
   }
 
-  /** The stored bytes and media type of one requirement image; undefined for an unknown issue, image or missing file. */
+  /** The text plus one absolute path per attached image, so a worker can read what the message shows. */
+  private withImages(issue: LocalIssue, text: string, images: readonly LocalImage[]): string {
+    if (!images.length) return text
+    const lines = images.map(image =>
+      `- ${requirementImagePath(this.host.stateDir, issue.id, image)} (${image.mediaType}, ${image.bytes} bytes)`)
+    return text ? `${text}\n\nImages:\n${lines.join('\n')}` : `Images:\n${lines.join('\n')}`
+  }
+
+  /** The stored bytes and media type of one requirement image, from the requirement or any follow-up message. */
   image(id: string, imageId: string): { bytes: Buffer; mediaType: string } | undefined {
-    const image = this.get(id)?.images?.find(entry => entry.id === imageId)
+    const issue = this.get(id)
+    const image = [...(issue?.images ?? []), ...(issue?.commentImages ?? []).flatMap(entry => entry.images)]
+      .find(entry => entry.id === imageId)
     if (!image) return undefined
     try { return { bytes: readFileSync(requirementImagePath(this.host.stateDir, id, image)), mediaType: image.mediaType } }
     catch { return undefined }
   }
 
-  /** Append a human comment to the issue Thread; it can wake an idle Ticket or start a fresh Eval. */
-  comment(id: string, text: string): LocalIssue | undefined {
+  /**
+   * Append a human comment to the issue Thread; it can wake an idle Ticket or start a fresh Eval. A comment may carry images
+   * and no text, and its images stay on that message alone, named by the Trigger it became, so the timeline shows them under
+   * that message only. Images are validated and stored before anything is written.
+   */
+  comment(id: string, text: string, images: readonly LocalImageInput[] = []): LocalIssue | undefined {
     const issue = this.get(id)
     if (!issue) return undefined
+    const body = text.trim()
+    if (!body && !images.length) throw new UserError('issueCommentText')
     const at = this.clock()
-    const updated = { ...issue, updatedAt: at }
-    this.host.store.set(KV.local.issue(id), updated)
-    this.host.receive(localTrigger({ issue: updated, text: text.trim(), at, id: key('local-trigger', id, at, text) }))
+    const triggerId = key('local-trigger', id, at, body)
+    const stored = storeIssueCommentImages(this.host.stateDir, id, triggerId, images)
+    const updated: LocalIssue = { ...issue, updatedAt: at, ...(stored.length ? {
+      commentImages: [...(issue.commentImages ?? []), { triggerId, images: stored }],
+    } : {}) }
+    try {
+      this.host.store.set(KV.local.issue(id), updated)
+      this.host.receive(localTrigger({ issue: updated, text: this.withImages(updated, body, stored), at, id: triggerId }))
+    } catch (error) {
+      // A message the Engine refused leaves neither its record nor this message's bytes behind.
+      this.host.store.set(KV.local.issue(id), issue)
+      for (const image of stored) rmSync(requirementImagePath(this.host.stateDir, id, image), { force: true })
+      throw error
+    }
     return updated
   }
 

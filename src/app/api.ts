@@ -62,7 +62,8 @@ export interface Api {
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }
   'POST local/issues': { body: { title?: string; body?: string; project: string; discussion?: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }
   'GET local/issues/:id': { response: { issue: LocalIssueView; project: LocalProjectView | null; thread: ThreadDetailView; replies: Receipt[] } }
-  'POST local/issues/:id/comments': { body: { text: string }; response: { issue: LocalIssueView } }
+  /** A follow-up may be images alone; its text and images travel together in one comment request. */
+  'POST local/issues/:id/comments': { body: { text?: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }
   'POST local/issues/:id/alignment': { body: { summary?: string; slices?: LocalSlice[]; acceptance?: string[] }; response: { issue: LocalIssueView } }
   'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string; roundId?: string }; response: { issue: LocalIssueView; tickets: { id: string; title: string }[] } }
   'POST local/issues/:id/execution': { body: { mode: ExecutionMode }; response: { issue: LocalIssueView } }

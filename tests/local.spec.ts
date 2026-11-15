@@ -78,6 +78,57 @@ describe('the local issue board', () => {
     expect(issues.get(issue.id)?.title).toBe('Local requirement')
   })
 
+  it('stores a follow-up message\'s images under the requirement directory and names them in that message\'s Trigger', () => {
+    const { issues, triggers, project, directory } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    const updated = issues.comment(issue.id, 'Look at this', [image('shot.png', 'image/png', PNG)])!
+    // The requirement keeps its own images apart from the message's, which name the Trigger the message became.
+    expect(updated.images).toBeUndefined()
+    expect(updated.commentImages).toHaveLength(1)
+    const message = updated.commentImages![0]!
+    expect(message.triggerId).toBe(triggers[1]!.id)
+    expect(message.images[0]).toMatchObject({ name: 'shot.png', mediaType: 'image/png', bytes: PNG.length })
+    const file = join(directory, 'local-images', issue.id, `${message.images[0]!.id}.png`)
+    expect(readFileSync(file).equals(PNG)).toBe(true)
+    expect(issues.image(issue.id, message.images[0]!.id)).toMatchObject({ mediaType: 'image/png' })
+    // The Engine-routed Trigger names the image's absolute path, so a worker can read it with read_image.
+    expect(triggers[1]!.text).toBe(`Look at this\n\nImages:\n- ${file} (image/png, ${PNG.length} bytes)`)
+  })
+
+  it('accepts an image-only follow-up and keeps two messages\' identically named images apart', () => {
+    const { issues, triggers, project } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
+    const image: LocalImageInput = { name: 'shot.png', mediaType: 'image/png', data: PNG.toString('base64') }
+    issues.comment(issue.id, 'First', [image])
+    const second = issues.comment(issue.id, '   ', [image])!
+    expect(triggers).toHaveLength(3)
+    // An image-only message is accepted and its Trigger text carries only the Images block.
+    expect(triggers[2]!.text.startsWith('Images:\n- ')).toBe(true)
+    expect(second.commentImages).toHaveLength(2)
+    const [first, last] = second.commentImages!
+    expect(first!.triggerId).toBe(triggers[1]!.id)
+    expect(last!.triggerId).toBe(triggers[2]!.id)
+    // The same file name in two messages still stores two files, so neither message can change the other's image.
+    expect(first!.images[0]!.id).not.toBe(last!.images[0]!.id)
+  })
+
+  it('refuses a follow-up image or an empty follow-up, leaving the record and the Trigger count untouched', () => {
+    const { issues, triggers, project, directory } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    const code = (text: string, images: LocalImageInput[]): unknown => {
+      try { issues.comment(issue.id, text, images) } catch (error) { return (error as { code?: unknown }).code }
+      return undefined
+    }
+    expect(code('Bad', [image('bad.bmp', 'image/bmp', Buffer.from('BM'))])).toBe('issueImageType')
+    expect(code('Bad', [image('big.png', 'image/png', Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]))])).toBe('issueImageSize')
+    expect(code('   ', [])).toBe('issueCommentText')
+    expect(triggers).toHaveLength(1)
+    expect(issues.get(issue.id)).toEqual(issue)
+    expect(existsSync(join(directory, 'local-images'))).toBe(false)
+  })
+
   it('records a proposal and the person\'s review, and refuses a review without one', () => {
     const { issues, project } = setup()
     const issue = issues.create({ title: 'Local requirement', project: project.id })

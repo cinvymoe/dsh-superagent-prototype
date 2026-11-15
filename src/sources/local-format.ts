@@ -228,6 +228,13 @@ export interface LocalDiscussion {
   handoff?: LocalHandoff
 }
 
+/** The images one human follow-up message attached, named by the Trigger that message became. */
+export interface LocalCommentImages {
+  /** The Thread Trigger of the follow-up message these images belong to. */
+  triggerId: string
+  images: LocalImage[]
+}
+
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */
 export interface LocalIssue {
   id: string
@@ -243,6 +250,11 @@ export interface LocalIssue {
   discussionId?: string
   /** Images attached when the requirement was submitted; absent when there are none. */
   images?: LocalImage[]
+  /**
+   * The images attached to its human follow-up messages, oldest first and each naming the Trigger it belongs to. Absent when
+   * no follow-up attached one, so records written before follow-up images existed read fine and need no migration.
+   */
+  commentImages?: LocalCommentImages[]
   /**
    * The questions people asked about its dispatched Tickets, newest last. Absent when there are none, so records written
    * before questions existed read fine and need no migration.

@@ -72,6 +72,7 @@ export const USER_ERRORS = {
   chainIntakeTaken: ['refused', 'Intake repository {repository} is already used by chain {chain}'],
   projectChainInUse: ['refused', 'Chain {chain} is in use by project {project}; change that project\'s chain through its form instead'],
   issueEmpty: ['refused', 'A requirement needs a description'],
+  issueCommentText: ['refused', 'A requirement follow-up needs text or an image'],
   discussionEmpty: ['refused', 'A discussion needs a description'],
   unknownDiscussion: ['missing', 'Unknown local discussion'],
   discussionLinked: ['refused', 'Discussion {discussion} already created requirement {issue}'],
