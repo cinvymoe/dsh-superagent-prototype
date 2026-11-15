@@ -7,7 +7,8 @@
 
 - **Before**：部署 `main` @ `75bfe730`（含 C1、C2 的粘贴入口，未含 C3）。需求追评框与等回答框都是普通 `textarea`：
   文本框没有图片入口，粘贴事件没有处理路径，提交也只发文字。
-- **After**：本工单分支 `agent/pasted-images-on-487708020d2e`。两个框接上共享的 `PasteImageField`：粘贴或拖入图片、
+- **After**：本工单分支 `agent/pasted-images-on-487708020d2e` @ `d60ea1c0`（截图所用的切片提交；之后合入的 main
+  `a917ef86` 未改这两个框的路径）。两个框接上共享的 `PasteImageField`：粘贴或拖入图片、
   缩略图与文件名、数量/类型限制、超过 5 MiB 时降采样；图片落盘在需求自己的目录，按 Trigger 记在需求记录上，
   时间线只在该消息行显示缩略图；Trigger 文本带 `Images:` 绝对路径块，面板隐藏该块。
 
