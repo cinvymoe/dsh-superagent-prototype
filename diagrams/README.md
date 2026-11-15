@@ -15,7 +15,7 @@
 | [003 执行 · 并发](../docs/003-execution.md) | [concurrency-queue](./concurrency-queue.html) | 三类来源、有限槽位、人的插队槽 |
 | [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | [agent-capabilities](./agent-capabilities.html) | 三个角色的工具集怎么按插件拼出来 |
 | [004 提示词](../docs/004-prompts.md) | [prompt-assembly](./prompt-assembly.html) | 团队段 → 内置段 → 技能 → 角色组装 → 版本 |
-| [005 面板](../docs/005-panel.md) | [panel-ia](./panel-ia.html) · [requirement-lifecycle](./requirement-lifecycle.html) · [discussion-to-requirement](./discussion-to-requirement.html) | 四层漏斗；需求的状态；讨论如何变成需求 |
+| [005 面板](../docs/005-panel.md) | [panel-ia](./panel-ia.html) · [requirement-lifecycle](./requirement-lifecycle.html) · [discussion-to-requirement](./discussion-to-requirement.html) · [discussion-routing](./discussion-routing.html) | 四层漏斗；需求的状态；讨论如何变成需求；Router 的 discuss 决策与交给对齐 |
 | [006 部署](../docs/006-deployment.md) | [deployment-topology](./deployment-topology.html) · [trust-boundaries](./trust-boundaries.html) | 一个进程与一个状态目录；唯一授权路径与被拒绝的旁路 |
 | [007 持久化](../docs/007-architecture.md) | [schema-core](./schema-core.html) · [schema-queues](./schema-queues.html) | 五张编排表；四张队列 / 收据表 |
 | [007 依赖规则](../docs/007-architecture.md) | [module-dependencies](./module-dependencies.html) | core 不外出、Sources 看不见胶水层 |
@@ -24,6 +24,14 @@
 
 > 全部图都是自包含 HTML（内联 SVG + 内联 CSS + Google Fonts），同名 `.svg` / `.png`（@2x）为导出件。
 > 根目录 `AGENTS.md` 里有一张「改动落在哪 → 要改哪张图」的映射表，与这张表同源；改图要同时重导出。
+
+## 图 0d：讨论的路由（2026-11-15）
+
+[![讨论有一条可选的先谈之路](./discussion-routing.png)](./discussion-routing.html)
+
+- 单文件 HTML：[`discussion-routing.html`](./discussion-routing.html)（内联 SVG + 三张说明卡）。
+- 讲三处改动：① Router 可以在本地需求上选 `mode=discuss`，只开讨论、不建 Ticket；② Answerer 的等待跟随会话输出（2 分钟静默 / 30 分钟上限，此前是 120 秒总预算）；③ 人点 **Give to alignment** 才建该需求唯一的 align 工单，结论作为 routing note 交给 Aligner。
+- 画布：`doc-wide` 1280×720；coral 只标本次改动的三处，其余是既有环节。
 
 ## 图 0：编辑版总览（2026-11-10 重设计）
 

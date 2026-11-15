@@ -37,7 +37,7 @@ Opening a URL that carries `panel=dsh-superagent` selects **Superagent** in the 
 
 ### Creating a requirement
 
-**New requirement** above the requirement list opens a dialog over it; the separate New requirement page is gone. The dialog names the target project and its repository chain and has one description field: its first non-empty line becomes the title, with whitespace collapsed and shortened to 200 characters, while the whole description is stored as the body. **Choose images** attaches up to four PNG, JPEG, WebP or GIF files of at most 5 MiB each; each shows a thumbnail and its file name and can be removed before submitting. Submit stays disabled while the description is blank. Opened from a discussion's result panel, the dialog fills the description once with that discussion's text, which stays fully editable, and submits the discussion id with the requirement. A refused create keeps the dialog open with the description and the chosen images, and nothing is cleared before the request succeeds.
+**New requirement** above the requirement list opens a dialog over it; the separate New requirement page is gone. The dialog names the target project and its repository chain and has one description field: its first non-empty line becomes the title, with whitespace collapsed and shortened to 200 characters, while the whole description is stored as the body. **Choose images** attaches up to four PNG, JPEG, WebP or GIF files of at most 5 MiB each; each shows a thumbnail and its file name and can be removed before submitting. Pasting a clipboard image or dropping image files on the box attaches them the same way, without inserting any file-name text into the description. Submit stays disabled while the description is blank. Opened from a discussion's result panel, the dialog fills the description once with that discussion's text, which stays fully editable, and submits the discussion id with the requirement. A refused create keeps the dialog open with the description and the chosen images, and nothing is cleared before the request succeeds.
 
 ### Projects
 
@@ -49,7 +49,7 @@ A configured worktree root must already exist and accept writes; otherwise the T
 
 ### Discussions
 
-The figure [`diagrams/discussion-to-requirement.html`](../diagrams/discussion-to-requirement.html) traces one discussion into one requirement, field by field.
+The figure [`diagrams/discussion-to-requirement.html`](../diagrams/discussion-to-requirement.html) traces one discussion into one requirement, field by field. The figure [`diagrams/discussion-routing.html`](../diagrams/discussion-routing.html) draws the route around it: the Router's `discuss` decision, the read-only Answerer that answers it, and the hand-off that starts the one alignment Ticket.
 
 Every discussion belongs to one local project and lives on its own Thread, apart from the project's requirements. The **Discussions** page lists the current project's discussions newest first; each row shows whether it is Open or Closed, whether it already created a requirement, and when it was created. **New discussion** above the list opens a dialog for the text: its first non-empty line becomes the title and the whole text is stored, with the same title rules as a requirement's description.
 
@@ -77,7 +77,10 @@ A requirement's state label is **Open** while work remains and **Closed** after 
 
 **Choose images** in the requirement dialog attaches up to four files to one requirement. The limits are PNG, JPEG, WebP or GIF only, at most 5 MiB per image and at most 4 images; the form states them below the button.
 
-- The client refuses an unsupported type, an oversized file or a selection that would exceed four images, shows the reason and adds nothing, so no request is made. The already chosen images stay.
+- **Choose images**, a clipboard paste or dropped image files all use the same intake; a pasted image shows its thumbnail and file name and never inserts its name into the description.
+- An image over 5 MiB is downsampled to a JPEG whose longest edge is 2560 at quality 0.9 before attaching instead of being refused; a result still over 5 MiB is refused with the size reason.
+- The client refuses an unsupported type or a selection that would exceed four images, shows the reason and adds nothing, so no request is made. The already chosen images stay. A pasted non-image adds nothing.
+- Pasting the same file twice keeps one entry, and an unnamed clipboard screenshot is attached as `pasted-<timestamp>.png`.
 - Submitting sends the description and the images in one create request, so the requirement exists with all of them or with none.
 - When the host refuses the create, the description and the chosen images stay on the page and the localized error appears; nothing is cleared before the request succeeds.
 - The detail shows the images in submission order, each with its file name and byte size. The list row adds the image count.
