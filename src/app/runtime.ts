@@ -36,7 +36,7 @@ import { Prepare } from './prepare.ts'
 import { LocalIssues } from './local.ts'
 import { Discussions } from './discussions.ts'
 import { Answers } from './answers.ts'
-import { Answerer } from './answerer.ts'
+import { Answerer, discussionWorkspace } from './answerer.ts'
 import { LocalQuestions } from './local-questions.ts'
 import { Questions } from './questions.ts'
 import { Projects } from './projects.ts'
@@ -196,12 +196,15 @@ export class Runtime extends Service implements SourceHost {
       const evaluateDue = () => { engine.evaluateDue(); evals.set(evalsHealth(store)) }
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
-      this.discussions = new Discussions({ store, receive: trigger => this.passes.receive(trigger),
-        answer: (discussion, text, triggerId) => { this.answers.accept(discussion, text, triggerId) } })
+      this.discussions = new Discussions({ store, stateDir: machine.stateDir, receive: trigger => this.passes.receive(trigger),
+        answer: (discussion, text, triggerId) => { this.answers.accept(discussion, text, triggerId) },
+        // A deleted discussion stops its own read-only Session; an unknown one is already gone and needs no archive.
+        archive: sessionId => ctx.workspaceRegistry.archiveSession(sessionId as SessionId, { stopActivity: true }),
+        warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       // A discussion answers in its own read-only Session, in the project's own checkout when it names one, never in a worker slot.
       this.answers = new Answers({ discussions: this.discussions, lifetime: this.lifetime,
         answerer: new Answerer({ sessions, workspace: discussion =>
-          store.get(KV.local.project(discussion.project))?.worktreeRoot || join(machine.stateDir, 'discussions', discussion.id),
+          discussionWorkspace(machine.stateDir, store.get(KV.local.project(discussion.project)), discussion.id),
         lifetime: this.lifetime }),
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       this.local = new LocalIssues({ store, stateDir: machine.stateDir, discussions: this.discussions,

@@ -119,7 +119,8 @@ export function DiscussionList() {
 /**
  * One discussion, two columns: the exchange on the left (its body, then the message timeline with the follow-up box above
  * it), and the result panel on the right, which carries the newest conclusion into a requirement, opens the one already
- * made from it, or closes the discussion.
+ * made from it, hands the conclusion to the alignment worker, closes the discussion, or deletes one that is about no
+ * requirement.
  */
 export function DiscussionDetail({ id }: { id: string }) {
   const { t, call, notify, navigate } = usePanel()
@@ -127,6 +128,7 @@ export function DiscussionDetail({ id }: { id: string }) {
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const discussion = data?.discussion
   const act = async (work: () => Promise<unknown>) => {
     if (busy) return
@@ -141,6 +143,12 @@ export function DiscussionDetail({ id }: { id: string }) {
   }
   const retry = (answerId: string) => act(async () => {
     await call('POST local/discussions/:id/answers/:answerId/retry', { id, answerId })
+  })
+  // Deleting is offered only while the discussion is about no requirement, so a requirement never loses its source.
+  const remove = () => act(async () => {
+    setConfirming(false)
+    await call('DELETE local/discussions/:id', { id })
+    navigate({ page: 'discussions' }, true)
   })
   if (error) return <p className="dt-error" role="alert">{error.message}</p>
   if (!discussion) return <p className="dt-hint">{t('loading')}</p>
@@ -227,6 +235,8 @@ export function DiscussionDetail({ id }: { id: string }) {
                 icon={<Icon name="plus" size={14} />} onClick={() => setCreating(true)}>{t('discussion.sendIssue')}</Button>}
             {discussion.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
               onClick={() => { void act(() => call('POST local/discussions/:id/close', { id })) }}>{t('discussion.close')}</Button>}
+            {discussion.issueId === undefined && <Button variant="ghost" size="sm" disabled={busy}
+              onClick={() => setConfirming(true)}>{t('discussion.delete')}</Button>}
           </div>
           {discussion.handoff && <p className="dt-hint">
             {t('discussion.handoffTo', { ticket: discussion.handoff.ticketId })}<When at={discussion.handoff.at} /></p>}
@@ -234,6 +244,14 @@ export function DiscussionDetail({ id }: { id: string }) {
       </aside>
     </div>
     {creating && <RequirementDialog discussion={discussion.id} onClose={() => setCreating(false)} />}
+    {confirming && <Modal className="dt-discussion-modal" open onClose={() => setConfirming(false)}
+      title={t('discussion.delete')} closeLabel={t('close')}
+      footer={<>
+        <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>{t('cancel')}</Button>
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => { void remove() }}>{t('confirm')}</Button>
+      </>}>
+      <p>{t('discussion.deleteConfirm', { title: discussion.title })}</p>
+    </Modal>}
   </>
 }
 

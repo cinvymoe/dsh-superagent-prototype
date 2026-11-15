@@ -1,8 +1,9 @@
 /** Local discussions: records and Threads of their own, kept apart from requirement records. */
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { discussionWorkspace } from '../src/app/answerer.ts'
 import { Discussions } from '../src/app/discussions.ts'
 import { LocalIssues } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
@@ -20,14 +21,17 @@ describe('the discussion records', () => {
     directories.push(directory)
     const store = new Store(join(directory, 'orchestrator.sqlite'))
     const triggers: Trigger[] = []
-    const receive = (trigger: Trigger) => { triggers.push(trigger); return { kind: 'stored' } as never }
+    const archived: string[] = []
+    // The real host stores each Trigger and indexes its Thread; the port test keeps that index without an Engine.
+    const receive = (trigger: Trigger) => { triggers.push(trigger); store.triggers.save(trigger); return { kind: 'stored' } as never }
     let tick = 0
-    const discussions = new Discussions({ store, receive,
+    const discussions = new Discussions({ store, stateDir: directory, receive,
+      archive: sessionId => { archived.push(sessionId) },
       // Each create moves the clock a second so the newest-first list order is unambiguous.
       now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)).toISOString() })
     const local = new LocalIssues({ store, stateDir: directory, discussions, receive })
     const project = local.createProject({ name: 'Demo', repository: 'acme/widgets' })
-    return { discussions, local, triggers, project, store }
+    return { discussions, local, triggers, archived, project, store, directory }
   }
 
   it('creates a discussion on its own thread and lists it by project, newest first', () => {
@@ -130,6 +134,82 @@ describe('the discussion records', () => {
     expect(discussions.get(discussion.id)).toEqual(discussion)
     expect(discussions.thread(discussion.id)).toBe(`local:${discussion.id}`)
   })
+
+  it('deletes a discussion with its Thread, its own Triggers, its Answerer Session and its workspace', async () => {
+    const { discussions, triggers, archived, project, store, directory } = setup()
+    const discussion = discussions.create({ body: 'Delete this', project: project.id })
+    discussions.comment(discussion.id, 'And this message')
+    const workspace = join(directory, 'discussions', discussion.id)
+    mkdirSync(workspace, { recursive: true })
+    writeFileSync(join(workspace, 'note.txt'), 'kept')
+    expect(store.read.threadTriggers(`local:${discussion.id}`, 10)).toHaveLength(2)
+
+    await expect(discussions.delete(discussion.id)).resolves.toMatchObject({ id: discussion.id, title: 'Delete this' })
+
+    expect(discussions.list()).toEqual([])
+    expect(discussions.get(discussion.id)).toBeUndefined()
+    expect(store.read.threadTriggers(`local:${discussion.id}`, 10)).toEqual([])
+    expect(triggers.map(trigger => store.triggers.get(trigger.id))).toEqual([undefined, undefined])
+    expect(archived).toEqual([`answerer-${discussion.id}`])
+    expect(existsSync(workspace)).toBe(false)
+    expect(await discussions.delete(discussion.id)).toBeUndefined()
+  })
+
+  it('refuses to delete a discussion that created a requirement and keeps its record and Thread', async () => {
+    const { discussions, local, triggers, project, store } = setup()
+    const discussion = discussions.create({ body: 'Linked discussion', project: project.id })
+    const issue = local.create({ body: 'Its requirement', project: project.id, discussion: discussion.id })
+    const stored = discussions.get(discussion.id)
+    const thread = store.threads.get(`local:${discussion.id}`)
+    const messages = store.read.threadTriggers(`local:${discussion.id}`, 10)
+
+    await expect(discussions.delete(discussion.id)).rejects.toThrow('keep it or remove that requirement first')
+
+    expect(discussions.get(discussion.id)).toEqual(stored)
+    expect(discussions.get(discussion.id)?.issueId).toBe(issue.id)
+    expect(store.threads.get(`local:${discussion.id}`)).toEqual(thread)
+    expect(store.read.threadTriggers(`local:${discussion.id}`, 10)).toEqual(messages)
+    expect(triggers).toHaveLength(2)
+  })
+})
+
+describe('the discussion answer workspace', () => {
+  const stateDirectory = () => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-superagent-discussion-workspace-'))
+    directories.push(directory)
+    return directory
+  }
+
+  it('creates the state-directory fallback before the Session opens', () => {
+    const stateDir = stateDirectory()
+    const directory = discussionWorkspace(stateDir, undefined, 'd-12345678')
+    expect(directory).toBe(join(stateDir, 'discussions', 'd-12345678'))
+    expect(statSync(directory).isDirectory()).toBe(true)
+  })
+
+  it('keeps an existing configured worktree root, without creating the fallback', () => {
+    const stateDir = stateDirectory()
+    const root = join(stateDir, 'checkout')
+    mkdirSync(root)
+    expect(discussionWorkspace(stateDir, { worktreeRoot: root }, 'd-12345678')).toBe(root)
+    expect(existsSync(join(stateDir, 'discussions', 'd-12345678'))).toBe(false)
+  })
+
+  it('falls back when the configured worktree root is missing', () => {
+    const stateDir = stateDirectory()
+    const directory = discussionWorkspace(stateDir, { worktreeRoot: join(stateDir, 'missing') }, 'd-12345678')
+    expect(directory).toBe(join(stateDir, 'discussions', 'd-12345678'))
+    expect(statSync(directory).isDirectory()).toBe(true)
+  })
+
+  it('falls back when the configured worktree root is not a directory', () => {
+    const stateDir = stateDirectory()
+    const file = join(stateDir, 'checkout.txt')
+    writeFileSync(file, 'not a checkout')
+    const directory = discussionWorkspace(stateDir, { worktreeRoot: file }, 'd-12345678')
+    expect(directory).toBe(join(stateDir, 'discussions', 'd-12345678'))
+    expect(statSync(directory).isDirectory()).toBe(true)
+  })
 })
 
 describe('the discussion answers', () => {
@@ -172,6 +252,42 @@ describe('the discussion answers', () => {
     expect(h.tools.get(`answerer-${discussion.id}`)!.has('orchestrator_align')).toBe(false)
   })
 
+  it('creates the Answerer workspace under the state directory when the project configures no worktree root', async () => {
+    const discussion = h.runtime.discussions.create({ body: 'Where does the Answerer run?', project: project.id })
+    const workspace = join(h.directory, 'discussions', discussion.id)
+    expect(existsSync(workspace)).toBe(false)
+    await settle(discussion.id, 'In the state directory.')
+    expect(existsSync(workspace)).toBe(true)
+    expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'In the state directory.' })
+    expect(h.headers.get(`answerer-${discussion.id}`)?.cwd).toBe(realpathSync(workspace))
+  })
+
+  it('keeps an existing project worktree root as the Answerer workspace', async () => {
+    const root = join(h.directory, 'project-checkout')
+    mkdirSync(root)
+    const rooted = h.runtime.local.createProject({ name: 'Rooted', repository: 'deepseek-ai/dsh-superagent-prototype', worktreeRoot: root })
+    const discussion = h.runtime.discussions.create({ body: 'Where does this one run?', project: rooted.id })
+    await settle(discussion.id, 'In the project checkout.')
+    expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'In the project checkout.' })
+    expect(h.headers.get(`answerer-${discussion.id}`)?.cwd).toBe(realpathSync(root))
+    expect(existsSync(join(h.directory, 'discussions', discussion.id))).toBe(false)
+  })
+
+  it('falls back to the state directory when the project worktree root is missing or not a directory', async () => {
+    const missing = join(h.directory, 'missing-checkout')
+    const file = join(h.directory, 'checkout.txt')
+    writeFileSync(file, 'not a checkout')
+    for (const worktreeRoot of [missing, file]) {
+      const rooted = h.runtime.local.createProject({ name: `Rooted ${worktreeRoot === file}`, repository: 'deepseek-ai/dsh-superagent-prototype', worktreeRoot })
+      const discussion = h.runtime.discussions.create({ body: 'Answer despite the root', project: rooted.id })
+      await settle(discussion.id, 'Answered through the fallback.')
+      expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'Answered through the fallback.' })
+      expect(h.headers.get(`answerer-${discussion.id}`)?.cwd).toBe(realpathSync(join(h.directory, 'discussions', discussion.id)))
+      expect(existsSync(join(h.directory, 'discussions', discussion.id))).toBe(true)
+    }
+    expect(existsSync(missing)).toBe(false)
+  })
+
   it('answers a discussion written before answers were recorded once answers resume', async () => {
     const id = 'd-legacy'
     const at = '2026-11-14T00:00:00.000Z'
@@ -205,6 +321,23 @@ describe('the discussion answers', () => {
     await settle(discussion.id, 'Retried answer')
     expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'Retried answer' })
     expect(h.runtime.store.tickets.list()).toEqual([])
+  })
+
+  it('answers a failed ENOENT answer once the panel retries it', async () => {
+    const id = 'd-enoent-retry'
+    const at = '2026-11-14T00:00:00.000Z'
+    const workspace = join(h.directory, 'discussions', id)
+    h.runtime.store.set(KV.local.discussion(id), {
+      id, title: 'A question that failed', body: 'A question that failed', author: 'local', project: project.id,
+      createdAt: at, updatedAt: at, state: 'open',
+      answers: [{ id: 'an-enoent', discussionId: id, triggerId: 'trigger-enoent', text: 'A question that failed', at, state: 'failed',
+        failure: { reason: 'no-session', message: `ENOENT: no such file or directory, realpath '${workspace}'` } }],
+    })
+    // The panel's Retry route queues the same answer again.
+    expect((await h.api('POST', `local/discussions/${id}/answers/an-enoent/retry`)).status).toBe(200)
+    await settle(id, 'Answered after the retry')
+    expect(h.runtime.discussions.get(id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'Answered after the retry' })
+    expect(existsSync(workspace)).toBe(true)
   })
 })
 
@@ -271,11 +404,58 @@ describe('the discussion HTTP API', () => {
     expect((await h.api('GET', 'local/discussions/d-00000000')).status).toBe(404)
     expect((await h.api('POST', 'local/discussions/d-00000000/comments', { text: 'text' })).status).toBe(404)
     expect((await h.api('POST', 'local/discussions/d-00000000/close')).status).toBe(404)
+    expect((await h.api('DELETE', 'local/discussions/d-00000000')).status).toBe(404)
     const empty = await h.api('POST', 'local/discussions', { body: '   ', project: project.id })
     expect(empty.status).toBe(400)
     expect(empty.body.code).toBe('discussionEmpty')
     const unknownProject = await h.api('POST', 'local/discussions', { body: 'A discussion', project: 'p-missing' })
     expect(unknownProject.status).toBe(404)
     expect((await h.api('GET', `local/discussions?project=${project.id}`)).body.discussions).toEqual([])
+  })
+
+  it('deletes an unlinked discussion over HTTP and takes its Thread, Triggers, Answerer Session and workspace with it', async () => {
+    const created = await h.api('POST', 'local/discussions', { body: 'Delete over HTTP\n\nWith detail', project: project.id })
+    const discussion = created.body.discussion as LocalDiscussion
+    const threadKeyValue = `local:${discussion.id}`
+    const triggerIds = h.runtime.store.read.threadTriggers(threadKeyValue, 10).map(trigger => trigger.id)
+    expect(triggerIds).toHaveLength(1)
+    const workspace = join(h.directory, 'discussions', discussion.id)
+    mkdirSync(workspace, { recursive: true })
+    writeFileSync(join(workspace, 'note.txt'), 'kept')
+
+    const deleted = await h.api('DELETE', `local/discussions/${discussion.id}`)
+    expect(deleted.status).toBe(200)
+    expect(deleted.body).toEqual({ deleted: true })
+
+    expect((await h.api('GET', `local/discussions?project=${project.id}`)).body.discussions).toEqual([])
+    expect((await h.api('GET', `local/discussions/${discussion.id}`)).status).toBe(404)
+    expect(h.runtime.discussions.get(discussion.id)).toBeUndefined()
+    expect(h.runtime.store.threads.get(threadKeyValue)).toBeUndefined()
+    expect(h.runtime.store.read.threadTriggers(threadKeyValue, 10)).toEqual([])
+    triggerIds.forEach(id => expect(h.runtime.store.triggers.get(id)).toBeUndefined())
+    expect(h.archiveSession).toHaveBeenCalledWith(`answerer-${discussion.id}`, { stopActivity: true })
+    expect(existsSync(workspace)).toBe(false)
+  })
+
+  it('refuses to delete a discussion that created a requirement over HTTP and changes nothing', async () => {
+    const created = await h.api('POST', 'local/discussions', { body: 'A linked discussion\n\nDetails', project: project.id })
+    const discussion = created.body.discussion as LocalDiscussion
+    const made = await h.api('POST', 'local/issues', { body: 'The requirement', project: project.id, discussion: discussion.id })
+    const issue = made.body.issue as { id: string }
+    await h.api('POST', `local/discussions/${discussion.id}/comments`, { text: 'A message that stays' })
+    const stored = h.runtime.discussions.get(discussion.id)!
+    const thread = h.runtime.store.threads.get(`local:${discussion.id}`)!
+    const messages = h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 10)
+
+    const refused = await h.api('DELETE', `local/discussions/${discussion.id}`)
+    expect(refused.status).toBe(400)
+    expect(refused.body).toMatchObject({ code: 'discussionRequirement' })
+
+    expect(h.runtime.discussions.get(discussion.id)).toEqual(stored)
+    expect(h.runtime.discussions.get(discussion.id)?.issueId).toBe(issue.id)
+    expect(h.runtime.store.threads.get(`local:${discussion.id}`)).toEqual(thread)
+    expect(h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 10)).toEqual(messages)
+    expect(h.archiveSession).not.toHaveBeenCalled()
+    expect((await h.api('GET', `local/discussions/${discussion.id}`)).status).toBe(200)
   })
 })

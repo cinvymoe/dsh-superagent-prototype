@@ -55,6 +55,8 @@ export interface Api {
   /** Hand the discussion's conclusion to the requirement's Aligner; the discussion keeps its answers and stays open. */
   'POST local/discussions/:id/handoff': { response: { ticket: { id: string; title: string; mode?: 'work' | 'align' }; discussion: LocalDiscussion | undefined } }
   'POST local/discussions/:id/close': { response: { discussion: LocalDiscussion } }
+  /** Delete a discussion that created no requirement; a linked one is refused with `discussionRequirement`. */
+  'DELETE local/discussions/:id': { response: { deleted: true } }
   // Local requirement responses carry the HTTP view (`LocalIssueView`), whose `slicesFinished` is derived per read.
   'GET local/issues': { query?: { project?: string }; response: { issues: LocalIssueView[] } }
   'POST local/issues': { body: { title?: string; body?: string; project: string; discussion?: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView } }

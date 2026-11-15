@@ -3,7 +3,7 @@
  * allowed member Alice (`ou_alice`), listened chat `oc_team`, and `auto` eval mode. Stop it with `stop()`.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { vi, type Mock } from 'vitest'
@@ -203,13 +203,14 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
   let http!: HttpHandler
   const resolveDefault = async (id: string) => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } }
   const controller = {
-    create: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    create: vi.fn(async ({ sessionId, workspaceId }: { sessionId: string; workspaceId?: string }) => {
       if (agents.has(sessionId)) return
       const agentCtx = new Context()
       const sessionTools = new Map<string, RegisteredTool>()
       tools.set(sessionId, sessionTools)
       events.set(sessionId, [])
-      const header = headers.get(sessionId) ?? { inheritedEventCount: 0, cwd: directory }
+      const header = headers.get(sessionId) ?? { inheritedEventCount: 0,
+        cwd: (workspaceId === undefined ? undefined : workspaces.get(workspaceId)) ?? directory }
       headers.set(sessionId, header)
       const register = (tool: RegisteredTool) => { sessionTools.set(tool.name, tool); return () => sessionTools.delete(tool.name) }
       agentCtx.reflect.provide('tools', { register, get: (name: string) => builtins.includes(name) ? { name } : undefined,
@@ -300,7 +301,15 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
   const webServer = { host: '127.0.0.1', port: 3082, register: (route: { handler: HttpHandler }) => { http = route.handler; return () => {} } }
   const jobs = jobRegistry(id => agents.get(id))
   const subagents = subagentRuntime(agents)
-  const workspaceRegistry = { create: async (cwd: string) => ({ id: cwd }), archiveSession }
+  /** Each workspace's canonical directory, keyed by the id `workspaceRegistry.create` returns. */
+  const workspaces = new Map<string, string>()
+  // As DSH's registry does: canonicalize the directory, refuse a missing or non-directory path, and reuse the canonical one.
+  const workspaceRegistry = { create: async (cwd: string) => {
+    const canonical = realpathSync(cwd)
+    if (!statSync(canonical).isDirectory()) throw new Error(`cannot create a workspace at '${canonical}': path is not a directory`)
+    workspaces.set(canonical, canonical)
+    return { id: canonical }
+  }, archiveSession }
   // The host's global tool registry, which `GET settings` reads through DSH's tools service. A spec registers a fake
   // plugin tool here; the per-Session registries above are separate, as they are on a real host.
   // The profile's own tool plugins register the built-in tools globally, as a real host does; a spec adds others.

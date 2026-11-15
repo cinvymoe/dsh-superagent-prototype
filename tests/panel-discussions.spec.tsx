@@ -129,6 +129,37 @@ it('hands a requirement\'s discussion conclusion to the Aligner from its result 
   expect(all('button').some(item => item.textContent?.trim() === zh['discussion.handedOff'])).toBe(true)
 })
 
+it('deletes an unlinked discussion after a confirmation that carries its title and returns to the list', async () => {
+  server.localProjects = [PROJECT]
+  server.localDiscussions = [localDiscussion('Delete me', 'Body', PROJECT.id, 'd-delete'),
+    localDiscussion('Keep me', 'Body', PROJECT.id, 'd-keep')]
+  at({ page: 'discussions', id: 'd-delete' })
+  await mount()
+  // A dialogue carrying the title asks first; cancelling sends nothing.
+  await click(button(zh['discussion.delete']))
+  const dialog = document.querySelector('.dt-modal')!
+  expect(dialog.textContent).toContain('Delete me')
+  const cancel = [...dialog.querySelectorAll('button')].find(item => item.textContent?.trim() === zh['cancel'])!
+  await click(cancel)
+  expect(server.requests.some(request => request.method === 'DELETE')).toBe(false)
+  // Confirming sends the delete and lands on the list, where the deleted row is gone.
+  await click(button(zh['discussion.delete']))
+  const confirm = [...document.querySelector('.dt-modal')!.querySelectorAll('button')]
+    .find(item => item.textContent?.trim() === zh['confirm'])!
+  await click(confirm)
+  expect(server.requests.some(request => request.path === 'local/discussions/d-delete' && request.method === 'DELETE')).toBe(true)
+  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Widgets')
+  expect(all('.dt-cards .dt-row-title').map(title => title.textContent)).toEqual(['Keep me'])
+})
+
+it('does not offer Delete on a discussion that created a requirement', async () => {
+  server.localProjects = [PROJECT]
+  server.localDiscussions = [{ ...localDiscussion('Linked talk', 'Body', PROJECT.id, 'd-linked'), issueId: 'q-1' }]
+  at({ page: 'discussions', id: 'd-linked' })
+  await mount()
+  expect(all('#dt-page button').some(item => item.textContent?.trim() === zh['discussion.delete'])).toBe(false)
+})
+
 it('sends a discussion result to a requirement dialog and creates it, linked back to the discussion', async () => {
   server.localProjects = [PROJECT]
   server.localDiscussions = [{ ...localDiscussion('Design the layout', 'Design the layout\n\nDetails from the discussion', PROJECT.id,
@@ -193,7 +224,8 @@ it('shows the discussion pages in English as well', async () => {
   await click(all('.dt-cards .dt-row-title button')[0]!)
   expect(text()).toContain(en['discussion.detail'])
   expect(text()).toContain(en['discussion.messages'])
-  expect(all('button').some(item => item.textContent?.trim() === en['discussion.sendIssue'])).toBe(true)
+  expect(all('#dt-page button').some(item => item.textContent?.trim() === en['discussion.sendIssue'])).toBe(true)
+  expect(all('#dt-page button').some(item => item.textContent?.trim() === en['discussion.delete'])).toBe(true)
 })
 
 it('still shows a message written before answers were recorded', async () => {
