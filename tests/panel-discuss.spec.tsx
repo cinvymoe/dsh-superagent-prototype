@@ -685,6 +685,28 @@ async function selectImages(files: File[]) {
   })
   await settle()
 }
+/** A paste event carrying `files` on the clipboard, the way a screenshot arrives instead of text. */
+function pasteEvent(files: File[]): Event {
+  const items = files.map(file => ({ kind: 'file', type: file.type, getAsFile: () => file }))
+  const event = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', { value: { items, files, types: ['Files'] } })
+  return event
+}
+/** A drop event carrying `files` as dragged data. */
+function dropEvent(files: File[]): Event {
+  const event = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: { files, types: ['Files'] } })
+  return event
+}
+/** Dispatch a paste or drop at the box and wait long enough for the FileReader results to render. */
+async function dispatchFiles(box: HTMLElement, event: Event) {
+  await act(async () => {
+    box.dispatchEvent(event)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
+  })
+  await settle()
+}
 
 it('selects several images with thumbnails and names, submits description and images together, and shows them in order', async () => {
   server.localProjects = [PROJECT]
@@ -731,7 +753,7 @@ it('removes a chosen image before submitting, posting and rendering only the rem
   expect(all('.dt-image-caption').map(caption => caption.textContent)).toEqual(['two.png · 1 B'])
 })
 
-it('refuses an unsupported type and an oversized file locally without submitting or showing a thumbnail', async () => {
+it('refuses an unsupported type locally without submitting or showing a thumbnail', async () => {
   server.localProjects = [PROJECT]
   at({ page: 'requirements' })
   await mount()
@@ -740,12 +762,28 @@ it('refuses an unsupported type and an oversized file locally without submitting
   await selectImages([new File(['x'], 'note.txt', { type: 'text/plain' })])
   expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['discuss.imagesRefuseType'].replace('{name}', 'note.txt'))
   expect(all('.dt-image-choice')).toHaveLength(0)
-  const big = imageFile('big.png')
-  Object.defineProperty(big, 'size', { value: 5 * 1024 * 1024 + 1 })
-  await selectImages([big])
-  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['discuss.imagesRefuseSize'].replace('{name}', 'big.png'))
-  expect(all('.dt-image-choice')).toHaveLength(0)
   expect(server.requests.some(request => request.path === 'local/issues' && request.method === 'POST')).toBe(false)
+})
+
+it('adds no entry for a chosen image the browser fails to read', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  const original = FileReader.prototype.readAsDataURL
+  const read = vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementation(function (this: FileReader, blob: Blob) {
+    if (blob instanceof File && blob.name === 'broken.png') {
+      queueMicrotask(() => this.dispatchEvent(new Event('error')))
+      return
+    }
+    original.call(this, blob)
+  })
+  try {
+    await selectImages([new File(['x'], 'broken.png', { type: 'image/png' }), imageFile('ok.png', 'ok')])
+    expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['ok.png'])
+  } finally {
+    read.mockRestore()
+  }
 })
 
 it('keeps the description and chosen images and shows the localized error when the host refuses the create', async () => {
@@ -792,6 +830,140 @@ it('reads each requirement image through the management API with the same-origin
   expect(calls[0]![1]).toMatchObject({ headers: { 'x-orchestrator-request': '1' } })
   expect(createObjectURL).toHaveBeenCalled()
   expect(all('.dt-image-card img')[0]!.getAttribute('src')).toBe('blob:requirement-image')
+})
+
+it('pastes a clipboard image into the description box, blocks the file-name text and submits it with the description', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  const box = area(zh['discuss.descriptionPlaceholder'])
+  const paste = pasteEvent([imageFile('clipboard.png', 'pixels')])
+  await dispatchFiles(box, paste)
+  expect(paste.defaultPrevented).toBe(true)
+  await vi.waitFor(() => expect(all('.dt-image-choice')).toHaveLength(1))
+  expect(all('.dt-image-thumb').map(image => image.getAttribute('alt'))).toEqual(['clipboard.png'])
+  expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['clipboard.png'])
+  // Preventing the paste is what keeps the browser from writing the file name into the description.
+  expect(box.value).toBe('')
+  const description = 'Ship the pasted screenshot'
+  await type(box, description)
+  await click(submitButton())
+  const posted = server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')!
+  expect(posted).toMatchObject({ method: 'POST', body: { body: description, project: 'p-fixture' } })
+  const images = (posted.body as { images: { name: string; mediaType: string; data: string }[] }).images
+  expect(images).toHaveLength(1)
+  expect(images[0]).toMatchObject({ name: 'clipboard.png', mediaType: 'image/png' })
+  expect(images[0]!.data.startsWith('data:image/png;base64,')).toBe(true)
+})
+
+it('names an unnamed clipboard screenshot pasted-<timestamp>.png', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  const box = area(zh['discuss.descriptionPlaceholder'])
+  await dispatchFiles(box, pasteEvent([imageFile('', 'screenshot')]))
+  await vi.waitFor(() => expect(all('.dt-image-choice')).toHaveLength(1))
+  expect(all('.dt-image-name')[0]!.textContent).toMatch(/^pasted-\d+\.png$/)
+})
+
+it('keeps one entry for the same image pasted twice and ignores a non-image paste', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  const box = area(zh['discuss.descriptionPlaceholder'])
+  await dispatchFiles(box, pasteEvent([imageFile('same.png', 'same bytes')]))
+  await vi.waitFor(() => expect(all('.dt-image-choice')).toHaveLength(1))
+  // A second paste arrives as a new File object with the same bytes, as the clipboard produces it.
+  await dispatchFiles(box, pasteEvent([imageFile('same.png', 'same bytes')]))
+  await dispatchFiles(box, pasteEvent([new File(['note'], 'note.txt', { type: 'text/plain' })]))
+  await vi.waitFor(() => expect(all('.dt-image-choice')).toHaveLength(1))
+  expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['same.png'])
+  expect(document.querySelector('.dt-toast')).toBeNull()
+})
+
+it('reports the four-image limit and adds none when a fifth image is pasted', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  await selectImages([imageFile('a.png', 'a'), imageFile('b.png', 'b'), imageFile('c.png', 'c'), imageFile('d.png', 'd')])
+  expect(all('.dt-image-choice')).toHaveLength(4)
+  await dispatchFiles(area(zh['discuss.descriptionPlaceholder']), pasteEvent([imageFile('e.png', 'e')]))
+  await vi.waitFor(() => expect(document.querySelector('.dt-toast')?.textContent)
+    .toBe(zh['discuss.imagesRefuseCount'].replace('{count}', '4')))
+  expect(all('.dt-image-choice')).toHaveLength(4)
+  expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['a.png', 'b.png', 'c.png', 'd.png'])
+})
+
+it('attaches an image dropped on the description box the same way as a paste', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  await dispatchFiles(area(zh['discuss.descriptionPlaceholder']), dropEvent([imageFile('dropped.png', 'dropped')]))
+  await vi.waitFor(() => expect(all('.dt-image-choice')).toHaveLength(1))
+  expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['dropped.png'])
+})
+
+it('downsamples an oversized image to a JPEG whose longest edge is 2560 before submitting', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  const drawImage = vi.fn()
+  let canvas: HTMLCanvasElement | undefined
+  const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+    (() => ({ drawImage })) as unknown as typeof HTMLCanvasElement.prototype.getContext)
+  const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(function (this: HTMLCanvasElement) {
+    canvas = this
+    return 'data:image/jpeg;base64,AAAA'
+  })
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 3200, height: 1800, close: vi.fn() })))
+  const big = imageFile('huge.png')
+  Object.defineProperty(big, 'size', { value: 5 * 1024 * 1024 + 1 })
+  try {
+    await dispatchFiles(area(zh['discuss.descriptionPlaceholder']), pasteEvent([big]))
+    await vi.waitFor(() => expect(all('.dt-image-choice')).toHaveLength(1))
+    expect(canvas?.width).toBe(2560)
+    expect(canvas?.height).toBe(1440)
+    expect(toDataURL).toHaveBeenCalledWith('image/jpeg', 0.9)
+    expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 2560, 1440)
+    expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['huge.jpg'])
+    await type(area(zh['discuss.descriptionPlaceholder']), 'Screenshot over the old limit')
+    await click(submitButton())
+    const posted = server.requests.find(request => request.path === 'local/issues' && request.method === 'POST')!
+    const images = (posted.body as { images: { name: string; mediaType: string; data: string }[] }).images
+    expect(images).toEqual([{ name: 'huge.jpg', mediaType: 'image/jpeg', data: 'data:image/jpeg;base64,AAAA' }])
+  } finally {
+    getContext.mockRestore()
+    toDataURL.mockRestore()
+  }
+})
+
+it('refuses an image whose downsampled JPEG is still over 5 MiB, with the existing wording', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'requirements' })
+  await mount()
+  await openRequirement()
+  const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+    (() => ({ drawImage: vi.fn() })) as unknown as typeof HTMLCanvasElement.prototype.getContext)
+  const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+    .mockReturnValue(`data:image/jpeg;base64,${'A'.repeat(7_100_000)}`)
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 6000, height: 4000, close: vi.fn() })))
+  const big = imageFile('wide.png')
+  Object.defineProperty(big, 'size', { value: 5 * 1024 * 1024 + 1 })
+  try {
+    await dispatchFiles(area(zh['discuss.descriptionPlaceholder']), pasteEvent([big]))
+    await vi.waitFor(() => expect(document.querySelector('.dt-toast')?.textContent)
+      .toBe(zh['discuss.imagesRefuseSize'].replace('{name}', 'wide.png')))
+    expect(all('.dt-image-choice')).toHaveLength(0)
+  } finally {
+    getContext.mockRestore()
+    toDataURL.mockRestore()
+  }
 })
 
 /** Two alignment rounds of one requirement: the first was sent back with a reason, the second awaits review. */
