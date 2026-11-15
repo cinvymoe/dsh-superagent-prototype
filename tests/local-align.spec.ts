@@ -587,6 +587,62 @@ describe('project prepare commands', () => {
   })
 })
 
+it('stores discussion images, serves them over the authenticated route and removes them with the discussion', async () => {
+  const created = await h.api('POST', 'local/discussions', { body: 'Screenshot talk', project: project.id,
+    images: [{ name: 'shot.png', mediaType: 'image/png', data: PNG.toString('base64') }] })
+  expect(created.status).toBe(200)
+  const discussion = created.body.discussion as { id: string; images?: { id: string; name: string; mediaType: string; bytes: number }[] }
+  expect(discussion.images).toMatchObject([{ name: 'shot.png', mediaType: 'image/png', bytes: PNG.length }])
+  const openingId = discussion.images![0]!.id
+  const opening = join(h.directory, 'local-images', 'discussions', discussion.id, `${openingId}.png`)
+  expect(existsSync(opening)).toBe(true)
+  expect(h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 1)[0]!.text).toContain(opening)
+
+  // A follow-up may be images alone, and only its own answer carries them.
+  const commented = await h.api('POST', `local/discussions/${discussion.id}/comments`, { text: '',
+    images: [{ name: 'later.png', mediaType: 'image/png', data: PNG.toString('base64') }] })
+  expect(commented.status).toBe(200)
+  // The route answers the record as it was before its answer was recorded; the detail read carries the message's answer.
+  const answer = h.runtime.discussions.get(discussion.id)!.answers!.at(-1)!
+  expect(answer.text).toBe('')
+  const laterId = answer.images![0]!.id
+  expect(existsSync(join(h.directory, 'local-images', 'discussions', discussion.id, `${laterId}.png`))).toBe(true)
+
+  // The image route answers bytes with no caching; it is same-origin only, like the requirement image route.
+  const served = await h.raw('GET', `local/discussions/${discussion.id}/images/${laterId}`)
+  expect(served.status).toBe(200)
+  expect(served.headers['content-type']).toBe('image/png')
+  expect(served.headers['cache-control']).toBe('no-store')
+  expect(served.body.equals(PNG)).toBe(true)
+  expect((await h.api('GET', `local/discussions/${discussion.id}/images/img-unknown`)).status).toBe(404)
+  expect((await h.api('GET', `local/discussions/d-unknown/images/${laterId}`)).status).toBe(404)
+  expect((await h.raw('GET', `local/discussions/${discussion.id}/images/${laterId}`, undefined,
+    { 'x-orchestrator-request': undefined })).status).toBe(403)
+
+  // Deleting the discussion removes the whole directory, whichever message stored the image.
+  expect((await h.api('DELETE', `local/discussions/${discussion.id}`)).status).toBe(200)
+  expect(existsSync(join(h.directory, 'local-images', 'discussions', discussion.id))).toBe(false)
+})
+
+it('refuses a discussion image that breaks a rule without writing a record or bytes', async () => {
+  const created = await h.api('POST', 'local/discussions', { body: 'Bad image', project: project.id,
+    images: [{ name: 'mismatch.png', mediaType: 'image/png', data: GIF.toString('base64') }] })
+  expect(created.status).toBe(400)
+  expect(created.body).toMatchObject({ code: 'issueImageType', values: { name: 'mismatch.png' } })
+  expect(h.runtime.discussions.list()).toEqual([])
+  expect(existsSync(join(h.directory, 'local-images'))).toBe(false)
+  const kept = await h.api('POST', 'local/discussions', { body: 'Kept', project: project.id })
+  const id = (kept.body.discussion as { id: string }).id
+  const before = h.runtime.discussions.get(id)!.answers!.length
+  const refused = await h.api('POST', `local/discussions/${id}/comments`, { text: 'x',
+    images: [{ name: 'big.png', mediaType: 'image/png', data: Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]).toString('base64') }] })
+  expect(refused.status).toBe(400)
+  expect(refused.body).toMatchObject({ code: 'issueImageSize', values: { name: 'big.png' } })
+  // Nothing was recorded and no bytes were written.
+  expect(h.runtime.discussions.get(id)!.answers).toHaveLength(before)
+  expect(existsSync(join(h.directory, 'local-images', 'discussions', id))).toBe(false)
+})
+
 it('stores requirement images, returns their metadata and serves the bytes back with no caching', async () => {
   const submitted = await h.api('POST', 'local/issues', { title: 'With a screenshot', project: project.id,
     images: [{ name: 'shot.png', mediaType: 'image/png', data: PNG.toString('base64') }] })

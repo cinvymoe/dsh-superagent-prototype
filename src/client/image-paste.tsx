@@ -10,7 +10,7 @@ import { usePanel } from './provider.tsx'
 /** One selected image: the FileReader data URL doubles as the thumbnail and the create request's payload. */
 export interface ChosenImage { name: string; mediaType: string; data: string; bytes: number; preview: string }
 
-/** What a text box needs to accept images: the selection, its picker, the paste and drop handlers, and removal. */
+/** What a text box needs to accept images: the selection, its picker, the paste and drop handlers, removal and clearing. */
 export interface ImagePasteState {
   images: ChosenImage[]
   choose: (event: ChangeEvent<HTMLInputElement>) => void
@@ -18,6 +18,8 @@ export interface ImagePasteState {
   drop: (event: DragEvent<HTMLElement>) => void
   dragOver: (event: DragEvent<HTMLElement>) => void
   remove: (index: number) => void
+  /** Drop every chosen image, as a submitted form does once its request succeeds. */
+  clear: () => void
 }
 
 /** What reading one file produced: an image to attach or, when even downsampling cannot fit it, the name to refuse. */
@@ -166,6 +168,7 @@ export function useImagePaste(): ImagePasteState {
       if (event.dataTransfer?.types.includes('Files')) event.preventDefault()
     },
     remove: index => commit(current.current.filter((_, position) => position !== index)),
+    clear: () => commit([]),
   }
 }
 

@@ -31,6 +31,7 @@ function fakeAgent() {
 function host(agent: unknown, overrides: Partial<AnswererHost> = {}): AnswererHost {
   return {
     workspace: () => '/tmp',
+    stateDir: '/tmp',
     sessions: { ensureAnswerer: async () => agent as never, prompt: async () => {} },
     ...overrides,
   }
@@ -76,5 +77,23 @@ describe('discussion Answerer', () => {
     clearInterval(timer)
     expect(result).toMatchObject({ ok: false, reason: 'timeout' })
     expect(agent.cancel).toHaveBeenCalled()
+  })
+
+  it('names a message\'s attached images as an Images block of absolute paths', async () => {
+    const { agent, say, finish } = fakeAgent()
+    const prompts: string[] = []
+    const answerer = new Answerer(host(agent, { stateDir: '/srv/state',
+      sessions: { ensureAnswerer: async () => agent as never,
+        prompt: async (_id: string, _key: string, text: string) => { prompts.push(text) } } }))
+    setTimeout(() => { say('Read the shots'); finish() }, 10)
+    const result = await answerer.answer(discussion, { ...message, images: [
+      { id: 'img-1', name: 'one.png', mediaType: 'image/png', bytes: 3 },
+      { id: 'img-2', name: 'two.jpg', mediaType: 'image/jpeg', bytes: 4 },
+    ] })
+
+    expect(result).toEqual({ ok: true, answer: 'Read the shots' })
+    expect(prompts[0]).toContain('Take a look at this\n\nImages:')
+    expect(prompts[0]).toContain('- /srv/state/local-images/discussions/d-one/img-1.png (image/png, 3 bytes)')
+    expect(prompts[0]).toContain('- /srv/state/local-images/discussions/d-one/img-2.jpg (image/jpeg, 4 bytes)')
   })
 })

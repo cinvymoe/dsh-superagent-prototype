@@ -1,6 +1,6 @@
 /** Answers of local discussions, kept on the discussion record and produced in the background by its Answerer. */
 import { key, UserError } from '../core/index.ts'
-import type { LocalAnswer, LocalDiscussion } from '../sources/local-format.ts'
+import type { LocalAnswer, LocalDiscussion, LocalImage } from '../sources/local-format.ts'
 import type { DiscussionAnswerer } from './answerer.ts'
 import type { Discussions } from './discussions.ts'
 
@@ -36,14 +36,15 @@ export class Answers {
 
   /**
    * Record one human message of the discussion and answer it in the background. The record is written before the work
-   * starts, so a restart or a crash leaves the message with a `queued` answer rather than losing it.
+   * starts, so a restart or a crash leaves the message with a `queued` answer rather than losing it. A message may carry
+   * images and no text; the opening message's images stay on the discussion record, so they are not repeated here.
    */
-  accept(discussion: LocalDiscussion, text: string, triggerId: string): LocalAnswer {
+  accept(discussion: LocalDiscussion, text: string, triggerId: string, images: readonly LocalImage[] = []): LocalAnswer {
     const trimmed = text.trim()
-    if (!trimmed) throw new UserError('answerText')
+    if (!trimmed && !images.length && !discussion.images?.length) throw new UserError('answerText')
     const at = this.clock()
     const answer: LocalAnswer = { id: `an-${key('local-answer', at, discussion.id, triggerId).slice(0, 8)}`,
-      discussionId: discussion.id, triggerId, text: trimmed, at, state: 'queued' }
+      discussionId: discussion.id, triggerId, text: trimmed, ...(images.length ? { images: [...images] } : {}), at, state: 'queued' }
     const current = this.host.discussions.get(discussion.id) ?? discussion
     this.host.discussions.put({ ...current, answers: [...current.answers ?? [], answer] })
     this.queue(answer.discussionId, answer.id)

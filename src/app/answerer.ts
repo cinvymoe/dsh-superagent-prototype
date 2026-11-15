@@ -3,7 +3,8 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import type { LocalAnswer, LocalDiscussion, LocalProject } from '../sources/local-format.ts'
+import type { LocalAnswer, LocalDiscussion, LocalImage, LocalProject } from '../sources/local-format.ts'
+import { discussionImagePath } from './local-images.ts'
 import type { Sessions } from './sessions.ts'
 
 /** How long one answer may run without a single new Session event before it counts as stalled; a person may retry it. */
@@ -45,6 +46,8 @@ export interface DiscussionAnswerer {
 export interface AnswererHost {
   /** The workspace that holds the discussion's read-only Session, created on demand. */
   workspace(discussion: LocalDiscussion): string
+  /** Directory every discussion image is stored under, so a message's attached paths can be named to the Answerer. */
+  readonly stateDir: string
   readonly sessions: Pick<Sessions, 'ensureAnswerer' | 'prompt'>
   /** Host lifetime; an aborted wait leaves the answer `queued` for the next start. */
   readonly lifetime?: AbortSignal
@@ -73,7 +76,13 @@ export class Answerer implements DiscussionAnswerer {
       const events = agent.session.snapshotEvents()
       const from = (events.at(-1)?.seq ?? -1) + 1
       // A new Session starts with the discussion's own text; a later message reaches the Session that already holds it.
-      const text = events.length === 0 ? `## ${discussion.title}\n\n${discussion.body}\n\n${answer.text}` : answer.text
+      // Images become an absolute-path block on the text the Answerer reads, whether they belong to the opening message
+      // or to this one.
+      const first = events.length === 0
+      const text = first
+        ? `## ${discussion.title}\n\n${this.withImages(discussion, discussion.body, discussion.images ?? [])}\n\n` +
+          this.withImages(discussion, answer.text, answer.images ?? [])
+        : this.withImages(discussion, answer.text, answer.images ?? [])
       // A retry sends the same text again; its own request id keeps the delivery from being read as already sent.
       const attempt = (this.attempts.get(answer.id) ?? 0) + 1
       this.attempts.set(answer.id, attempt)
@@ -129,6 +138,14 @@ export class Answerer implements DiscussionAnswerer {
       const timer = setTimeout(done, ms)
       stop.addEventListener('abort', done, { once: true })
     })
+  }
+
+  /** The text plus one absolute path per attached image, which is how an image reaches the read-only Answerer. */
+  private withImages(discussion: LocalDiscussion, text: string, images: readonly LocalImage[]): string {
+    if (!images.length) return text
+    const lines = images.map(image =>
+      `- ${discussionImagePath(this.host.stateDir, discussion.id, image)} (${image.mediaType}, ${image.bytes} bytes)`)
+    return text ? `${text}\n\nImages:\n${lines.join('\n')}` : `Images:\n${lines.join('\n')}`
   }
 
   /** The last assistant message produced after `from`, as its text blocks. */

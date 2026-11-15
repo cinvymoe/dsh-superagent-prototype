@@ -86,7 +86,10 @@ export interface LocalAlignment {
   reason?: string
 }
 
-/** One image attached to a local requirement; its bytes live under `<stateDir>/local-images/<issue id>/`. */
+/**
+ * One image attached to a local record. A requirement's bytes live under `<stateDir>/local-images/<issue id>/`; a
+ * discussion's, whichever message attached them, under `<stateDir>/local-images/discussions/<discussion id>/`.
+ */
 export interface LocalImage {
   id: string
   /** Original file name the person attached. */
@@ -135,6 +138,8 @@ export interface LocalAnswer {
   triggerId: string
   /** The message text, kept so the panel can show the exchange without reading the Thread. */
   text: string
+  /** Images this message attached; absent when it has none, so a message is text, images or both. */
+  images?: LocalImage[]
   at: string
   state: 'queued' | 'answering' | 'answered' | 'failed'
   /** The Answerer Session that answered it, `answerer-<discussion id>`. */
@@ -210,6 +215,8 @@ export interface LocalDiscussion {
   createdAt: string
   updatedAt: string
   state: 'open' | 'closed'
+  /** Images the opening message attached; each later message keeps its own on its answer. Absent when there are none. */
+  images?: LocalImage[]
   /** Its messages and the Answerer's answers, oldest first; the Thread Trigger of each message keeps the timeline. */
   answers?: LocalAnswer[]
   /**
