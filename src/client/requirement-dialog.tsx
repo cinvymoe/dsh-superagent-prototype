@@ -1,14 +1,11 @@
 /** The create-requirement dialog: one description box and optional images, opened from the list or a discussion result. */
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import { REQUIREMENT_IMAGES } from '../limits.ts'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { projectRepositories, type LocalDiscussion } from '../sources/local-format.ts'
 import { usePoll } from './api.ts'
 import { Button, Icon, Modal, Tag } from './controls.tsx'
+import { PasteImageField, useImagePaste } from './image-paste.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { errorText } from './text.ts'
-
-/** One image chosen in the dialog: the FileReader data URL doubles as the thumbnail and the payload. */
-interface ChosenImage { name: string; mediaType: string; data: string; bytes: number; preview: string }
 
 /**
  * Prefill the requirement dialog from a discussion once, without overwriting anything a person has typed. The latest
@@ -41,32 +38,8 @@ export function RequirementDialog({ discussion: discussionId, onClose }: { discu
   const [description, setDescription] = useState('')
   const source = useDiscussionPrefill(discussionId, setDescription)
   const active = projects.find(item => item.id === (source?.project ?? project)) ?? projects[0]
-  const [images, setImages] = useState<ChosenImage[]>([])
+  const paste = useImagePaste()
   const [busy, setBusy] = useState(false)
-  const picker = useRef<HTMLInputElement>(null)
-  const choose = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = [...event.target.files ?? []]
-    // Clear the input so choosing the same file again still fires a change event.
-    event.target.value = ''
-    if (!files.length) return
-    const type = files.find(file => !(REQUIREMENT_IMAGES.mediaTypes as readonly string[]).includes(file.type))
-    const size = files.find(file => file.size > REQUIREMENT_IMAGES.bytes)
-    if (type) { notify(t('discuss.imagesRefuseType', { name: type.name })); return }
-    if (size) { notify(t('discuss.imagesRefuseSize', { name: size.name })); return }
-    if (images.length + files.length > REQUIREMENT_IMAGES.count) {
-      notify(t('discuss.imagesRefuseCount', { count: REQUIREMENT_IMAGES.count }))
-      return
-    }
-    const chosen = await Promise.all(files.map(file => new Promise<ChosenImage | undefined>(resolve => {
-      const reader = new FileReader()
-      reader.onload = () => resolve({ name: file.name, mediaType: file.type, data: String(reader.result), bytes: file.size,
-        preview: String(reader.result) })
-      reader.onerror = () => resolve(undefined)
-      reader.readAsDataURL(file)
-    })))
-    // A file that failed to read is left out; the others still join the selection.
-    setImages(current => [...current, ...chosen.filter((image): image is ChosenImage => image !== undefined)])
-  }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const text = description.trim()
@@ -75,7 +48,7 @@ export function RequirementDialog({ discussion: discussionId, onClose }: { discu
     try {
       const { issue } = await call('POST local/issues', { body: { body: text, project: active.id,
         ...(source ? { discussion: source.id } : {}),
-        ...(images.length ? { images: images.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}) } })
+        ...(paste.images.length ? { images: paste.images.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}) } })
       onClose()
       navigate({ page: 'requirements', id: issue.id })
     } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
@@ -86,26 +59,9 @@ export function RequirementDialog({ discussion: discussionId, onClose }: { discu
     {active && <form className="dt-form" onSubmit={event => { void submit(event) }}>
       <div className="dt-row-meta"><Tag tone="neutral">{active.name}</Tag>
         <span className="dt-mono">{projectRepositories(active)}</span></div>
-      <textarea className="dt-textarea" value={description} maxLength={20000} rows={7}
-        placeholder={t('discuss.descriptionPlaceholder')} aria-label={t('discuss.descriptionPlaceholder')}
-        onChange={event => setDescription(event.target.value)} />
-      <p className="dt-hint">{t('discuss.descriptionHint')}</p>
-      <div className="dt-image-field">
-        <input ref={picker} type="file" className="dt-image-input" multiple
-          accept={REQUIREMENT_IMAGES.mediaTypes.join(',')} aria-label={t('discuss.imagesChoose')}
-          onChange={event => { void choose(event) }} />
-        <Button variant="outline" size="sm" icon={<Icon name="image" size={14} />} disabled={busy}
-          onClick={() => picker.current?.click()}>{t('discuss.imagesChoose')}</Button>
-        <p className="dt-hint">{t('discuss.imagesHint')}</p>
-        {images.length > 0 && <ul className="dt-image-choices">{images.map((image, index) => <li key={`${image.name}-${index}`}
-          className="dt-image-choice">
-          <img className="dt-image-thumb" src={image.preview} alt={image.name} />
-          <span className="dt-image-name" title={image.name}>{image.name}</span>
-          <Button variant="ghost" size="sm" icon={<Icon name="close" size={12} />}
-            aria-label={`${t('discuss.imagesRemove')} ${image.name}`}
-            onClick={() => setImages(current => current.filter((_, position) => position !== index))} />
-        </li>)}</ul>}
-      </div>
+      <PasteImageField state={paste} value={description} onChange={setDescription} disabled={busy}
+        maxLength={20000} rows={7} placeholder={t('discuss.descriptionPlaceholder')}
+        ariaLabel={t('discuss.descriptionPlaceholder')} note={<p className="dt-hint">{t('discuss.descriptionHint')}</p>} />
       <div className="dt-actions">
         <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
           disabled={busy || !description.trim() || !active}>{t('discuss.submit')}</Button>
