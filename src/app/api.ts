@@ -47,9 +47,9 @@ export interface Api {
     blockedCommands?: string[]; cli?: string }; response: { project: LocalProjectView } }
   // Local discussions are their own records and Threads; a requirement is made from one only by an explicit action.
   'GET local/discussions': { query?: { project?: string }; response: { discussions: LocalDiscussion[] } }
-  'POST local/discussions': { body: { body: string; project: string; author?: string }; response: { discussion: LocalDiscussion } }
+  'POST local/discussions': { body: { body: string; project: string; author?: string; images?: LocalImageInput[] }; response: { discussion: LocalDiscussion } }
   'GET local/discussions/:id': { response: { discussion: LocalDiscussion; project: LocalProjectView | null; thread: ThreadDetailView; replies: Receipt[] } }
-  'POST local/discussions/:id/comments': { body: { text: string }; response: { discussion: LocalDiscussion } }
+  'POST local/discussions/:id/comments': { body: { text: string; images?: LocalImageInput[] }; response: { discussion: LocalDiscussion } }
   /** Queue one failed answer again; the discussion record carries the answer's new state. */
   'POST local/discussions/:id/answers/:answerId/retry': { response: { discussion: LocalDiscussion | undefined } }
   /** Hand the discussion's conclusion to the requirement's Aligner; the discussion keeps its answers and stays open. */
@@ -93,3 +93,10 @@ export type ApiResponse<K extends keyof Api> = Api[K]['response']
  */
 export const localImageUrl = (issueId: string, imageId: string): string =>
   `/orchestrator/api/local/issues/${encodeURIComponent(issueId)}/images/${encodeURIComponent(imageId)}`
+
+/**
+ * Same-origin URL of one discussion image, which answers bytes like a requirement image does. It goes through the same
+ * authenticated management route, so no discussion image has an unauthenticated URL.
+ */
+export const discussionImageUrl = (discussionId: string, imageId: string): string =>
+  `/orchestrator/api/local/discussions/${encodeURIComponent(discussionId)}/images/${encodeURIComponent(imageId)}`

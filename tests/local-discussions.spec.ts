@@ -15,6 +15,11 @@ import { startRuntime, type Host } from './fixtures/host.ts'
 const directories: string[] = []
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }) })
 
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64')
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9])
+const image = (name: string, mediaType: string, bytes: Buffer) => ({ name, mediaType, data: bytes.toString('base64') })
+
 describe('the discussion records', () => {
   const setup = () => {
     const directory = mkdtempSync(join(tmpdir(), 'dsh-superagent-discussions-'))
@@ -22,16 +27,18 @@ describe('the discussion records', () => {
     const store = new Store(join(directory, 'orchestrator.sqlite'))
     const triggers: Trigger[] = []
     const archived: string[] = []
+    const answered: { text: string; triggerId: string; images?: { id: string; name: string }[] }[] = []
     // The real host stores each Trigger and indexes its Thread; the port test keeps that index without an Engine.
     const receive = (trigger: Trigger) => { triggers.push(trigger); store.triggers.save(trigger); return { kind: 'stored' } as never }
     let tick = 0
     const discussions = new Discussions({ store, stateDir: directory, receive,
+      answer: (_discussion, text, triggerId, images) => { answered.push({ text, triggerId, ...(images?.length ? { images } : {}) }) },
       archive: sessionId => { archived.push(sessionId) },
       // Each create moves the clock a second so the newest-first list order is unambiguous.
       now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)).toISOString() })
     const local = new LocalIssues({ store, stateDir: directory, discussions, receive })
     const project = local.createProject({ name: 'Demo', repository: 'acme/widgets' })
-    return { discussions, local, triggers, archived, project, store, directory }
+    return { discussions, local, triggers, archived, answered, project, store, directory }
   }
 
   it('creates a discussion on its own thread and lists it by project, newest first', () => {
@@ -79,6 +86,70 @@ describe('the discussion records', () => {
     expect(() => discussions.create({ body: 'A discussion', project: 'p-missing' })).toThrow('Unknown local project')
     expect(discussions.list()).toEqual([])
     expect(triggers).toEqual([])
+  })
+
+  it('stores opening and follow-up images under the discussion directory and names their paths in the Thread', () => {
+    const { discussions, triggers, answered, project, directory } = setup()
+    const discussion = discussions.create({ body: 'Screenshot talk', project: project.id,
+      images: [image('one.png', 'image/png', PNG)] })
+    expect(discussion.images).toMatchObject([{ name: 'one.png', mediaType: 'image/png', bytes: PNG.length }])
+    const opening = join(directory, 'local-images', 'discussions', discussion.id, `${discussion.images![0]!.id}.png`)
+    expect(existsSync(opening)).toBe(true)
+    // The opening message's Thread text carries the image's absolute path and its Images block.
+    expect(triggers[0]!.text).toContain('Screenshot talk')
+    expect(triggers[0]!.text).toContain('Images:')
+    expect(triggers[0]!.text).toContain(opening)
+    // The opening images stay on the discussion record, not on the answer the port receives.
+    expect(answered[0]).toMatchObject({ text: 'Screenshot talk' })
+
+    discussions.comment(discussion.id, 'Look here', [image('two.jpg', 'image/jpeg', JPEG)])
+    const attached = answered[1]!.images![0]!
+    const followUp = join(directory, 'local-images', 'discussions', discussion.id, `${attached.id}.jpg`)
+    expect(attached).toMatchObject({ name: 'two.jpg' })
+    expect(existsSync(followUp)).toBe(true)
+    expect(triggers[1]!.text).toContain('Look here')
+    expect(triggers[1]!.text).toContain('Images:')
+    expect(triggers[1]!.text).toContain(followUp)
+    // The opening image answers its bytes, while a follow-up image is only reachable once its answer is recorded.
+    expect(discussions.image(discussion.id, discussion.images![0]!.id)?.bytes.equals(PNG)).toBe(true)
+  })
+
+  it('accepts an image-only opening message and an image-only follow-up', () => {
+    const { discussions, triggers, answered, project } = setup()
+    const discussion = discussions.create({ body: '  ', project: project.id,
+      images: [image('pasted.png', 'image/png', PNG)] })
+    expect(discussion.title).toBe('pasted.png')
+    expect(discussion.body).toBe('')
+    expect(discussion.images).toHaveLength(1)
+    expect(triggers[0]!.text.startsWith('Images:\n')).toBe(true)
+
+    discussions.comment(discussion.id, '   ', [image('later.png', 'image/png', PNG)])
+    expect(answered[1]).toMatchObject({ text: '' })
+    expect(answered[1]!.images).toMatchObject([{ name: 'later.png' }])
+    expect(triggers[1]!.text.startsWith('Images:\n')).toBe(true)
+  })
+
+  it('refuses an image that breaks a rule without writing a record, a trigger or any bytes', () => {
+    const { discussions, triggers, project, directory } = setup()
+    const code = (images: { name: string; mediaType: string; data: string }[]): unknown => {
+      try { discussions.create({ body: 'Bad', project: project.id, images }) } catch (error) { return (error as { code?: unknown }).code }
+      return undefined
+    }
+    expect(code([image('1.png', 'image/png', PNG), image('2.png', 'image/png', PNG), image('3.png', 'image/png', PNG),
+      image('4.png', 'image/png', PNG), image('5.png', 'image/png', PNG)])).toBe('issueImageCount')
+    expect(code([image('big.png', 'image/png', Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]))])).toBe('issueImageSize')
+    expect(code([image('mismatch.png', 'image/png', JPEG)])).toBe('issueImageType')
+    expect(code([{ name: 'x.png', mediaType: 'image/png', data: 'not base64!!' }])).toBe('issueImageData')
+    expect(discussions.list()).toEqual([])
+    expect(triggers).toEqual([])
+    expect(existsSync(join(directory, 'local-images'))).toBe(false)
+
+    // A refused follow-up leaves the discussion and the images it already stored untouched.
+    const kept = discussions.create({ body: 'Kept', project: project.id, images: [image('kept.png', 'image/png', PNG)] })
+    expect(() => discussions.comment(kept.id, 'Bad', [image('bad.png', 'image/png', JPEG)])).toThrow('must be a PNG, JPEG, WebP or GIF')
+    expect(discussions.get(kept.id)).toEqual(kept)
+    expect(triggers).toHaveLength(1)
+    expect(existsSync(join(directory, 'local-images', 'discussions', kept.id, `${kept.images![0]!.id}.png`))).toBe(true)
   })
 
   it('creates a requirement from a discussion and links both records', () => {
@@ -135,13 +206,16 @@ describe('the discussion records', () => {
     expect(discussions.thread(discussion.id)).toBe(`local:${discussion.id}`)
   })
 
-  it('deletes a discussion with its Thread, its own Triggers, its Answerer Session and its workspace', async () => {
+  it('deletes a discussion with its Thread, its Triggers, its images, its Answerer Session and its workspace', async () => {
     const { discussions, triggers, archived, project, store, directory } = setup()
-    const discussion = discussions.create({ body: 'Delete this', project: project.id })
-    discussions.comment(discussion.id, 'And this message')
+    const discussion = discussions.create({ body: 'Delete this', project: project.id,
+      images: [image('gone.png', 'image/png', PNG)] })
+    discussions.comment(discussion.id, 'And this message', [image('also-gone.png', 'image/png', PNG)])
     const workspace = join(directory, 'discussions', discussion.id)
     mkdirSync(workspace, { recursive: true })
     writeFileSync(join(workspace, 'note.txt'), 'kept')
+    const images = join(directory, 'local-images', 'discussions', discussion.id)
+    expect(existsSync(images)).toBe(true)
     expect(store.read.threadTriggers(`local:${discussion.id}`, 10)).toHaveLength(2)
 
     await expect(discussions.delete(discussion.id)).resolves.toMatchObject({ id: discussion.id, title: 'Delete this' })
@@ -152,6 +226,8 @@ describe('the discussion records', () => {
     expect(triggers.map(trigger => store.triggers.get(trigger.id))).toEqual([undefined, undefined])
     expect(archived).toEqual([`answerer-${discussion.id}`])
     expect(existsSync(workspace)).toBe(false)
+    // Every message's images live under the discussion's directory, so deleting it removes all of them.
+    expect(existsSync(images)).toBe(false)
     expect(await discussions.delete(discussion.id)).toBeUndefined()
   })
 

@@ -86,9 +86,9 @@ export const localDiscussion = (title: string, body = '', project = 'p-fixture',
 export const localDiscussionAnswer = (discussion: LocalDiscussion, text: string, at: string,
   extra: Partial<LocalAnswer> = {}): LocalAnswer => ({ id: `an-${at}`, discussionId: discussion.id, triggerId: `t-${at}`, text, at,
   state: 'answered', sessionId: `answerer-${discussion.id}`, answer: `Answer to ${text}`, answeredAt: at, ...extra })
-/** A human message on a discussion's own thread. */
+/** A human message on a discussion's own thread; its id is the Trigger the answer names, so the row is not shown twice. */
 export const localDiscussionComment = (discussion: LocalDiscussion, text: string, at: string): TriggerRow => ({
-  ...localTrigger(discussion), id: `local-discussion-comment-${at}`, at, text, preview: text })
+  ...localTrigger(discussion), id: `t-${at}`, at, text, preview: text })
 const localDiscussionThread = (discussion: LocalDiscussion, extra: TriggerRow[] = []): ThreadPageView => ({
   key: `local:${discussion.id}`, source: 'local', title: discussion.title, stage: 'unsubscribed', latest: undefined,
   lastAt: discussion.updatedAt, createdAt: discussion.createdAt, subscriptions: 0, tickets: [], evaluating: undefined,
@@ -547,9 +547,16 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     ({ discussions: server.localDiscussions.filter(discussion => !query.project || discussion.project === query.project) }) },
   'POST local/discussions': { body: true, answer: ({ body }) => {
     const text = String(body.body ?? '').trim()
-    const title = text.split('\n').find((line: string) => line.trim())?.trim().replace(/\s+/g, ' ').slice(0, 200) ?? ''
+    // A discussion may open with images alone; its title then comes from the first image name, as the host derives it.
+    const images = (body.images ?? []).map((image: { name: string; mediaType: string; data: string }, index: number) => ({
+      id: `img-${index + 1}`, name: image.name, mediaType: image.mediaType,
+      bytes: Buffer.from(image.data.replace(/^data:[^;,]*;base64,/i, ''), 'base64').length,
+    }))
+    const title = text.split('\n').find((line: string) => line.trim())?.trim().replace(/\s+/g, ' ').slice(0, 200)
+      ?? String(images[0]?.name ?? '').trim()
     if (!title) return refuse(400, 'A discussion needs a description', { code: 'discussionEmpty' })
-    const discussion = { ...localDiscussion(title, text, body.project), id: `d-fixture-${server.localDiscussions.length + 1}` }
+    const discussion = { ...localDiscussion(title, text, body.project), id: `d-fixture-${server.localDiscussions.length + 1}`,
+      ...(images.length ? { images } : {}) }
     server.localDiscussions = [discussion, ...server.localDiscussions]
     return { discussion }
   } },
@@ -565,9 +572,14 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     if (!discussion) return refuse(404, 'Local discussion not found')
     const posted = server.localDiscussionComments[params.id] ?? []
     const at = new Date(Date.UTC(2026, 8, 24, 0, 0, posted.length)).toISOString()
-    const text = String(body.text).trim()
+    const text = String(body.text ?? '').trim()
+    const images = (body.images ?? []).map((image: { name: string; mediaType: string; data: string }, index: number) => ({
+      id: `img-${posted.length + index + 1}`, name: image.name, mediaType: image.mediaType,
+      bytes: Buffer.from(image.data.replace(/^data:[^;,]*;base64,/i, ''), 'base64').length,
+    }))
+    if (!text && !images.length) return refuse(400, 'A discussion answer needs text', { code: 'answerText' })
     const next = { ...discussion, updatedAt: at,
-      answers: [...discussion.answers ?? [], localDiscussionAnswer(discussion, text, at)] }
+      answers: [...discussion.answers ?? [], localDiscussionAnswer(discussion, text, at, images.length ? { images } : {})] }
     server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
     server.localDiscussionComments = { ...server.localDiscussionComments, [params.id]: [...posted, localDiscussionComment(next, text, at)] }
     return { discussion: next }
@@ -867,14 +879,25 @@ class Reply extends Response {
 /** A valid 1×1 PNG, so the image-bytes route answers real bytes rather than JSON. */
 const PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64')
-/** The requirement-image bytes route answers raw bytes, not JSON, so it is handled before the typed route table. */
+/** The stored-image bytes route answers raw bytes, not JSON, so it is handled before the typed route table. */
 function imageReply(path: string): Response | undefined {
   const segments = path.split('/')
-  if (segments.length !== 5 || segments[0] !== 'local' || segments[1] !== 'issues' || segments[3] !== 'images') return undefined
-  const issue = server.localIssues.find(item => item.id === decodeURIComponent(segments[2]!))
-  const image = issue?.images?.find(item => item.id === decodeURIComponent(segments[4]!))
-  if (!image) return new Response(null, { status: 404 })
-  return new Response(PIXEL_PNG, { status: 200, headers: { 'content-type': image.mediaType } })
+  if (segments.length !== 5 || segments[0] !== 'local' || segments[3] !== 'images') return undefined
+  const id = decodeURIComponent(segments[2]!)
+  const imageId = decodeURIComponent(segments[4]!)
+  if (segments[1] === 'issues') {
+    const image = server.localIssues.find(item => item.id === id)?.images?.find(item => item.id === imageId)
+    return image ? new Response(PIXEL_PNG, { status: 200, headers: { 'content-type': image.mediaType } })
+      : new Response(null, { status: 404 })
+  }
+  if (segments[1] === 'discussions') {
+    const discussion = server.localDiscussions.find(item => item.id === id)
+    const image = [...discussion?.images ?? [], ...(discussion?.answers ?? []).flatMap(answer => answer.images ?? [])]
+      .find(item => item.id === imageId)
+    return image ? new Response(PIXEL_PNG, { status: 200, headers: { 'content-type': image.mediaType } })
+      : new Response(null, { status: 404 })
+  }
+  return undefined
 }
 
 export function usePanelServer(cleanup: () => void) {

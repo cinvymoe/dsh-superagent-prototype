@@ -1,10 +1,11 @@
 /** Read/write operations for discussions held on their own Threads, before any requirement exists for them. */
-import { rmSync } from 'node:fs'
+import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { key, UserError, type ReceiveResult, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, type LocalDiscussion, type LocalHandoff } from '../sources/local-format.ts'
+import { LOCAL_ACTOR, type LocalDiscussion, type LocalHandoff, type LocalImage, type LocalImageInput } from '../sources/local-format.ts'
+import { discussionImagePath, discussionImagesDir, storeDiscussionImages } from './local-images.ts'
 import { requirementTitle } from './local.ts'
 import type { Store } from './store.ts'
 
@@ -16,9 +17,10 @@ export interface DiscussionsHost {
   receive(trigger: Trigger): ReceiveResult
   /**
    * Hands one human message to the discussion's Answerer. The Engine never evaluates a discussion Thread, so this is what
-   * makes the discussion answer; `triggerId` is the Thread Trigger the message was stored as.
+   * makes the discussion answer; `triggerId` is the Thread Trigger the message was stored as, and `images` are the ones
+   * that message attached.
    */
-  answer?(discussion: LocalDiscussion, text: string, triggerId: string): void
+  answer?(discussion: LocalDiscussion, text: string, triggerId: string, images?: LocalImage[]): void
   /** Archives the discussion's Answerer Session, stopping anything it still runs; an absent Session is not an error. */
   archive?(sessionId: string): Promise<void> | void
   /** Reports a failed archive, which is logged rather than raised so it cannot keep a deleted discussion behind. */
@@ -34,6 +36,8 @@ export interface DiscussionInput {
   issueId?: string
   /** Its title, when the record it talks about already has one; otherwise the body's first line names it. */
   title?: string
+  /** Images submitted with the opening message; an image-only message is accepted when it attaches one. */
+  images?: LocalImageInput[]
 }
 
 /**
@@ -66,23 +70,33 @@ export class Discussions {
   /**
    * Create a discussion from its text and submit that text as the first human Trigger of its own Thread. The project is
    * checked before anything is written, so a refused create leaves no record and no Thread behind. `input.issueId` names the
-   * requirement the Router opened it about, and the discussion is stored with that link from the start.
+   * requirement the Router opened it about, and the discussion is stored with that link from the start. Its images are
+   * validated and stored before the record exists, and an image-only message is named after its first image's file name.
    */
   create(input: DiscussionInput): LocalDiscussion {
     if (!this.host.store.get(KV.local.project(input.project))) throw new UserError('unknownProject')
     const body = (input.body ?? '').trim()
-    const title = input.title?.trim() || requirementTitle(body)
+    const images = input.images ?? []
+    const title = input.title?.trim() || requirementTitle(body) || requirementTitle(images[0]?.name ?? '')
     if (!title) throw new UserError('discussionEmpty')
     const at = this.clock()
     const id = `d-${key('local-discussion', at, title, String(this.list().length)).slice(0, 8)}`
-    const discussion: LocalDiscussion = { id, title, body, author: input.author?.trim() || LOCAL_ACTOR, project: input.project,
-      ...(input.issueId ? { issueId: input.issueId } : {}), createdAt: at, updatedAt: at, state: 'open' }
-    this.host.store.set(KV.local.discussion(id), discussion)
     const triggerId = key('local-trigger', id, at)
-    try { this.host.receive(localTrigger({ discussion, text: body, at, id: triggerId })) }
+    // Validate and store every image before the record exists, so one refused image creates nothing.
+    const stored = storeDiscussionImages(this.state(), id, triggerId, images)
+    const discussion: LocalDiscussion = { id, title, body, author: input.author?.trim() || LOCAL_ACTOR, project: input.project,
+      ...(input.issueId ? { issueId: input.issueId } : {}), ...(stored.length ? { images: stored } : {}),
+      createdAt: at, updatedAt: at, state: 'open' }
+    try { this.host.store.set(KV.local.discussion(id), discussion) }
     catch (error) {
-      // A delivery the Engine refused leaves no half-created discussion behind.
+      if (stored.length) rmSync(discussionImagesDir(this.state(), id), { recursive: true, force: true })
+      throw error
+    }
+    try { this.host.receive(localTrigger({ discussion, text: this.messageText(discussion, body, stored), at, id: triggerId })) }
+    catch (error) {
+      // A delivery the Engine refused leaves no half-created discussion or image bytes behind.
       this.host.store.delete(KV.local.discussion(id))
+      if (stored.length) rmSync(discussionImagesDir(this.state(), id), { recursive: true, force: true })
       throw error
     }
     this.host.answer?.(discussion, body, triggerId)
@@ -104,17 +118,55 @@ export class Discussions {
     return linked
   }
 
-  /** Append a human comment to the discussion's Thread; the record keeps its text and only its update time moves. */
-  comment(id: string, text: string): LocalDiscussion | undefined {
+  /**
+   * Append a human comment to the discussion's Thread; the record keeps its text and only its update time moves. A
+   * comment may carry images and no text at all, and its images stay on that message's answer, so the timeline shows
+   * them beside that message only. `images` are validated before anything is written.
+   */
+  comment(id: string, text: string, images: readonly LocalImageInput[] = []): LocalDiscussion | undefined {
     const discussion = this.get(id)
     if (!discussion) return undefined
+    const body = text.trim()
+    if (!body && !images.length) throw new UserError('answerText')
     const at = this.clock()
+    const triggerId = key('local-trigger', id, at, body)
+    const stored = storeDiscussionImages(this.state(), id, triggerId, images)
     const updated: LocalDiscussion = { ...discussion, updatedAt: at }
-    this.host.store.set(KV.local.discussion(id), updated)
-    const triggerId = key('local-trigger', id, at, text)
-    this.host.receive(localTrigger({ discussion: updated, text: text.trim(), at, id: triggerId }))
-    this.host.answer?.(updated, text.trim(), triggerId)
+    try {
+      this.host.store.set(KV.local.discussion(id), updated)
+      this.host.receive(localTrigger({ discussion: updated, text: this.messageText(updated, body, stored), at, id: triggerId }))
+    } catch (error) {
+      // Only this message's bytes are abandoned; earlier messages keep theirs.
+      for (const image of stored) rmSync(discussionImagePath(this.state(), id, image), { force: true })
+      throw error
+    }
+    this.host.answer?.(updated, body, triggerId, stored)
     return updated
+  }
+
+  /** The stored bytes and media type of one discussion image, from any of its messages; undefined when unknown. */
+  image(id: string, imageId: string): { bytes: Buffer; mediaType: string } | undefined {
+    const discussion = this.get(id)
+    if (!discussion) return undefined
+    const image = [...(discussion.images ?? []), ...(discussion.answers ?? []).flatMap(answer => answer.images ?? [])]
+      .find(entry => entry.id === imageId)
+    if (!image) return undefined
+    try { return { bytes: readFileSync(discussionImagePath(this.state(), id, image)), mediaType: image.mediaType } }
+    catch { return undefined }
+  }
+
+  /** The state directory every discussion image lives under; a record without one cannot store images. */
+  private state(): string {
+    if (!this.host.stateDir) throw new Error('A discussion image needs a state directory')
+    return this.host.stateDir
+  }
+
+  /** The submitted text plus one absolute path per attached image, so the Answerer can read what the message shows. */
+  private messageText(discussion: LocalDiscussion, text: string, images: readonly LocalImage[]): string {
+    if (!images.length) return text
+    const lines = images.map(image =>
+      `- ${discussionImagePath(this.state(), discussion.id, image)} (${image.mediaType}, ${image.bytes} bytes)`)
+    return text ? `${text}\n\nImages:\n${lines.join('\n')}` : `Images:\n${lines.join('\n')}`
   }
 
   /**
@@ -154,7 +206,11 @@ export class Discussions {
     this.host.store.delete(KV.local.discussion(id))
     this.host.store.threads.remove(this.thread(id))
     // Only the state-directory fallback belongs to the discussion; a configured project root is shared and stays.
-    if (this.host.stateDir) rmSync(join(this.host.stateDir, 'discussions', id), { recursive: true, force: true })
+    if (this.host.stateDir) {
+      rmSync(join(this.host.stateDir, 'discussions', id), { recursive: true, force: true })
+      // Every message's images live under the discussion's own directory, whatever the message attached.
+      rmSync(discussionImagesDir(this.host.stateDir, id), { recursive: true, force: true })
+    }
     return discussion
   }
 }

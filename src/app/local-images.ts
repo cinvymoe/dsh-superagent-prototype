@@ -1,4 +1,7 @@
-/** Validation and file storage of the images a local requirement attaches, under `<stateDir>/local-images/<issue id>/`. */
+/**
+ * Validation and file storage of the images a local record attaches, under `<stateDir>/local-images/`: a requirement's
+ * under `<issue id>/`, and a discussion's — every message's alike — under `discussions/<discussion id>/`.
+ */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { key, UserError } from '../core/index.ts'
@@ -18,7 +21,22 @@ export function requirementImagesDir(stateDir: string, issueId: string): string 
 
 /** Absolute path of one stored requirement image, named after its id with the extension of its media type. */
 export function requirementImagePath(stateDir: string, issueId: string, image: Pick<LocalImage, 'id' | 'mediaType'>): string {
-  return join(requirementImagesDir(stateDir, issueId), `${image.id}.${EXTENSIONS[image.mediaType as RequirementImageMediaType] ?? 'bin'}`)
+  return join(requirementImagesDir(stateDir, issueId), fileName(image))
+}
+
+/** Directory holding every image one discussion carries, whichever of its messages attached them. */
+export function discussionImagesDir(stateDir: string, discussionId: string): string {
+  return join(stateDir, 'local-images', 'discussions', discussionId)
+}
+
+/** Absolute path of one stored discussion image, named after its id with the extension of its media type. */
+export function discussionImagePath(stateDir: string, discussionId: string, image: Pick<LocalImage, 'id' | 'mediaType'>): string {
+  return join(discussionImagesDir(stateDir, discussionId), fileName(image))
+}
+
+/** The stored file's name: its image id plus the extension of its media type. */
+function fileName(image: Pick<LocalImage, 'id' | 'mediaType'>): string {
+  return `${image.id}.${EXTENSIONS[image.mediaType as RequirementImageMediaType] ?? 'bin'}`
 }
 
 /** The media type the bytes themselves declare, or undefined when they are not a PNG, JPEG, WebP or GIF image. */
@@ -39,7 +57,11 @@ function decodeBase64(source: string): Buffer | undefined {
   return bytes.length ? bytes : undefined
 }
 
-function prepare(issueId: string, input: LocalImageInput, index: number): { image: LocalImage; bytes: Buffer } {
+/**
+ * Validate one submitted image against the shared limits and name its id after the record and message it belongs to, so
+ * two messages of the same discussion cannot collide.
+ */
+function prepare(seed: readonly string[], input: LocalImageInput, index: number): { image: LocalImage; bytes: Buffer } {
   const name = typeof input.name === 'string' ? input.name.trim() : ''
   if (!name || name.length > NAME_MAX) throw new UserError('issueImageName')
   const mediaType = typeof input.mediaType === 'string' ? input.mediaType.trim().toLowerCase() : ''
@@ -48,24 +70,45 @@ function prepare(issueId: string, input: LocalImageInput, index: number): { imag
   if (!bytes) throw new UserError('issueImageData', { name })
   if (bytes.length > REQUIREMENT_IMAGES.bytes) throw new UserError('issueImageSize', { name, max: String(REQUIREMENT_IMAGES.bytes) })
   if (sniffImageMediaType(bytes) !== mediaType) throw new UserError('issueImageType', { name })
-  return { image: { id: `img-${key('local-image', issueId, String(index), name).slice(0, 8)}`, name, mediaType, bytes: bytes.length }, bytes }
+  return { image: { id: `img-${key('local-image', ...seed, String(index), name).slice(0, 8)}`, name, mediaType, bytes: bytes.length }, bytes }
 }
 
 /**
- * Validate every submitted image before writing anything, so one bad image refuses the whole requirement, then store
- * the bytes under the requirement's directory. A failed write removes that directory again.
+ * Validate every submitted image before writing anything, so one bad image refuses the whole message, then store the bytes
+ * in `directory`. A failed write removes the files it already wrote, leaving earlier messages' images untouched.
  */
-export function storeRequirementImages(stateDir: string, issueId: string, inputs: readonly LocalImageInput[]): LocalImage[] {
+function storeImages(directory: string, seed: readonly string[], inputs: readonly LocalImageInput[]): LocalImage[] {
   if (inputs.length > REQUIREMENT_IMAGES.count) throw new UserError('issueImageCount', { max: String(REQUIREMENT_IMAGES.count) })
-  const prepared = inputs.map((input, index) => prepare(issueId, input, index))
+  const prepared = inputs.map((input, index) => prepare(seed, input, index))
   if (!prepared.length) return []
-  const directory = requirementImagesDir(stateDir, issueId)
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  const written: string[] = []
   try {
-    mkdirSync(directory, { recursive: true, mode: 0o700 })
-    for (const { image, bytes } of prepared) writeFileSync(requirementImagePath(stateDir, issueId, image), bytes, { mode: 0o600 })
+    for (const { image, bytes } of prepared) {
+      const file = join(directory, fileName(image))
+      writeFileSync(file, bytes, { mode: 0o600 })
+      written.push(file)
+    }
   } catch (error) {
-    rmSync(directory, { recursive: true, force: true })
+    for (const file of written) rmSync(file, { force: true })
     throw error
   }
   return prepared.map(entry => entry.image)
+}
+
+/**
+ * Validate and store the images a requirement was submitted with, under the requirement's own directory. A refused image
+ * writes nothing; a failed write removes what it had written.
+ */
+export function storeRequirementImages(stateDir: string, issueId: string, inputs: readonly LocalImageInput[]): LocalImage[] {
+  return storeImages(requirementImagesDir(stateDir, issueId), ['requirement', issueId], inputs)
+}
+
+/**
+ * Validate and store the images one discussion message attached, under the discussion's directory. `messageKey` keeps
+ * different messages' images apart; nothing is written when one of the images is refused.
+ */
+export function storeDiscussionImages(stateDir: string, discussionId: string, messageKey: string,
+  inputs: readonly LocalImageInput[]): LocalImage[] {
+  return storeImages(discussionImagesDir(stateDir, discussionId), ['discussion', discussionId, messageKey], inputs)
 }

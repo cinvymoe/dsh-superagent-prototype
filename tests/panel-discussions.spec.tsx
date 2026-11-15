@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // The Discussions tab: the current project's discussions, starting one from a dialog on the list, and reading one in
 // two columns before sending its result to a requirement. A requirement made from a discussion links back to it.
-import { expect, it } from 'vitest'
+import { act } from 'react'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
-import { usePanel, mount, all, click, type, text, at, tab } from './fixtures/panel.tsx'
+import { usePanel, mount, all, click, type, text, at, tab, settle } from './fixtures/panel.tsx'
 import { localDiscussion, localDiscussionAnswer, localDiscussionComment, localIssue, server } from './fixtures/panel-server.ts'
 
 usePanel()
@@ -237,4 +238,77 @@ it('still shows a message written before answers were recorded', async () => {
   await mount()
   // The body is shown once above the timeline; the message recorded before answers existed still shows there.
   expect(messages()).toEqual(['An older remark'])
+})
+
+// jsdom implements neither object-URL call; a discussion gallery creates one blob URL per image and revokes it on unmount.
+const createObjectURL = vi.fn((_blob: Blob | MediaSource) => 'blob:discussion-image')
+const revokeObjectURL = vi.fn((_url: string) => {})
+beforeEach(() => {
+  createObjectURL.mockClear()
+  revokeObjectURL.mockClear()
+  URL.createObjectURL = createObjectURL as unknown as typeof URL.createObjectURL
+  URL.revokeObjectURL = revokeObjectURL as unknown as typeof URL.revokeObjectURL
+})
+
+/** Build an image file of the given name and content; the client trusts the declared type. */
+const imageFile = (name: string, content = 'x', type = 'image/png') => new File([content], name, { type })
+/** A paste event carrying `files` on the clipboard, the way a screenshot arrives instead of text. */
+function pasteEvent(files: File[]): Event {
+  const items = files.map(file => ({ kind: 'file', type: file.type, getAsFile: () => file }))
+  const event = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', { value: { items, files, types: ['Files'] } })
+  return event
+}
+/** Dispatch a paste at the box and wait long enough for the FileReader results to render. */
+async function dispatchFiles(box: HTMLElement, event: Event) {
+  await act(async () => {
+    box.dispatchEvent(event)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
+  })
+  await settle()
+}
+
+it('pastes an image into the new-discussion dialog and shows its thumbnail and name in the detail', async () => {
+  server.localProjects = [PROJECT]
+  at({ page: 'discussions' })
+  await mount()
+  await click(button(zh['discussion.new']))
+  const box = area(zh['discussion.newPlaceholder'])
+  await dispatchFiles(box, pasteEvent([imageFile('pasted.png')]))
+  expect(all('.dt-image-thumb').map(image => image.getAttribute('alt'))).toEqual(['pasted.png'])
+  expect(all('.dt-image-name').map(name => name.textContent)).toEqual(['pasted.png'])
+  // An image alone enables the create button and posts without any text.
+  expect(button(zh['discussion.create']).disabled).toBe(false)
+  await click(button(zh['discussion.create']))
+  const posted = server.requests.find(request => request.path === 'local/discussions' && request.method === 'POST')!
+  expect(posted.body).toMatchObject({ body: '', project: 'p-fixture',
+    images: [{ name: 'pasted.png', mediaType: 'image/png' }] })
+  // The detail reads the stored image through the authenticated route and shows it from an object URL.
+  expect(createObjectURL).toHaveBeenCalled()
+  expect(all('.dt-image-gallery img').map(image => image.getAttribute('src'))).toEqual(['blob:discussion-image'])
+  expect(all('.dt-image-caption').map(caption => caption.textContent)).toEqual(['pasted.png'])
+})
+
+it('pastes an image-only follow-up and shows it only on that message\'s timeline row', async () => {
+  server.localProjects = [PROJECT]
+  const base = localDiscussion('Layout talk', 'The body of the talk', PROJECT.id, 'd-talk')
+  server.localDiscussions = [{ ...base, answers: [localDiscussionAnswer(base, 'First remark', '2026-09-20T00:00:01Z')] }]
+  at({ page: 'discussions', id: 'd-talk' })
+  await mount()
+  const box = area(zh['discussion.commentPlaceholder'])
+  await dispatchFiles(box, pasteEvent([imageFile('later.png')]))
+  expect(button(zh['discussion.comment']).disabled).toBe(false)
+  await click(button(zh['discussion.comment']))
+  const posted = server.requests.find(request => request.path === 'local/discussions/d-talk/comments' && request.method === 'POST')!
+  expect(posted.body).toMatchObject({ text: '', images: [{ name: 'later.png', mediaType: 'image/png' }] })
+  // Only the newest message carries the image; the older remark and the body stay without one.
+  const rows = all('.dt-timeline .dt-row')
+  expect(rows).toHaveLength(2)
+  expect(rows[0]!.querySelectorAll('.dt-image-caption')).toHaveLength(1)
+  expect(rows[0]!.querySelector('.dt-image-caption')?.textContent).toBe('later.png')
+  expect(rows[1]!.querySelectorAll('.dt-image-caption')).toHaveLength(0)
+  // The submitted box clears its text and its image selection.
+  expect((area(zh['discussion.commentPlaceholder']) as HTMLTextAreaElement).value).toBe('')
+  expect(all('.dt-image-choice')).toHaveLength(0)
 })
