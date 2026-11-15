@@ -43,7 +43,7 @@ A configured worktree root must already exist and accept writes; otherwise the T
 
 ### Discussions
 
-The figure [`diagrams/discussion-to-requirement.html`](../diagrams/discussion-to-requirement.html) traces one discussion into one requirement, field by field.
+The figure [`diagrams/discussion-to-requirement.html`](../diagrams/discussion-to-requirement.html) traces one discussion into one requirement, field by field. The figure [`diagrams/discussion-routing.html`](../diagrams/discussion-routing.html) draws the route around it: the Router's `discuss` decision, the read-only Answerer that answers it, and the hand-off that starts the one alignment Ticket.
 
 Every discussion belongs to one local project and lives on its own Thread, apart from the project's requirements. The **Discussions** page lists the current project's discussions newest first; each row shows whether it is Open or Closed, whether it already created a requirement, and when it was created. **New discussion** above the list opens a dialog for the text: its first non-empty line becomes the title and the whole text is stored, with the same title rules as a requirement's description.
 

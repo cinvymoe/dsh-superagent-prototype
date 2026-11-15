@@ -23,6 +23,7 @@ dsh-superagent is a DeepSeek Harness bundle: it reads Triggers from Sources, eva
 | `docs/005-panel.md` § Tabs, a new page or a new block on a page | `diagrams/panel-ia.html` |
 | § Requirement states, alignment rounds, `acceptPlan` | `diagrams/requirement-lifecycle.html` |
 | § Discussions, answerer sessions, Send to issue | `diagrams/discussion-to-requirement.html` |
+| The Router's `discuss` decision, the Answerer's wait, Give to alignment, `acceptAlignment` | `diagrams/discussion-routing.html` |
 | `docs/006-deployment.md` § What runs, `SETUP.md`, state directory | `diagrams/deployment-topology.html` |
 | § Permissions and isolation, panel-only saves, blocked commands | `diagrams/trust-boundaries.html` |
 | `docs/007-architecture.md` § Persistence, `src/app/store.ts` tables or generated columns | `diagrams/schema-core.html` and `diagrams/schema-queues.html` |
