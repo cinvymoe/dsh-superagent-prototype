@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="schema-core-title schema-core-desc" id="schema-core-root">
+        <title id="schema-core-title">编排核心的物理表结构：JSON 列、生成列与逻辑引用</title>
+        <desc id="schema-core-desc">数据库结构图：trigger、trigger_thread、thread、ticket、decision 五张表，每行一列 value JSON，active 与 open 等生成列构成工作集，三处逻辑引用没有外键约束。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #schema-core-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #schema-core-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #schema-core-root .container { max-width: 1360px; margin: 0 auto; }
+      #schema-core-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #schema-core-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #schema-core-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #schema-core-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #schema-core-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #schema-core-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #schema-core-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #schema-core-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #schema-core-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #schema-core-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #schema-core-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #schema-core-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #schema-core-root .card-dot.coral { background: var(--color-accent); }
+      #schema-core-root .card-dot.muted { background: var(--color-muted); }
+      #schema-core-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#schema-core-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="schema-core-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="schema-core-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="schema-core-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ references (drawn before tables) ============ -->
+        <path d="M 520,220 H 464 Q 456,220 456,212 V 204 Q 456,196 448,196 H 384" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#schema-core-arrow)"/>
+        <line x1="840" y1="188" x2="976" y2="188" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#schema-core-arrow)"/>
+        <path d="M 840,436 H 936 Q 944,436 944,428 V 212 Q 944,204 952,204 H 976" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#schema-core-arrow)"/>
+
+        <!-- ============ reference labels ============ -->
+        <rect x="466" y="228" width="48" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="490" y="239" class="d-arrow" fill="#5a6580" text-anchor="middle">NO FK</text>
+        <rect x="880" y="166" width="48" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="904" y="177" class="d-arrow" fill="#5a6580" text-anchor="middle">NO FK</text>
+        <rect x="856" y="404" width="48" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="880" y="415" class="d-arrow" fill="#5a6580" text-anchor="middle">NO FK</text>
+
+        <!-- ============ tables ============ -->
+        <rect x="64" y="140" width="320" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="140" width="320" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="72" y="148" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="94" y="157" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="74" y="176" class="d-sub" font-weight="600" fill="#2d3142">trigger</text>
+        <line x1="64" y1="184" x2="384" y2="184" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="184" width="320" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="74" y="200" class="d-sub" fill="#2d3142">id</text>
+        <rect x="192" y="190" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="204.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="374" y="200" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="64" y="208" width="320" height="24" fill="none"/>
+        <text x="74" y="224" class="d-sub" fill="#2d3142">value</text>
+        <rect x="192" y="214" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="204.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="374" y="224" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="64" y="232" width="320" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="74" y="248" class="d-sub" fill="#2d3142">at</text>
+        <rect x="192" y="238" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="204.0" y="247" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="374" y="248" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <line x1="64" y1="256" x2="384" y2="256" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="74" y="269" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="74" y="282" class="d-mono" fill="#5a6580">trigger_at (at)</text>
+        <rect x="520" y="140" width="320" height="172" rx="6" fill="#f5f5f5"/>
+        <rect x="520" y="140" width="320" height="172" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="528" y="148" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="550" y="157" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="530" y="176" class="d-sub" font-weight="600" fill="#2d3142">trigger_thread</text>
+        <line x1="520" y1="184" x2="840" y2="184" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="520" y="184" width="320" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="530" y="200" class="d-sub" fill="#2d3142">thread</text>
+        <rect x="648" y="190" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="660.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <rect x="676" y="190" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="688.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">FK</text>
+        <text x="830" y="200" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="208" width="320" height="24" fill="none"/>
+        <text x="530" y="224" class="d-sub" fill="#2d3142">id</text>
+        <rect x="648" y="214" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="660.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <rect x="676" y="214" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="688.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">FK</text>
+        <text x="830" y="224" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="232" width="320" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="530" y="248" class="d-sub" fill="#2d3142">at</text>
+        <rect x="648" y="238" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="660.0" y="247" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="830" y="248" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="256" width="320" height="24" fill="none"/>
+        <text x="530" y="272" class="d-sub" fill="#2d3142">human</text>
+        <rect x="648" y="262" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="660.0" y="271" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="830" y="272" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <line x1="520" y1="280" x2="840" y2="280" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="530" y="293" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="530" y="306" class="d-mono" fill="#5a6580">trigger_thread_at (thread, at)</text>
+        <rect x="976" y="140" width="280" height="172" rx="6" fill="#f5f5f5"/>
+        <rect x="976" y="140" width="280" height="172" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="984" y="148" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1006" y="157" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="986" y="176" class="d-sub" font-weight="600" fill="#2d3142">thread</text>
+        <line x1="976" y1="184" x2="1256" y2="184" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="976" y="184" width="280" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="986" y="200" class="d-sub" fill="#2d3142">key</text>
+        <rect x="1104" y="190" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1116.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="1246" y="200" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="976" y="208" width="280" height="24" fill="none"/>
+        <text x="986" y="224" class="d-sub" fill="#2d3142">value</text>
+        <rect x="1104" y="214" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1116.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="1246" y="224" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="976" y="232" width="280" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="986" y="248" class="d-sub" fill="#2d3142">active</text>
+        <rect x="1104" y="238" width="32" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1120.0" y="247" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="248" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <rect x="976" y="256" width="280" height="24" fill="none"/>
+        <text x="986" y="272" class="d-sub" fill="#2d3142">subscribed</text>
+        <rect x="1104" y="262" width="32" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1120.0" y="271" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="272" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <line x1="976" y1="280" x2="1256" y2="280" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="986" y="293" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="986" y="306" class="d-mono" fill="#5a6580">thread_active · thread_subscribed</text>
+        <rect x="520" y="356" width="320" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="520" y="356" width="320" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="528" y="364" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="550" y="373" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="530" y="392" class="d-sub" font-weight="600" fill="#2d3142">decision</text>
+        <line x1="520" y1="400" x2="840" y2="400" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="520" y="400" width="320" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="530" y="416" class="d-sub" fill="#2d3142">id</text>
+        <rect x="648" y="406" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="660.0" y="415" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="830" y="416" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="424" width="320" height="24" fill="none"/>
+        <text x="530" y="440" class="d-sub" fill="#2d3142">thread</text>
+        <rect x="648" y="430" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="660.0" y="439" class="d-tag" fill="#5a6580" text-anchor="middle">FK</text>
+        <text x="830" y="440" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="448" width="320" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="530" y="464" class="d-sub" fill="#2d3142">value</text>
+        <rect x="648" y="454" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="660.0" y="463" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="830" y="464" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <line x1="520" y1="472" x2="840" y2="472" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="530" y="485" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="530" y="498" class="d-mono" fill="#5a6580">decision_thread (thread)</text>
+        <rect x="976" y="356" width="280" height="172" rx="6" fill="#f5f5f5"/>
+        <rect x="976" y="356" width="280" height="172" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="984" y="364" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1006" y="373" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="986" y="392" class="d-sub" font-weight="600" fill="#2d3142">ticket</text>
+        <line x1="976" y1="400" x2="1256" y2="400" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="976" y="400" width="280" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="986" y="416" class="d-sub" fill="#2d3142">id</text>
+        <rect x="1104" y="406" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1116.0" y="415" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="1246" y="416" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="976" y="424" width="280" height="24" fill="none"/>
+        <text x="986" y="440" class="d-sub" fill="#2d3142">value</text>
+        <rect x="1104" y="430" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1116.0" y="439" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="1246" y="440" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="976" y="448" width="280" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="986" y="464" class="d-sub" fill="#2d3142">open</text>
+        <rect x="1104" y="454" width="32" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1120.0" y="463" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="464" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <rect x="976" y="472" width="280" height="24" fill="none"/>
+        <text x="986" y="488" class="d-sub" fill="#2d3142">active</text>
+        <rect x="1104" y="478" width="32" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1120.0" y="487" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="488" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <line x1="976" y1="496" x2="1256" y2="496" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="986" y="509" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="986" y="522" class="d-mono" fill="#5a6580">ticket_open · ticket_active</text>
+
+        <!-- ============ annotations ============ -->
+        <text x="64" y="360" class="d-annot" fill="#5a6580">引用是逻辑的：</text>
+        <text x="64" y="384" class="d-annot" fill="#5a6580">没有 FOREIGN KEY，</text>
+        <text x="64" y="408" class="d-annot" fill="#5a6580">也没有级联删除。</text>
+        <text x="64" y="452" class="d-mono" fill="#5a6580">trigger_thread(thread, id)</text>
+        <text x="64" y="470" class="d-mono" fill="#5a6580">is the composite key</text>
+
+        <text x="64" y="522" class="d-annot" fill="#bf4520">work set = 生成列 + 部分索引</text>
+        <text x="64" y="546" class="d-annot" fill="#5a6580">一次 pass 只读 active / open 的行。</text>
+
+        <text x="976" y="560" class="d-mono" fill="#5a6580">outbox · effect · disposition · kv</text>
+        <text x="976" y="578" class="d-sub" fill="#5a6580">四张表见下一页：队列与收据</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <text x="112" y="668" class="d-sub" fill="#4f5d75">PK</text>
+        <text x="140" y="668" class="d-mono" fill="#5a6580">primary key</text>
+        <text x="260" y="668" class="d-sub" fill="#4f5d75">FK</text>
+        <text x="288" y="668" class="d-mono" fill="#5a6580">logical reference, no constraint</text>
+        <text x="520" y="668" class="d-sub" fill="#4f5d75">GEN</text>
+        <text x="552" y="668" class="d-mono" fill="#5a6580">generated column, indexed when set</text>
+        <text x="836" y="668" class="d-sub" fill="#4f5d75">NN</text>
+        <text x="864" y="668" class="d-mono" fill="#5a6580">not null</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">schema 13 · src/app/store.ts</text>
+      </svg>

@@ -8,17 +8,22 @@
 | 文档 | 图 | 讲什么 |
 | --- | --- | --- |
 | [007 架构总览](../docs/007-architecture.md) | [current-architecture](./current-architecture.html) · [router-worker](./router-worker-architecture.html) · [agent-dispatch](./agent-dispatch-worker.html) | 当前实现的角色与链路；两张早期 Router/Worker 视角 |
-| [001 领域模型](../docs/001-domain.md) | **[domain-model](./domain-model.html)** | 七个概念、八条关系、授权链只有一处出口 |
-| [002 授权](../docs/002-authorization.md) | **[authorization-flow](./authorization-flow.html)** | 一条 Trigger 的两种去向：订阅扇出 vs Eval |
-| [003 执行 · 阶段](../docs/003-execution.md) | **[ticket-state](./ticket-state.html)** | Ticket 的七个阶段与恢复；Assignment 平行时间线 |
-| [003 执行 · 失败](../docs/003-execution.md) | **[failure-recovery](./failure-recovery.html)** | 过路性重试 / 挂起 / 恢复，以及四条横切规则 |
-| [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | **[agent-capabilities](./agent-capabilities.html)** | 三个角色的工具集怎么按插件拼出来 |
-| [006 部署](../docs/006-deployment.md) | **[deployment-topology](./deployment-topology.html)** | 一个进程、一个状态目录、两个外部账号 |
+| [001 领域模型](../docs/001-domain.md) | [domain-model](./domain-model.html) | 七个概念、八条关系，授权链只有一处出口 |
+| [002 授权](../docs/002-authorization.md) | [authorization-flow](./authorization-flow.html) · [paired-decisions](./paired-decisions.html) | 一条 Trigger 的两种去向；两条请求为何一个接单一个忽略 |
+| [003 执行 · 阶段](../docs/003-execution.md) | [ticket-state](./ticket-state.html) | 七个阶段与恢复；Assignment 平行时间线 |
+| [003 执行 · 失败](../docs/003-execution.md) | [failure-recovery](./failure-recovery.html) | 过路性重试 / 挂起 / 恢复，以及四条横切规则 |
+| [003 执行 · 并发](../docs/003-execution.md) | [concurrency-queue](./concurrency-queue.html) | 三类来源、有限槽位、人的插队槽 |
+| [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | [agent-capabilities](./agent-capabilities.html) | 三个角色的工具集怎么按插件拼出来 |
+| [004 提示词](../docs/004-prompts.md) | [prompt-assembly](./prompt-assembly.html) | 团队段 → 内置段 → 技能 → 角色组装 → 版本 |
+| [005 面板](../docs/005-panel.md) | [panel-ia](./panel-ia.html) · [requirement-lifecycle](./requirement-lifecycle.html) · [discussion-to-requirement](./discussion-to-requirement.html) | 四层漏斗；需求的状态；讨论如何变成需求 |
+| [006 部署](../docs/006-deployment.md) | [deployment-topology](./deployment-topology.html) · [trust-boundaries](./trust-boundaries.html) | 一个进程与一个状态目录；唯一授权路径与被拒绝的旁路 |
+| [007 持久化](../docs/007-architecture.md) | [schema-core](./schema-core.html) · [schema-queues](./schema-queues.html) | 五张编排表；四张队列 / 收据表 |
+| [007 依赖规则](../docs/007-architecture.md) | [module-dependencies](./module-dependencies.html) | core 不外出、Sources 看不见胶水层 |
+| [008 新增 Source](../docs/008-cookbook.md) | [source-onboarding](./source-onboarding.html) | 作者 / SourceContext / Engine 三条泳道 |
 | 讨论双管线（提案） | [discussion-issue-isolation](./discussion-issue-isolation.svg) | 讨论与需求的隔离目标形态 |
 
-> 加粗的六张是按文档编号补齐的图，改动对应文档的规则时请一起改（见仓库根目录 `AGENTS.md`）。
-> 所有图都是自包含 HTML（内联 SVG + 内联 CSS + Google Fonts），同名 `.svg` / `.png` 为导出件。
-
+> 全部图都是自包含 HTML（内联 SVG + 内联 CSS + Google Fonts），同名 `.svg` / `.png`（@2x）为导出件。
+> 根目录 `AGENTS.md` 里有一张「改动落在哪 → 要改哪张图」的映射表，与这张表同源；改图要同时重导出。
 
 ## 图 0：编辑版总览（2026-11-10 重设计）
 
@@ -171,3 +176,82 @@ flowchart TB
 - 闸门：`queueForEval()` 对 `local:d-…` 主 Thread 直接拒绝入队，讨论永不产生 Eval / Decision / Ticket；唯一跨界动作是人在面板点「创建 Issue」。
 - 角色色键：〔人〕蓝＝决策与确认、〔Engine〕紫＝编排与唯一状态写入、〔Router〕橙＝研判路由、〔Answerer〕绿＝讨论只读会话、〔Worker〕青＝工单执行、〔Source〕灰＝外部通道。
 - 时间线为设计目标 / 典型量级（非实测）：讨论 ≤120s（沿用 `eval.timeoutSeconds`），Issue 判定秒级、Worker 执行 10min～数小时。
+
+## 图 10–20：按文档补齐的第二批（2026-11-15）
+
+这一批按 `docs/000–008` 逐篇补：每篇一条主线，图只讲那条主线，细节留在文档和卡片里。
+
+### 图 10：成对策略轨迹（002）
+
+[![同一条 Thread，两种结果](./paired-decisions.png)](./paired-decisions.html)
+
+- 两条 Trigger、同一套规则、同样的命中结果；差别只在 R1 给出的强度，以及推断档在 `observe` 下只被记录。
+- 状态写成 `PASS / FAIL / NOT REACHED` 文本，`NOT REACHED` 用虚线格标出「流程主动跳过」，与 `SKIPPED` 区分。
+- 首个分岔用 coral 标在 R1，并有一条注释指出来。
+
+### 图 11 / 12：物理表结构（007）
+
+[![编排核心的五张表](./schema-core.png)](./schema-core.html)
+[![队列与收据的四张表](./schema-queues.png)](./schema-queues.html)
+
+- 真正的结构是「一列 JSON + 少量生成列」：`trigger` / `trigger_thread` / `thread` / `ticket` / `decision`，以及 `effect` / `outbox` / `disposition` / `kv`。
+- 生成列 `active` / `open` / `subscribed` 就是工作集，部分索引只覆盖有活的行。
+- 三处逻辑引用没有 `FOREIGN KEY`，也没有级联删除：`no FK` 是图里刻意标出的结论。
+
+### 图 13：模块依赖（007）
+
+[![依赖只朝一个方向](./module-dependencies.png)](./module-dependencies.html)
+
+- 9 个节点、4 个 rank：`src/core` 扇入 3，且不 import 自身之外的任何东西；`src/sources` 看不见 `src/app`。
+- 面板只有一条虚线边到 `agent-model.ts`，表示「类型 + 纯值」。
+- 节点右上角的 `N IN` 徽标就是扇入数，用来判断改一处会波及多广。
+
+### 图 14：面板信息架构（005）
+
+[![四层漏斗](./panel-ia.png)](./panel-ia.html)
+
+- 四层嵌套：三个问题 → 当前项目 → 列表一行 → 一条记录；每层只放该层能做的动作。
+- 最内层是五块内容：正文与图片、时间线、关联 Ticket、对齐轮次、执行方式。
+
+### 图 15：需求生命周期（005）
+
+[![三轮人的动作](./requirement-lifecycle.png)](./requirement-lifecycle.html)
+
+- 讨论 →（Send to issue）需求 →（align）提案 →（人确认）已确认 →（slice 全结束）Pending close →（人关闭）Closed。
+- 打回回到 Open，Ticket 恢复让标签回到 Open；执行方式在确认时固定，派发后不可改。
+
+### 图 16：新增 Source 的泳道（008）
+
+[![五步写作，三次交给宿主](./source-onboarding.png)](./source-onboarding.html)
+
+- 三条泳道：作者、SourceContext、Engine；作者写五步，其中三处交接给宿主接口，一处交给 Intake。
+- 只画八格：去重、准入、重试、工单生命周期都不在作者的职责里。
+
+### 图 17：信任边界（002 / 006 / 007）
+
+[![只有一条路能把话变成动作](./trust-boundaries.png)](./trust-boundaries.html)
+
+- 请求 → Gate（唯一特权门）→ Mandate → Executor → GitHub；面板只能在本机写配置。
+- 两条被拒绝的旁路：绕过 Gate 的请求在边界处停下；会话里的工具改不动设置。
+- 图里明说 block 命令与 CLI wrapper 不是安全边界，隔离靠独立的操作系统账号。
+
+### 图 18：并发与排队（003）
+
+[![槽位有限，人永远进得来](./concurrency-queue.png)](./concurrency-queue.html)
+
+- 三类来源汇入等待队列：新工单、订阅/CI、人的消息；讨论回答走独立的两个 Answerer 槽。
+- 槽位画成格子：3 个正常槽 + 1 个人工槽（H），依赖未结束的 slice 不占槽。
+
+### 图 19：提示词拼装（004）
+
+[![拼出来的提示词](./prompt-assembly.png)](./prompt-assembly.html)
+
+- 五层：团队段 → 内置段与模板 → 技能 → 角色组装 → 版本与覆盖；右列是四份组装结果。
+- 角色差异发生在 P4：`composeAlign` 不含实现授权，`composeExecute` 拿着 Ticket 固定的策略。
+
+### 图 20：讨论 → 需求（005）
+
+[![一段对话变成一个记录](./discussion-to-requirement.png)](./discussion-to-requirement.html)
+
+- 对话里三条消息与两条回答；人点一次 Send to issue 才发生时态变化。
+- 右侧记录五个字段，编号 ①②③ 标出哪段文字落进哪个字段；空字段留空，不推断。

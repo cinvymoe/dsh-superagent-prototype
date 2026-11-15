@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="module-dependencies-title module-dependencies-desc" id="module-dependencies-root">
+        <title id="module-dependencies-title">模块依赖：core、胶水层、Sources、工具与面板的单向依赖</title>
+        <desc id="module-dependencies-desc">依赖图：插件入口与面板依赖胶水层，胶水层依赖 Sources、Session 工具、管理接口、宿主与 core；Sources、工具与管理接口都依赖 core，core 不依赖自身之外的模块。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #module-dependencies-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #module-dependencies-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #module-dependencies-root .container { max-width: 1360px; margin: 0 auto; }
+      #module-dependencies-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #module-dependencies-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #module-dependencies-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #module-dependencies-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #module-dependencies-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #module-dependencies-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #module-dependencies-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #module-dependencies-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #module-dependencies-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #module-dependencies-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #module-dependencies-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #module-dependencies-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #module-dependencies-root .card-dot.coral { background: var(--color-accent); }
+      #module-dependencies-root .card-dot.muted { background: var(--color-muted); }
+      #module-dependencies-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#module-dependencies-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="module-dependencies-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="module-dependencies-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="module-dependencies-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ edges ============ -->
+        <line x1="460" y1="188" x2="460" y2="248" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <line x1="980" y1="188" x2="980" y2="364" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#module-dependencies-arrow)"/>
+        <path d="M 420,304 V 332 Q 420,340 412,340 H 208 Q 200,340 200,348 V 364"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <line x1="500" y1="304" x2="500" y2="364" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <path d="M 460,304 V 320 Q 460,328 468,328 H 712 Q 720,328 720,336 V 364"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <path d="M 540,290 H 872 Q 880,290 880,298 V 472 Q 880,480 888,480 H 900"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <line x1="460" y1="420" x2="460" y2="480" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <path d="M 720,420 V 448 Q 720,456 712,456 H 528 Q 520,456 520,464 V 480"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <path d="M 200,420 V 444 Q 200,452 208,452 H 392 Q 400,452 400,460 V 480"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+
+        <!-- ============ edge labels ============ -->
+        <rect x="900" y="266" width="72" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="972" y="278" class="d-label" fill="#5a6580" text-anchor="end">类型 + 纯值</text>
+        <rect x="812" y="382" width="56" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="868" y="393" class="d-arrow" fill="#5a6580" text-anchor="end">DSH HOST</text>
+
+        <!-- ============ rank 0 ============ -->
+        <rect x="380" y="132" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="380" y="132" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="460" y="162" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">src/index.ts</text>
+        <text x="460" y="180" class="d-mono" fill="#5a6580" text-anchor="middle">plugin entry</text>
+        <rect x="500" y="138" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="517" y="147" class="d-tag" fill="#5a6580" text-anchor="middle">0 IN</text>
+
+        <rect x="900" y="132" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="900" y="132" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="980" y="162" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">panel（client）</text>
+        <text x="980" y="180" class="d-mono" fill="#5a6580" text-anchor="middle">web UI</text>
+        <rect x="1020" y="138" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="1037" y="147" class="d-tag" fill="#5a6580" text-anchor="middle">0 IN</text>
+
+        <!-- ============ rank 1 ============ -->
+        <rect x="380" y="248" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="380" y="248" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="460" y="278" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">src/app</text>
+        <text x="460" y="296" class="d-mono" fill="#5a6580" text-anchor="middle">runtime · glue</text>
+        <rect x="500" y="254" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="517" y="263" class="d-tag" fill="#5a6580" text-anchor="middle">1 IN</text>
+
+        <!-- ============ rank 2 ============ -->
+        <rect x="120" y="364" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="120" y="364" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="200" y="394" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">src/sources</text>
+        <text x="200" y="412" class="d-mono" fill="#5a6580" text-anchor="middle">github · feishu · local</text>
+        <rect x="240" y="370" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="257" y="379" class="d-tag" fill="#5a6580" text-anchor="middle">1 IN</text>
+
+        <rect x="380" y="364" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="380" y="364" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="460" y="394" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">src/app/tools</text>
+        <text x="460" y="412" class="d-mono" fill="#5a6580" text-anchor="middle">main + executor</text>
+        <rect x="500" y="370" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="517" y="379" class="d-tag" fill="#5a6580" text-anchor="middle">1 IN</text>
+
+        <rect x="640" y="364" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="640" y="364" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="720" y="394" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">src/app/http · views</text>
+        <text x="720" y="412" class="d-mono" fill="#5a6580" text-anchor="middle">management API</text>
+        <rect x="760" y="370" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="777" y="379" class="d-tag" fill="#5a6580" text-anchor="middle">1 IN</text>
+
+        <rect x="900" y="364" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="900" y="364" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="980" y="394" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">src/agent-model.ts</text>
+        <text x="980" y="412" class="d-mono" fill="#5a6580" text-anchor="middle">pure · panel-bundled</text>
+        <rect x="1020" y="370" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="1037" y="379" class="d-tag" fill="#5a6580" text-anchor="middle">1 IN</text>
+
+        <!-- ============ rank 3 ============ -->
+        <rect x="380" y="480" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="380" y="480" width="160" height="56" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1.2"/>
+        <text x="460" y="510" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">src/core</text>
+        <text x="460" y="528" class="d-mono" fill="#5a6580" text-anchor="middle">engine · parts · ports</text>
+        <rect x="500" y="486" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="517" y="495" class="d-tag" fill="#5a6580" text-anchor="middle">3 IN</text>
+
+        <rect x="900" y="480" width="160" height="56" rx="6" fill="#f5f5f5"/>
+        <rect x="900" y="480" width="160" height="56" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="980" y="510" class="d-sub" font-weight="600" fill="#2d3142" text-anchor="middle">DeepSeek Harness</text>
+        <text x="980" y="528" class="d-mono" fill="#5a6580" text-anchor="middle">sessions · presets · tools</text>
+        <rect x="1020" y="486" width="34" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="1037" y="495" class="d-tag" fill="#5a6580" text-anchor="middle">1 IN</text>
+
+        <!-- ============ annotations ============ -->
+        <text x="120" y="596" class="d-annot" fill="#bf4520">core 无 I/O，也不 import 自身之外的任何东西（只有 node:crypto）。</text>
+        <text x="120" y="620" class="d-annot" fill="#5a6580">sources 看不见 src/app；面板只拿到类型和少数纯函数。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <line x1="112" y1="664" x2="140" y2="664" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#module-dependencies-arrow)"/>
+        <text x="148" y="668" class="d-sub" fill="#4f5d75">import 方向</text>
+        <line x1="264" y1="664" x2="292" y2="664" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="300" y="668" class="d-sub" fill="#4f5d75">只 import 类型 / 纯值</text>
+        <rect x="452" y="658" width="20" height="12" rx="3" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="480" y="668" class="d-sub" fill="#4f5d75">外部宿主</text>
+        <text x="600" y="668" class="d-sub" fill="#5a6580">徽标 = 有多少模块依赖它</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/007-architecture.md</text>
+      </svg>

@@ -12,6 +12,8 @@ Opening the panel answers three questions, in this order:
 
 ## Tabs
 
+The figure [`diagrams/panel-ia.html`](../diagrams/panel-ia.html) draws the four levels, from the three questions down to one record.
+
 The tabs follow the workflow: **Overview**, **Discussions**, **Requirements**, **Source**, **Trigger**, **Eval**, **Execution**, and **Settings**. Until repository and account setup succeeds, Overview shows what is missing and links to the relevant setting.
 
 Above the page tabs, the project bar shows one tab per local project and marks the current one. When the project tabs overflow, **More** at the end of the strip lists every project with its repository chain and the bot account its chain resolves to. **New project** at the top right opens a separate page; Cancel or Back there creates nothing, and creating a project makes it current and returns to its requirement list.
@@ -41,6 +43,8 @@ A configured worktree root must already exist and accept writes; otherwise the T
 
 ### Discussions
 
+The figure [`diagrams/discussion-to-requirement.html`](../diagrams/discussion-to-requirement.html) traces one discussion into one requirement, field by field.
+
 Every discussion belongs to one local project and lives on its own Thread, apart from the project's requirements. The **Discussions** page lists the current project's discussions newest first; each row shows whether it is Open or Closed, whether it already created a requirement, and when it was created. **New discussion** above the list opens a dialog for the text: its first non-empty line becomes the title and the whole text is stored, with the same title rules as a requirement's description.
 
 A discussion detail shows the body once, then its message timeline newest first with the follow-up box above the list, each message carrying the answer below it. The result panel sits in the right column beside it, showing the latest conclusion, the answer state and the actions it allows. Its messages are ordinary human Triggers on the discussion's Thread, and the discussion's own read-only Answerer Session answers each: no message becomes a Ticket, and nothing here aligns, dispatches slices or creates a requirement. An answer still in progress shows its state; a failed one shows the failure and **Retry**, which asks the same Session again, and a message written before answers were recorded still shows its text from the Thread. **Close discussion** sets the discussion to Closed and leaves its Thread and messages readable. **Delete discussion**, shown only while the discussion is about no requirement, asks for confirmation naming its title; confirming archives its Answerer Session, removes the record, its Thread with the Triggers that belong only to it, and its state-directory workspace, then lands on the list without that row. A discussion that is about a requirement is refused and keeps its record and messages, because that requirement still names it as its source. A discussion is about at most one requirement: a person makes the requirement from it, or the Router opens it about an existing requirement whose work is not decided yet. A requirement made from a discussion shows that source discussion in its detail and links back to it.
@@ -58,6 +62,8 @@ The switch saves immediately through `POST local/issues/:id/execution`, and a re
 Once the requirement has dispatched slice Tickets, its mode is fixed: the alignment card shows the stored mode as a read-only tag with the hint **Tickets are already dispatched, so the mode is fixed.** (已派发工单，执行方式固定。), and a further change is refused with `executionLocked`. A person therefore chooses the mode before confirming the alignment.
 
 ### Requirement states
+
+The figure [`diagrams/requirement-lifecycle.html`](../diagrams/requirement-lifecycle.html) draws those states together with the alignment rounds and the dispatch step.
 
 A requirement's state label is **Open** while work remains and **Closed** after a person closes it. Once the requirement's alignment is confirmed and every slice Ticket of that alignment has ended, an open requirement shows **Pending close** (待关闭) instead of Open, and its alignment tag stays **Confirmed** (已确认); a closed requirement shows only **Closed**. Both ways a slice Ticket ends count — an Executor's result report and a person's stop — so Pending close means execution has stopped and only closing is left, not that every slice succeeded. A requirement with no alignment, with a proposal awaiting review or one sent back, stays Open, and a confirmed alignment with no slices or with a slice whose Ticket is missing never shows Pending close. The label is derived when the panel reads the requirement, not stored: if a Ticket resumes, the label returns to Open.
 

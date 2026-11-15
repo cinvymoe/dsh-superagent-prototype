@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="schema-queues-title schema-queues-desc" id="schema-queues-root">
+        <title id="schema-queues-title">队列与收据的物理表：effect、outbox、disposition、kv</title>
+        <desc id="schema-queues-desc">数据库结构图：effect 以 kind 与 key 为主键按 due 排序重试，outbox 以消息 id 为收据并用生成列维持会话内顺序，disposition 记录每条 Trigger 的去向，kv 保存其余键值记录。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #schema-queues-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #schema-queues-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #schema-queues-root .container { max-width: 1360px; margin: 0 auto; }
+      #schema-queues-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #schema-queues-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #schema-queues-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #schema-queues-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #schema-queues-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #schema-queues-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #schema-queues-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #schema-queues-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #schema-queues-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #schema-queues-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #schema-queues-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #schema-queues-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #schema-queues-root .card-dot.coral { background: var(--color-accent); }
+      #schema-queues-root .card-dot.muted { background: var(--color-muted); }
+      #schema-queues-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#schema-queues-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="schema-queues-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="schema-queues-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="schema-queues-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ tables ============ -->
+        <rect x="64" y="120" width="400" height="268" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="120" width="400" height="268" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="72" y="128" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="94" y="137" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="74" y="156" class="d-sub" font-weight="600" fill="#2d3142">effect</text>
+        <line x1="64" y1="164" x2="464" y2="164" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="164" width="400" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="74" y="180" class="d-sub" fill="#2d3142">kind</text>
+        <rect x="212" y="170" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="179" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="454" y="180" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="64" y="188" width="400" height="24" fill="none"/>
+        <text x="74" y="204" class="d-sub" fill="#2d3142">key</text>
+        <rect x="212" y="194" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="203" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="454" y="204" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="64" y="212" width="400" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="74" y="228" class="d-sub" fill="#2d3142">value</text>
+        <rect x="212" y="218" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="227" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="454" y="228" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="64" y="236" width="400" height="24" fill="none"/>
+        <text x="74" y="252" class="d-sub" fill="#2d3142">seq</text>
+        <rect x="212" y="242" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="251" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="454" y="252" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <rect x="64" y="260" width="400" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="74" y="276" class="d-sub" fill="#2d3142">generation</text>
+        <rect x="212" y="266" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="275" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="454" y="276" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <rect x="64" y="284" width="400" height="24" fill="none"/>
+        <text x="74" y="300" class="d-sub" fill="#2d3142">attempts</text>
+        <rect x="212" y="290" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="299" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="454" y="300" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <rect x="64" y="308" width="400" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="74" y="324" class="d-sub" fill="#2d3142">error</text>
+        <rect x="212" y="314" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="323" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="454" y="324" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="64" y="332" width="400" height="24" fill="none"/>
+        <text x="74" y="348" class="d-sub" fill="#2d3142">due</text>
+        <rect x="212" y="338" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="224.0" y="347" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="454" y="348" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <line x1="64" y1="356" x2="464" y2="356" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="74" y="369" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="74" y="382" class="d-mono" fill="#5a6580">effect_due (kind, due, seq)</text>
+        <rect x="520" y="120" width="400" height="172" rx="6" fill="#f5f5f5"/>
+        <rect x="520" y="120" width="400" height="172" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="528" y="128" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="550" y="137" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="530" y="156" class="d-sub" font-weight="600" fill="#2d3142">outbox</text>
+        <line x1="520" y1="164" x2="920" y2="164" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="520" y="164" width="400" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="530" y="180" class="d-sub" fill="#2d3142">id</text>
+        <rect x="668" y="170" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="680.0" y="179" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="910" y="180" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="188" width="400" height="24" fill="none"/>
+        <text x="530" y="204" class="d-sub" fill="#2d3142">value</text>
+        <rect x="668" y="194" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="680.0" y="203" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="910" y="204" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="520" y="212" width="400" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="530" y="228" class="d-sub" fill="#2d3142">pending</text>
+        <rect x="668" y="218" width="32" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="684.0" y="227" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="910" y="228" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="236" width="400" height="24" fill="none"/>
+        <text x="530" y="252" class="d-sub" fill="#2d3142">dropped</text>
+        <rect x="668" y="242" width="32" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="684.0" y="251" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="910" y="252" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <line x1="520" y1="260" x2="920" y2="260" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="530" y="273" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="530" y="286" class="d-mono" fill="#5a6580">outbox_pending · outbox_dropped</text>
+        <rect x="520" y="356" width="400" height="92" rx="6" fill="#f5f5f5"/>
+        <rect x="520" y="356" width="400" height="92" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="528" y="364" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="550" y="373" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="530" y="392" class="d-sub" font-weight="600" fill="#2d3142">disposition</text>
+        <line x1="520" y1="400" x2="920" y2="400" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="520" y="400" width="400" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="530" y="416" class="d-sub" fill="#2d3142">id</text>
+        <rect x="668" y="406" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="680.0" y="415" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="910" y="416" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="424" width="400" height="24" fill="none"/>
+        <text x="530" y="440" class="d-sub" fill="#2d3142">value</text>
+        <rect x="668" y="430" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="680.0" y="439" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="910" y="440" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="976" y="120" width="264" height="124" rx="6" fill="#f5f5f5"/>
+        <rect x="976" y="120" width="264" height="124" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="984" y="128" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1006" y="137" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="986" y="156" class="d-sub" font-weight="600" fill="#2d3142">kv</text>
+        <line x1="976" y1="164" x2="1240" y2="164" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="976" y="164" width="264" height="24" fill="#2d3142" fill-opacity="0.02"/>
+        <text x="986" y="180" class="d-sub" fill="#2d3142">key</text>
+        <rect x="1124" y="170" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1136.0" y="179" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="1230" y="180" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="976" y="188" width="264" height="24" fill="none"/>
+        <text x="986" y="204" class="d-sub" fill="#2d3142">value</text>
+        <rect x="1124" y="194" width="24" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="1136.0" y="203" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="1230" y="204" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <line x1="976" y1="212" x2="1240" y2="212" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="986" y="225" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="986" y="238" class="d-mono" fill="#5a6580">one row per named record</text>
+
+        <!-- ============ notes ============ -->
+        <text x="64" y="428" class="d-annot" fill="#bf4520">同一个 (kind, key) 只有一行：主键就是幂等键。</text>
+        <text x="64" y="452" class="d-annot" fill="#5a6580">重试只是把 due 往后挪，任务本身不重复入队。</text>
+
+        <text x="64" y="500" class="d-mono" fill="#5a6580">kind = launch · delivery · reply · assessment · relay</text>
+        <text x="64" y="518" class="d-mono" fill="#5a6580">due 升序 + seq：同 due 内保序</text>
+
+        <text x="64" y="560" class="d-annot" fill="#5a6580">没有一条 DELETE：收据、去向、版本快照都留着。</text>
+
+        <text x="520" y="470" class="d-mono" fill="#5a6580">read by trigger id — no index needed</text>
+
+        <!-- right column: what the JSON points at -->
+        <text x="976" y="280" class="d-tag" fill="#5a6580" letter-spacing="0.12em">INSIDE THE JSON</text>
+        <text x="976" y="304" class="d-mono" fill="#5a6580">settings-revision</text>
+        <text x="976" y="322" class="d-mono" fill="#5a6580">settings-version:&lt;n&gt;</text>
+        <text x="976" y="340" class="d-mono" fill="#5a6580">prompt-revision</text>
+        <text x="976" y="358" class="d-mono" fill="#5a6580">github-cursor:&lt;n&gt;</text>
+        <text x="976" y="376" class="d-mono" fill="#5a6580">session-prompts:&lt;id&gt;</text>
+        <text x="976" y="400" class="d-sub" fill="#5a6580">读位置、版本、会话提示历史</text>
+
+        <text x="976" y="444" class="d-annot" fill="#5a6580">收据先写，消息后发：</text>
+        <text x="976" y="466" class="d-annot" fill="#5a6580">同一个 id 不会发两次。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <text x="112" y="668" class="d-sub" fill="#4f5d75">PK</text>
+        <text x="140" y="668" class="d-mono" fill="#5a6580">primary key = idempotency key</text>
+        <text x="392" y="668" class="d-sub" fill="#4f5d75">GEN</text>
+        <text x="424" y="668" class="d-mono" fill="#5a6580">generated column, indexed when set</text>
+        <text x="712" y="668" class="d-sub" fill="#4f5d75">NN</text>
+        <text x="740" y="668" class="d-mono" fill="#5a6580">not null</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">schema 13 · src/app/store.ts</text>
+      </svg>

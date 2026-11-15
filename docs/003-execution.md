@@ -74,6 +74,8 @@ With multiple repository chains, the same prepare command runs for every chain, 
 
 ### Concurrency
 
+The figure [`diagrams/concurrency-queue.html`](../diagrams/concurrency-queue.html) shows the three arrivals, the worker slots and the one extra slot a person's message may take.
+
 A Ticket holds a worker slot from the start of a launch, including preparation, or from the delivery that wakes its idle Executor. It also holds the slot throughout an active turn.
 
 The configured concurrency limit applies to these slots, with one extra slot for a person's message or a status request. Such a wake can use the extra slot when normal slots are full, and takes the next free slot before a new launch. New work therefore cannot prevent a person from continuing an existing Ticket.

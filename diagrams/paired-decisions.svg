@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="paired-decisions-title paired-decisions-desc" id="paired-decisions-root">
+        <title id="paired-decisions-title">成对策略轨迹：同一条 Thread 上的两条请求为什么结果不同</title>
+        <desc id="paired-decisions-desc">成对轨迹图：名单内的人显式请求通过 Gate 得到 explicit 强度，命中规则后接单；名单外的人跟帖只得到 inferred 强度，在同一套规则下被记录为 would accept 而忽略。首个分岔在第一关。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #paired-decisions-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #paired-decisions-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #paired-decisions-root .container { max-width: 1360px; margin: 0 auto; }
+      #paired-decisions-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #paired-decisions-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #paired-decisions-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #paired-decisions-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #paired-decisions-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #paired-decisions-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #paired-decisions-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #paired-decisions-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #paired-decisions-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #paired-decisions-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #paired-decisions-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #paired-decisions-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #paired-decisions-root .card-dot.coral { background: var(--color-accent); }
+      #paired-decisions-root .card-dot.muted { background: var(--color-muted); }
+      #paired-decisions-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#paired-decisions-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="paired-decisions-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="paired-decisions-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="paired-decisions-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ traces ============ -->
+        <line x1="316" y1="168" x2="316" y2="215" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#paired-decisions-arrow)"/>
+        <line x1="316" y1="259" x2="316" y2="311" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#paired-decisions-arrow)"/>
+        <line x1="316" y1="355" x2="316" y2="407" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#paired-decisions-arrow)"/>
+        <line x1="316" y1="451" x2="316" y2="520" stroke="#bf4520" stroke-width="1.4" marker-end="url(#paired-decisions-arrow-accent)"/>
+
+        <line x1="964" y1="168" x2="964" y2="215" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#paired-decisions-arrow)"/>
+        <line x1="964" y1="259" x2="964" y2="311" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#paired-decisions-arrow)"/>
+        <line x1="964" y1="355" x2="964" y2="407" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#paired-decisions-arrow)"/>
+        <line x1="964" y1="451" x2="964" y2="520" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#paired-decisions-arrow)"/>
+
+        <!-- ============ headers ============ -->
+        <rect x="200" y="96" width="232" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="200" y="96" width="232" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="208" y="106" width="60" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="238" y="115" class="d-tag" fill="#5a6580" text-anchor="middle">REQUEST A</text>
+        <text x="216" y="138" class="d-name" fill="#2d3142">名单内的人 @ 智能体</text>
+        <text x="216" y="158" class="d-mono" fill="#5a6580">contest: listed + mention</text>
+
+        <rect x="464" y="96" width="352" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="464" y="96" width="352" height="72" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <rect x="472" y="106" width="66" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.22"/>
+        <text x="505" y="115" class="d-tag" fill="#5a6580" text-anchor="middle">SAME THREAD</text>
+        <text x="480" y="138" class="d-name" fill="#2d3142">同一条 Thread，两条 Trigger</text>
+        <text x="480" y="158" class="d-mono" fill="#5a6580">rules are judged once each, in order</text>
+
+        <rect x="848" y="96" width="232" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="848" y="96" width="232" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="856" y="106" width="60" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="886" y="115" class="d-tag" fill="#5a6580" text-anchor="middle">REQUEST B</text>
+        <text x="864" y="138" class="d-name" fill="#2d3142">名单外的人跟帖</text>
+        <text x="864" y="158" class="d-mono" fill="#5a6580">contest: unlisted + follow-up</text>
+
+        <!-- ============ rules (middle) ============ -->
+        <rect x="464" y="208" width="352" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="464" y="208" width="352" height="64" rx="6" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <text x="480" y="232" class="d-name" fill="#2d3142">R1 · Gate：发信人是谁</text>
+        <text x="480" y="252" class="d-sub" fill="#4f5d75">名单 / 准入表 / bot 名单 → 强度</text>
+
+        <rect x="464" y="304" width="352" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="464" y="304" width="352" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="480" y="328" class="d-name" fill="#2d3142">R2 · Assessment：规则命中吗</text>
+        <text x="480" y="348" class="d-sub" fill="#4f5d75">每条启用规则判一次，记录命中</text>
+
+        <rect x="464" y="400" width="352" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="464" y="400" width="352" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="480" y="424" class="d-name" fill="#2d3142">R3 · accept mode</text>
+        <text x="480" y="444" class="d-sub" fill="#4f5d75">off / observe / auto：推断档的去处</text>
+
+        <!-- ============ status cells A ============ -->
+        <rect x="200" y="215" width="232" height="44" rx="4" fill="#f5f5f5"/>
+        <rect x="200" y="215" width="232" height="44" rx="4" fill="#ffffff" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="212" y="235" class="d-arrow" fill="#2d3142" letter-spacing="0.1em">PASS · EXPLICIT</text>
+        <text x="212" y="251" class="d-sub" fill="#4f5d75">在名单上并 @ 了智能体</text>
+
+        <rect x="200" y="311" width="232" height="44" rx="4" fill="#f5f5f5"/>
+        <rect x="200" y="311" width="232" height="44" rx="4" fill="#ffffff" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="212" y="331" class="d-arrow" fill="#2d3142" letter-spacing="0.1em">PASS · MATCHED</text>
+        <text x="212" y="347" class="d-sub" fill="#4f5d75">命中一条启用的主动规则</text>
+
+        <rect x="200" y="407" width="232" height="44" rx="4" fill="#f5f5f5"/>
+        <rect x="200" y="407" width="232" height="44" rx="4" fill="#f5f5f5" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,3" stroke-opacity="0.30"/>
+        <text x="212" y="427" class="d-arrow" fill="#5a6580" letter-spacing="0.1em">NOT REACHED</text>
+        <text x="212" y="443" class="d-sub" fill="#5a6580">显式请求不看 mode</text>
+
+        <!-- ============ status cells B ============ -->
+        <rect x="848" y="215" width="232" height="44" rx="4" fill="#f5f5f5"/>
+        <rect x="848" y="215" width="232" height="44" rx="4" fill="#ffffff" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="860" y="235" class="d-arrow" fill="#2d3142" letter-spacing="0.1em">FAIL · INFERRED</text>
+        <text x="860" y="251" class="d-sub" fill="#4f5d75">不在名单，只能推断</text>
+
+        <rect x="848" y="311" width="232" height="44" rx="4" fill="#f5f5f5"/>
+        <rect x="848" y="311" width="232" height="44" rx="4" fill="#ffffff" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="860" y="331" class="d-arrow" fill="#2d3142" letter-spacing="0.1em">PASS · MATCHED</text>
+        <text x="860" y="347" class="d-sub" fill="#4f5d75">命中同一条规则</text>
+
+        <rect x="848" y="407" width="232" height="44" rx="4" fill="#f5f5f5"/>
+        <rect x="848" y="407" width="232" height="44" rx="4" fill="#ffffff" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="860" y="427" class="d-arrow" fill="#2d3142" letter-spacing="0.1em">OBSERVE</text>
+        <text x="860" y="443" class="d-sub" fill="#4f5d75">记为 “would accept”，不接单</text>
+
+        <!-- ============ outcomes ============ -->
+        <rect x="120" y="520" width="480" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="120" y="520" width="480" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="136" y="546" class="d-arrow" fill="#5a6580" letter-spacing="0.1em">DECISION · ACCEPT</text>
+        <text x="136" y="572" class="d-name" fill="#2d3142">新建 Ticket + Mandate</text>
+        <text x="136" y="594" class="d-sub" fill="#5a6580">policyVersion · scope · 命中的规则</text>
+
+        <rect x="680" y="520" width="480" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="680" y="520" width="480" height="88" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="696" y="546" class="d-arrow" fill="#5a6580" letter-spacing="0.1em">DECISION · IGNORE</text>
+        <text x="696" y="572" class="d-name" fill="#2d3142">记录 would accept，不建工单</text>
+        <text x="696" y="594" class="d-sub" fill="#5a6580">Execution 面板不出现新 Ticket；Decision 全量可查</text>
+
+        <!-- ============ annotation ============ -->
+        <text x="640" y="492" class="d-annot" fill="#bf4520" text-anchor="middle">首个分岔在 R1：强度不同，R3 的结论就不同。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <text x="112" y="668" class="d-arrow" fill="#2d3142" letter-spacing="0.1em">PASS / MATCHED</text>
+        <text x="248" y="668" class="d-sub" fill="#4f5d75">规则通过</text>
+        <text x="352" y="668" class="d-arrow" fill="#5a6580" letter-spacing="0.1em">NOT REACHED</text>
+        <text x="468" y="668" class="d-sub" fill="#4f5d75">流程主动跳过（虚线格）</text>
+        <text x="668" y="668" class="d-sub" fill="#5a6580">状态用文字写，不靠颜色</text>
+        <rect x="828" y="658" width="20" height="12" rx="3" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <text x="856" y="668" class="d-sub" fill="#4f5d75">首个分岔</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/002-authorization.md</text>
+      </svg>

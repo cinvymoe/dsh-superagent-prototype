@@ -159,8 +159,8 @@
         <text x="416" y="370" class="d-sub" fill="#4f5d75">输入：批次 · Thread 快照</text>
         <text x="416" y="388" class="d-sub" fill="#4f5d75">　　　· 全部 Ticket · Policy</text>
         <text x="416" y="406" class="d-sub" fill="#4f5d75">gate 给强度；assessment 判规则</text>
-        <text x="416" y="424" class="d-mono" fill="#4f5d75">Decision: accept · stop · ignore</text>
-        <text x="416" y="442" class="d-mono" fill="#4f5d75">　　　　　　 unavailable</text>
+        <text x="416" y="424" class="d-mono" fill="#4f5d75">Decision: accept · discuss · stop</text>
+        <text x="416" y="442" class="d-mono" fill="#4f5d75">ignore · unavailable</text>
         <text x="416" y="462" class="d-sub" fill="#5a6580">无状态</text>
 
         <!-- Ticket · Mandate (focal) -->

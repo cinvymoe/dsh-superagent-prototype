@@ -4,6 +4,8 @@ This cookbook shows how to extend dsh-superagent. It uses the terms in [001 Doma
 
 ## Add a Source
 
+The figure [`diagrams/source-onboarding.html`](../diagrams/source-onboarding.html) places the steps in three lanes: the author, the SourceContext and the Engine.
+
 This recipe implements a Source kind called `webhook`. It reads an imaginary message queue through an invented CLI, `hookq`, and converts messages to Triggers. All other interfaces are part of dsh-superagent.
 
 The implementation has four responsibilities: translate events, define receiving and authorization rules, provide replies and context, and maintain a polling loop. The numbered steps build those pieces in order.

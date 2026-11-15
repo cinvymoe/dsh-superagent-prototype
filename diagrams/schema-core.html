@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>编排核心的表结构 · dsh-superagent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+    .container { max-width: 1360px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; max-width: 940px; }
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.2vw + 0.8rem, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin-bottom: 0.65rem;
+    }
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch;
+    }
+    .diagram-container {
+      width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+    .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+    .d-sub { font-family: var(--font-sans); font-size: 12px; }
+    .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+    .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+    .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+    .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+    .cards {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 0.95fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 1100px) { .cards { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: 1.15rem;
+    }
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.52rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.55rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.ink { background: var(--color-ink); }
+    .card h3 { font-size: 0.9rem; font-weight: 600; letter-spacing: -0.005em; }
+    .card p { color: var(--color-muted); font-size: 0.82rem; line-height: 1.55; margin-bottom: 0.6rem; }
+    .card ul { color: var(--color-muted); font-size: 0.82rem; line-height: 1.6; list-style: none; }
+    .card li { margin-bottom: 0.32rem; padding-left: 0.9rem; position: relative; }
+    .card li::before { content: '—'; position: absolute; left: 0; color: rgba(45,49,66,0.25); font-size: 0.75rem; }
+    .card code {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--color-ink);
+      background: rgba(45,49,66,0.04);
+      padding: 0.05rem 0.2rem;
+      border-radius: 2px;
+    }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    @media print {
+      .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+      svg { min-width: 0; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>  <div class="container">
+    <header class="header">
+      <p class="header-eyebrow">DSH Superagent · 007 Architecture · Persistence</p>
+      <h1>没有外键，只有生成列和一列 JSON</h1>
+      <p class="subtitle">一个 SQLite 文件，只有 Store 打开。表结构刻意薄：聚合体放在 <code>value</code> 这一列 JSON 里，真正要用索引的字段才提成生成列 —— 生成列 <code>active</code> / <code>open</code> / <code>subscribed</code> 就是这个系统的工作集。</p>
+    </header>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="schema-core-title schema-core-desc">
+        <title id="schema-core-title">编排核心的物理表结构：JSON 列、生成列与逻辑引用</title>
+        <desc id="schema-core-desc">数据库结构图：trigger、trigger_thread、thread、ticket、decision 五张表，每行一列 value JSON，active 与 open 等生成列构成工作集，三处逻辑引用没有外键约束。</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ references (drawn before tables) ============ -->
+        <path d="M 520,220 H 464 Q 456,220 456,212 V 204 Q 456,196 448,196 H 384" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="840" y1="188" x2="976" y2="188" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 840,436 H 936 Q 944,436 944,428 V 212 Q 944,204 952,204 H 976" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- ============ reference labels ============ -->
+        <rect x="466" y="228" width="48" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="490" y="239" class="d-arrow" fill="#5a6580" text-anchor="middle">NO FK</text>
+        <rect x="880" y="166" width="48" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="904" y="177" class="d-arrow" fill="#5a6580" text-anchor="middle">NO FK</text>
+        <rect x="856" y="404" width="48" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="880" y="415" class="d-arrow" fill="#5a6580" text-anchor="middle">NO FK</text>
+
+        <!-- ============ tables ============ -->
+        <rect x="64" y="140" width="320" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="140" width="320" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="72" y="148" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="94" y="157" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="74" y="176" class="d-sub" font-weight="600" fill="#2d3142">trigger</text>
+        <line x1="64" y1="184" x2="384" y2="184" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <rect x="64" y="184" width="320" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="74" y="200" class="d-sub" fill="#2d3142">id</text>
+        <rect x="192" y="190" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="204.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="374" y="200" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="64" y="208" width="320" height="24" fill="transparent"/>
+        <text x="74" y="224" class="d-sub" fill="#2d3142">value</text>
+        <rect x="192" y="214" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="204.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="374" y="224" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="64" y="232" width="320" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="74" y="248" class="d-sub" fill="#2d3142">at</text>
+        <rect x="192" y="238" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="204.0" y="247" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="374" y="248" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <line x1="64" y1="256" x2="384" y2="256" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="74" y="269" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="74" y="282" class="d-mono" fill="#5a6580">trigger_at (at)</text>
+        <rect x="520" y="140" width="320" height="172" rx="6" fill="#f5f5f5"/>
+        <rect x="520" y="140" width="320" height="172" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="528" y="148" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="550" y="157" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="530" y="176" class="d-sub" font-weight="600" fill="#2d3142">trigger_thread</text>
+        <line x1="520" y1="184" x2="840" y2="184" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <rect x="520" y="184" width="320" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="530" y="200" class="d-sub" fill="#2d3142">thread</text>
+        <rect x="648" y="190" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="660.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <rect x="676" y="190" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="688.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">FK</text>
+        <text x="830" y="200" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="208" width="320" height="24" fill="transparent"/>
+        <text x="530" y="224" class="d-sub" fill="#2d3142">id</text>
+        <rect x="648" y="214" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="660.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <rect x="676" y="214" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="688.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">FK</text>
+        <text x="830" y="224" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="232" width="320" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="530" y="248" class="d-sub" fill="#2d3142">at</text>
+        <rect x="648" y="238" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="660.0" y="247" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="830" y="248" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="256" width="320" height="24" fill="transparent"/>
+        <text x="530" y="272" class="d-sub" fill="#2d3142">human</text>
+        <rect x="648" y="262" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="660.0" y="271" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="830" y="272" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <line x1="520" y1="280" x2="840" y2="280" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="530" y="293" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="530" y="306" class="d-mono" fill="#5a6580">trigger_thread_at (thread, at)</text>
+        <rect x="976" y="140" width="280" height="172" rx="6" fill="#f5f5f5"/>
+        <rect x="976" y="140" width="280" height="172" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="984" y="148" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1006" y="157" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="986" y="176" class="d-sub" font-weight="600" fill="#2d3142">thread</text>
+        <line x1="976" y1="184" x2="1256" y2="184" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <rect x="976" y="184" width="280" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="986" y="200" class="d-sub" fill="#2d3142">key</text>
+        <rect x="1104" y="190" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1116.0" y="199" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="1246" y="200" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="976" y="208" width="280" height="24" fill="transparent"/>
+        <text x="986" y="224" class="d-sub" fill="#2d3142">value</text>
+        <rect x="1104" y="214" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1116.0" y="223" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="1246" y="224" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="976" y="232" width="280" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="986" y="248" class="d-sub" fill="#2d3142">active</text>
+        <rect x="1104" y="238" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1120.0" y="247" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="248" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <rect x="976" y="256" width="280" height="24" fill="transparent"/>
+        <text x="986" y="272" class="d-sub" fill="#2d3142">subscribed</text>
+        <rect x="1104" y="262" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1120.0" y="271" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="272" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <line x1="976" y1="280" x2="1256" y2="280" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="986" y="293" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="986" y="306" class="d-mono" fill="#5a6580">thread_active · thread_subscribed</text>
+        <rect x="520" y="356" width="320" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="520" y="356" width="320" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="528" y="364" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="550" y="373" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="530" y="392" class="d-sub" font-weight="600" fill="#2d3142">decision</text>
+        <line x1="520" y1="400" x2="840" y2="400" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <rect x="520" y="400" width="320" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="530" y="416" class="d-sub" fill="#2d3142">id</text>
+        <rect x="648" y="406" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="660.0" y="415" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="830" y="416" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="424" width="320" height="24" fill="transparent"/>
+        <text x="530" y="440" class="d-sub" fill="#2d3142">thread</text>
+        <rect x="648" y="430" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="660.0" y="439" class="d-tag" fill="#5a6580" text-anchor="middle">FK</text>
+        <text x="830" y="440" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="520" y="448" width="320" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="530" y="464" class="d-sub" fill="#2d3142">value</text>
+        <rect x="648" y="454" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="660.0" y="463" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="830" y="464" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <line x1="520" y1="472" x2="840" y2="472" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="530" y="485" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="530" y="498" class="d-mono" fill="#5a6580">decision_thread (thread)</text>
+        <rect x="976" y="356" width="280" height="172" rx="6" fill="#f5f5f5"/>
+        <rect x="976" y="356" width="280" height="172" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="984" y="364" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1006" y="373" class="d-tag" fill="#5a6580" text-anchor="middle">TABLE</text>
+        <text x="986" y="392" class="d-sub" font-weight="600" fill="#2d3142">ticket</text>
+        <line x1="976" y1="400" x2="1256" y2="400" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <rect x="976" y="400" width="280" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="986" y="416" class="d-sub" fill="#2d3142">id</text>
+        <rect x="1104" y="406" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1116.0" y="415" class="d-tag" fill="#5a6580" text-anchor="middle">PK</text>
+        <text x="1246" y="416" class="d-mono" fill="#5a6580" text-anchor="end">TEXT</text>
+        <rect x="976" y="424" width="280" height="24" fill="transparent"/>
+        <text x="986" y="440" class="d-sub" fill="#2d3142">value</text>
+        <rect x="1104" y="430" width="24" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1116.0" y="439" class="d-tag" fill="#5a6580" text-anchor="middle">NN</text>
+        <text x="1246" y="440" class="d-mono" fill="#5a6580" text-anchor="end">JSON</text>
+        <rect x="976" y="448" width="280" height="24" fill="rgba(45,49,66,0.02)"/>
+        <text x="986" y="464" class="d-sub" fill="#2d3142">open</text>
+        <rect x="1104" y="454" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1120.0" y="463" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="464" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <rect x="976" y="472" width="280" height="24" fill="transparent"/>
+        <text x="986" y="488" class="d-sub" fill="#2d3142">active</text>
+        <rect x="1104" y="478" width="32" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="1120.0" y="487" class="d-tag" fill="#5a6580" text-anchor="middle">GEN</text>
+        <text x="1246" y="488" class="d-mono" fill="#5a6580" text-anchor="end">INTEGER</text>
+        <line x1="976" y1="496" x2="1256" y2="496" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="986" y="509" class="d-tag" fill="#5a6580" letter-spacing="0.1em">INDEXES</text>
+        <text x="986" y="522" class="d-mono" fill="#5a6580">ticket_open · ticket_active</text>
+
+        <!-- ============ annotations ============ -->
+        <text x="64" y="360" class="d-annot" fill="#5a6580">引用是逻辑的：</text>
+        <text x="64" y="384" class="d-annot" fill="#5a6580">没有 FOREIGN KEY，</text>
+        <text x="64" y="408" class="d-annot" fill="#5a6580">也没有级联删除。</text>
+        <text x="64" y="452" class="d-mono" fill="#5a6580">trigger_thread(thread, id)</text>
+        <text x="64" y="470" class="d-mono" fill="#5a6580">is the composite key</text>
+
+        <text x="64" y="522" class="d-annot" fill="#bf4520">work set = 生成列 + 部分索引</text>
+        <text x="64" y="546" class="d-annot" fill="#5a6580">一次 pass 只读 active / open 的行。</text>
+
+        <text x="976" y="560" class="d-mono" fill="#5a6580">outbox · effect · disposition · kv</text>
+        <text x="976" y="578" class="d-sub" fill="#5a6580">四张表见下一页：队列与收据</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <text x="112" y="668" class="d-sub" fill="#4f5d75">PK</text>
+        <text x="140" y="668" class="d-mono" fill="#5a6580">primary key</text>
+        <text x="260" y="668" class="d-sub" fill="#4f5d75">FK</text>
+        <text x="288" y="668" class="d-mono" fill="#5a6580">logical reference, no constraint</text>
+        <text x="520" y="668" class="d-sub" fill="#4f5d75">GEN</text>
+        <text x="552" y="668" class="d-mono" fill="#5a6580">generated column, indexed when set</text>
+        <text x="836" y="668" class="d-sub" fill="#4f5d75">NN</text>
+        <text x="864" y="668" class="d-mono" fill="#5a6580">not null</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">schema 13 · src/app/store.ts</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <p class="eyebrow">Why one JSON column</p>
+        <div class="card-header"><span class="card-dot coral"></span><h3>聚合体整体读写</h3></div>
+        <p>Engine 的命令总是整份读写一个聚合体，所以 <code>value</code> 存整份快照，事务比拆表简单。</p>
+        <ul>
+          <li>只有需要跨行过滤的字段才提成真实列</li>
+          <li>生成列由 JSON 计算出来，定义变了就重建</li>
+          <li>每张表只有一个写者；读走 <code>storeRead</code></li>
+        </ul>
+      </article>
+      <article class="card">
+        <p class="eyebrow">Working set</p>
+        <div class="card-header"><span class="card-dot ink"></span><h3>索引只覆盖“有活”的行</h3></div>
+        <ul>
+          <li><code>thread.active</code>：有排队 Trigger 或正在评估</li>
+          <li><code>ticket.open</code> / <code>ticket.active</code>：未结束 / 有未投递 Input 或运行中的 Assignment</li>
+          <li><code>thread.subscribed</code>：带来源，用于按 Source 找线程</li>
+        </ul>
+      </article>
+      <article class="card">
+        <p class="eyebrow">Growth</p>
+        <div class="card-header"><span class="card-dot muted"></span><h3>现在什么都不删</h3></div>
+        <ul>
+          <li>trigger、disposition、decision、已结束的 Ticket 都会一直增长</li>
+          <li>升级前备份整个 <code>stateDir</code>；schema 只增不减</li>
+          <li>队列与收据在下一张图：<code>effect</code> / <code>outbox</code> / <code>disposition</code> / <code>kv</code></li>
+        </ul>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <span>dsh-superagent · schema · 对应 docs/007-architecture.md § Persistence</span>
+      <span>5 tables · 3 logical references · 0 foreign keys</span>
+    </footer>
+  </div>
+</body>
+</html>

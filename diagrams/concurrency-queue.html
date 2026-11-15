@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>并发与排队 · dsh-superagent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+    .container { max-width: 1360px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; max-width: 940px; }
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.2vw + 0.8rem, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin-bottom: 0.65rem;
+    }
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch;
+    }
+    .diagram-container {
+      width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+    .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+    .d-sub { font-family: var(--font-sans); font-size: 12px; }
+    .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+    .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+    .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+    .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+    .cards {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 0.95fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 1100px) { .cards { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: 1.15rem;
+    }
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.52rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.55rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.ink { background: var(--color-ink); }
+    .card h3 { font-size: 0.9rem; font-weight: 600; letter-spacing: -0.005em; }
+    .card p { color: var(--color-muted); font-size: 0.82rem; line-height: 1.55; margin-bottom: 0.6rem; }
+    .card ul { color: var(--color-muted); font-size: 0.82rem; line-height: 1.6; list-style: none; }
+    .card li { margin-bottom: 0.32rem; padding-left: 0.9rem; position: relative; }
+    .card li::before { content: '—'; position: absolute; left: 0; color: rgba(45,49,66,0.25); font-size: 0.75rem; }
+    .card code {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--color-ink);
+      background: rgba(45,49,66,0.04);
+      padding: 0.05rem 0.2rem;
+      border-radius: 2px;
+    }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    @media print {
+      .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+      svg { min-width: 0; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>  <div class="container">
+    <header class="header">
+      <p class="header-eyebrow">DSH Superagent · 003 Execution · concurrency</p>
+      <h1>槽位是有限的，人的消息永远进得来</h1>
+      <p class="subtitle">三类工作汇进同一个等待队列：新工单、订阅与 CI 的 Input、以及人的消息。前两类排正常槽，人的消息可以占一个额外的插队槽，所以人不会被自己的队列挡住；讨论回答走它自己的一条槽。</p>
+    </header>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="concurrency-queue-title concurrency-queue-desc">
+        <title id="concurrency-queue-title">并发与排队：三类来源、有限槽位与人的插队槽</title>
+        <desc id="concurrency-queue-desc">数据流图：新工单、订阅与 CI 的 Input、人的消息汇入等待队列，队列按 maxWorkers 的槽位派给 Executor，人的消息可用一个额外插队槽，依赖未结束的 slice 不占槽，讨论提问走独立的两个 Answerer 槽。</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ paths ============ -->
+        <path d="M 304,176 H 336 Q 344,176 344,184 V 196 Q 344,204 352,204 H 360"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="304" y1="268" x2="360" y2="268" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="304" y1="360" x2="360" y2="360" stroke="#bf4520" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <line x1="640" y1="240" x2="700" y2="240" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 600,420 V 482 Q 600,490 608,490 H 700"
+              fill="none" stroke="#5a6580" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M 304,456 H 656 Q 664,456 664,448 V 428 Q 664,420 672,420 H 700"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- ============ labels ============ -->
+        <rect x="644" y="204" width="44" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="666" y="216" class="d-label" fill="#4f5d75" text-anchor="middle">取槽</text>
+        <rect x="612" y="440" width="56" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="640" y="452" class="d-label" fill="#5a6580" text-anchor="middle">不占槽</text>
+
+        <!-- ============ sources ============ -->
+        <rect x="64" y="140" width="240" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="140" width="240" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="80" y="166" class="d-name" fill="#2d3142">Eval accept</text>
+        <text x="80" y="188" class="d-sub" fill="#4f5d75">新工单的 launch</text>
+
+        <rect x="64" y="232" width="240" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="232" width="240" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="80" y="258" class="d-name" fill="#2d3142">订阅 · CI</text>
+        <text x="80" y="280" class="d-sub" fill="#4f5d75">作为 Input 投递给工单</text>
+
+        <rect x="64" y="324" width="240" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="324" width="240" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="80" y="350" class="d-name" fill="#2d3142">人的消息</text>
+        <text x="80" y="372" class="d-sub" fill="#4f5d75">唤醒空闲工单，可插队</text>
+
+        <rect x="64" y="420" width="240" height="72" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="420" width="240" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="80" y="446" class="d-name" fill="#2d3142">讨论提问</text>
+        <text x="80" y="468" class="d-sub" fill="#4f5d75">走 Answerer 自己的队列</text>
+
+        <!-- ============ queue ============ -->
+        <rect x="360" y="160" width="280" height="260" rx="8" fill="#f5f5f5"/>
+        <rect x="360" y="160" width="280" height="260" rx="8" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="368" y="170" width="44" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="390" y="179" class="d-tag" fill="#5a6580" text-anchor="middle">QUEUE</text>
+        <text x="376" y="202" class="d-name" fill="#2d3142">等待队列</text>
+        <text x="376" y="222" class="d-sub" fill="#5a6580">working / queued</text>
+
+        <!-- slots -->
+        <rect x="376" y="240" width="56" height="56" rx="4" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="404" y="273" class="d-mono" fill="#5a6580" text-anchor="middle">01</text>
+        <rect x="440" y="240" width="56" height="56" rx="4" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="468" y="273" class="d-mono" fill="#5a6580" text-anchor="middle">02</text>
+        <rect x="504" y="240" width="56" height="56" rx="4" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="532" y="273" class="d-mono" fill="#5a6580" text-anchor="middle">03</text>
+        <rect x="568" y="240" width="56" height="56" rx="4" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="596" y="273" class="d-mono" fill="#bf4520" text-anchor="middle">H</text>
+
+        <text x="376" y="320" class="d-sub" fill="#4f5d75">3 个正常槽 + 1 个人工槽</text>
+        <text x="376" y="342" class="d-sub" fill="#5a6580">launch 从占槽就开始，prepare 也算</text>
+        <text x="376" y="362" class="d-sub" fill="#5a6580">人插队时优先拿 H，不排在新工单后面</text>
+        <text x="376" y="392" class="d-mono" fill="#5a6580">a launch waits until a slot is free</text>
+
+        <!-- ============ worker slots ============ -->
+        <rect x="700" y="160" width="300" height="140" rx="6" fill="#f5f5f5"/>
+        <rect x="700" y="160" width="300" height="140" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="708" y="170" width="48" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="732" y="179" class="d-tag" fill="#5a6580" text-anchor="middle">SLOTS</text>
+        <text x="716" y="202" class="d-name" fill="#2d3142">Worker 槽</text>
+        <text x="716" y="224" class="d-sub" fill="#4f5d75">maxWorkers：默认 3，范围 1–16</text>
+        <text x="716" y="248" class="d-sub" fill="#4f5d75">人的消息与状态查询可用 1 个额外槽</text>
+        <text x="716" y="270" class="d-mono" fill="#5a6580">其他 Input（CI）等正常槽</text>
+        <text x="716" y="288" class="d-mono" fill="#5a6580">A slow prepare delays only itself</text>
+
+        <!-- ============ answerer ============ -->
+        <rect x="700" y="340" width="300" height="120" rx="6" fill="#f5f5f5"/>
+        <rect x="700" y="340" width="300" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="708" y="350" width="60" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="738" y="359" class="d-tag" fill="#5a6580" text-anchor="middle">ANSWERER</text>
+        <text x="716" y="382" class="d-name" fill="#2d3142">Answerer 槽 ×2</text>
+        <text x="716" y="404" class="d-sub" fill="#4f5d75">ANSWER_CONCURRENCY = 2</text>
+        <text x="716" y="426" class="d-sub" fill="#5a6580">讨论回答永不占 worker 槽</text>
+        <text x="716" y="446" class="d-mono" fill="#5a6580">restart re-queues what was open</text>
+
+        <!-- ============ deferred ============ -->
+        <rect x="700" y="490" width="300" height="100" rx="6" fill="#f5f5f5"/>
+        <rect x="700" y="490" width="300" height="100" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+        <rect x="708" y="500" width="56" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
+        <text x="736" y="509" class="d-tag" fill="#5a6580" text-anchor="middle">DEFERRED</text>
+        <text x="716" y="532" class="d-name" fill="#2d3142">不占槽</text>
+        <text x="716" y="554" class="d-sub" fill="#4f5d75">依赖未结束的 slice 由 Later() 延后</text>
+        <text x="716" y="574" class="d-mono" fill="#5a6580">dependency ends → the launch runs</text>
+
+        <!-- ============ annotation ============ -->
+        <text x="64" y="556" class="d-annot" fill="#bf4520">容量是配置项，不是估算：多一个工单就多等一个槽。</text>
+        <text x="64" y="580" class="d-annot" fill="#5a6580">人的消息永远不会被自己的队列挡住 —— 这是 H 槽存在的唯一理由。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <rect x="112" y="658" width="20" height="12" rx="2" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="0.8"/>
+        <text x="140" y="668" class="d-sub" fill="#4f5d75">正常槽（可能被占）</text>
+        <rect x="316" y="658" width="20" height="12" rx="2" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="344" y="668" class="d-sub" fill="#4f5d75">人工插队槽</text>
+        <line x1="492" y1="664" x2="520" y2="664" stroke="#5a6580" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="528" y="668" class="d-sub" fill="#4f5d75">延后：不占槽</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/003-execution.md § Concurrency</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <p class="eyebrow">Capacity</p>
+        <div class="card-header"><span class="card-dot coral"></span><h3>工单从什么时候开始占槽</h3></div>
+        <ul>
+          <li>launch 一开始就占，包括 <code>prepare</code> 那十分钟</li>
+          <li>唤醒空闲工单的那次投递，也占一个槽直到 turn 结束</li>
+          <li>一个慢的 prepare 只拖慢它自己，其他 launch 并行</li>
+        </ul>
+      </article>
+      <article class="card">
+        <p class="eyebrow">Human first</p>
+        <div class="card-header"><span class="card-dot ink"></span><h3>为什么多留一个槽</h3></div>
+        <ul>
+          <li>正常槽满了，人的消息仍能推进自己那件事</li>
+          <li>状态查询同理：它不该排在三个长任务后面</li>
+          <li>但下一次新 launch 会先让位给人，不会插到人前面</li>
+        </ul>
+      </article>
+      <article class="card">
+        <p class="eyebrow">Two queues</p>
+        <div class="card-header"><span class="card-dot muted"></span><h3>讨论不抢工单的槽</h3></div>
+        <ul>
+          <li>Answerer 自己的队列与并发（2），失败可重试</li>
+          <li>重启时未完成的回答重新入队，答案按请求 id 去重</li>
+          <li>讨论永远不产生 Ticket，所以也不会占工单槽</li>
+        </ul>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <span>dsh-superagent · concurrency · 对应 docs/003-execution.md</span>
+      <span>4 sources · 1 queue · 3 outcomes</span>
+    </footer>
+  </div>
+
+</body>
+</html>

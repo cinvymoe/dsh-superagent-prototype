@@ -6,6 +6,8 @@ The host enforces allowed lists, rules and Mandates. Messages, comments and quot
 
 The figure [`diagrams/authorization-flow.html`](../diagrams/authorization-flow.html) draws the two paths and the three strengths in one frame.
 
+[`diagrams/paired-decisions.html`](../diagrams/paired-decisions.html) traces two requests on one Thread, rule by rule, to show why one is accepted and the other is only recorded.
+
 ## Two paths for a Trigger
 
 ### Eval: deciding whether to start work

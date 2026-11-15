@@ -43,6 +43,8 @@ The main Session can read affected part names in `orchestrator_read prompts`, un
 
 ## Assembly and precedence
 
+The figure [`diagrams/prompt-assembly.html`](../diagrams/prompt-assembly.html) stacks the layers from team text down to the four composed prompts.
+
 The system prompt is assembled in this order:
 
 1. Shared instructions and the role.

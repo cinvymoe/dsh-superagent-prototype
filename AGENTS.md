@@ -8,16 +8,26 @@ dsh-superagent is a DeepSeek Harness bundle: it reads Triggers from Sources, eva
 
 ## Documentation pairs with a figure
 
-`diagrams/*.html` are part of the documentation, not decoration. Each numbered document has one figure that a reader can hold in their head:
+`diagrams/*.html` are part of the documentation, not decoration. Each numbered document has at least one figure a reader can hold in their head:
 
 | Change touches | Update this figure |
 | --- | --- |
 | `docs/001-domain.md`, `src/core/model.ts`, Engine aggregates | `diagrams/domain-model.html` |
-| `docs/002-authorization.md`, `src/policy.ts`, gate and admission | `diagrams/authorization-flow.html` |
+| `docs/002-authorization.md` § two paths and strength, `src/policy.ts`, gate and admission | `diagrams/authorization-flow.html` |
+| A rule-by-rule comparison of two decisions, or the accept/ignore difference | `diagrams/paired-decisions.html` |
 | `docs/003-execution.md` § Ticket stages, `src/core/stage.ts` | `diagrams/ticket-state.html` |
-| `docs/003-execution.md` § Failure and recovery, retry, restart, effects | `diagrams/failure-recovery.html` |
+| § Failure and recovery, retry, restart, effects | `diagrams/failure-recovery.html` |
+| § Concurrency, worker slots, answering slots | `diagrams/concurrency-queue.html` |
+| § Agent configuration, `src/app/agent-tools.ts`, `src/app/capabilities.ts`, panel Agents settings | `diagrams/agent-capabilities.html` |
+| `docs/004-prompts.md`, `src/app/prompts.ts`, `prompts/*.md` | `diagrams/prompt-assembly.html` |
+| `docs/005-panel.md` § Tabs, a new page or a new block on a page | `diagrams/panel-ia.html` |
+| § Requirement states, alignment rounds, `acceptPlan` | `diagrams/requirement-lifecycle.html` |
+| § Discussions, answerer sessions, Send to issue | `diagrams/discussion-to-requirement.html` |
 | `docs/006-deployment.md` § What runs, `SETUP.md`, state directory | `diagrams/deployment-topology.html` |
-| `docs/003-execution.md` § Agent configuration, `src/app/agent-tools.ts`, `src/app/capabilities.ts`, panel Agents settings | `diagrams/agent-capabilities.html` |
+| § Permissions and isolation, panel-only saves, blocked commands | `diagrams/trust-boundaries.html` |
+| `docs/007-architecture.md` § Persistence, `src/app/store.ts` tables or generated columns | `diagrams/schema-core.html` and `diagrams/schema-queues.html` |
+| § Dependency rules, a new module or a changed import direction | `diagrams/module-dependencies.html` |
+| `docs/008-cookbook.md` § Add a Source | `diagrams/source-onboarding.html` |
 | Roles, routing and the accepted pipeline as a whole | `diagrams/current-architecture.html` |
 
 **Rule.** When a change alters a behaviour one of those figures draws, update the figure in the same change. If the change adds a new subsystem that no figure covers, add a figure rather than stretching an existing one past its budget.
@@ -45,7 +55,7 @@ The `.html` is the source of truth; `.svg` and `.png` are exports.
    # PNG: render diagrams/<name>.html and screenshot the first <svg> at 2×
    ```
 
-4. Update the `文档 → 图` table in `diagrams/README.md` if a figure is added, renamed or retired, and keep the one-line description next to the document it belongs to.
+4. Regenerate both exports (`<name>.svg`, `<name>.png` at 2×) and update the `文档 → 图` table in `diagrams/README.md` if a figure is added, renamed or retired.
 5. If the document itself gains or loses a section the figure explains, add the `The figure […]` line next to that section, so the two stay linked.
 
 ## Working in this checkout

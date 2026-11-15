@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="panel-ia-title panel-ia-desc" id="panel-ia-root">
+        <title id="panel-ia-title">面板信息架构：三个问题、项目、列表行与记录详情</title>
+        <desc id="panel-ia-desc">嵌套图：面板层回答三个问题并提供页签与搜索，当前项目层承载 Discussions 与 Requirements 两个列表，列表行只给状态与计数，记录详情层展开正文、图片、时间线、关联 Ticket 与对齐轮次。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #panel-ia-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #panel-ia-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #panel-ia-root .container { max-width: 1360px; margin: 0 auto; }
+      #panel-ia-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #panel-ia-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #panel-ia-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #panel-ia-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #panel-ia-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #panel-ia-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #panel-ia-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #panel-ia-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #panel-ia-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #panel-ia-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #panel-ia-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #panel-ia-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #panel-ia-root .card-dot.coral { background: var(--color-accent); }
+      #panel-ia-root .card-dot.muted { background: var(--color-muted); }
+      #panel-ia-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#panel-ia-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="panel-ia-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="panel-ia-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="panel-ia-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ rings ============ -->
+        <rect x="40" y="96" width="1200" height="424" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.015" stroke-opacity="0.30"/>
+        <rect x="88" y="144" width="1104" height="328" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.025" stroke-opacity="0.45"/>
+        <rect x="136" y="192" width="1008" height="232" rx="8" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.035"/>
+        <rect x="184" y="240" width="912" height="136" rx="8" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+
+        <!-- ============ ring labels ============ -->
+        <rect x="56" y="88" width="104" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="64" y="100" class="d-label" fill="#5a6580">面板 · PANEL</text>
+        <text x="56" y="126" class="d-sub" fill="#4f5d75">三个问题：谁需要我 → 系统健康吗 → 一件工作的来龙去脉</text>
+
+        <rect x="104" y="136" width="76" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="112" y="148" class="d-label" fill="#5a6580">当前项目</text>
+        <text x="104" y="174" class="d-sub" fill="#4f5d75">Discussions · Requirements，跟随顶部项目栏切换</text>
+
+        <rect x="152" y="184" width="48" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="160" y="196" class="d-label" fill="#5a6580">一行</text>
+        <text x="152" y="222" class="d-sub" fill="#4f5d75">状态 · 对齐标签 · slice 数 · 图片数 · 创建时间，不再放别的</text>
+
+        <rect x="200" y="232" width="80" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="208" y="244" class="d-label" fill="#bf4520">一条记录</text>
+        <text x="200" y="270" class="d-sub" fill="#2d3142">整条读一次：正文、图片、时间线、工单、对齐轮次</text>
+
+        <!-- ============ inner chips ============ -->
+        <rect x="208" y="288" width="160" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="208" y="288" width="160" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="224" y="314" class="d-sub" font-weight="600" fill="#2d3142">正文与图片</text>
+        <text x="224" y="334" class="d-sub" fill="#5a6580">≤ 4 张 · 5 MiB</text>
+
+        <rect x="384" y="288" width="160" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="384" y="288" width="160" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="400" y="314" class="d-sub" font-weight="600" fill="#2d3142">消息时间线</text>
+        <text x="400" y="334" class="d-sub" fill="#5a6580">含提问与回答</text>
+
+        <rect x="560" y="288" width="160" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="560" y="288" width="160" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="576" y="314" class="d-sub" font-weight="600" fill="#2d3142">关联 Ticket</text>
+        <text x="576" y="334" class="d-mono" fill="#5a6580">Open · Ask</text>
+
+        <rect x="736" y="288" width="160" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="736" y="288" width="160" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="752" y="314" class="d-sub" font-weight="600" fill="#2d3142">对齐轮次</text>
+        <text x="752" y="334" class="d-mono" fill="#5a6580">summary · slices</text>
+
+        <rect x="912" y="288" width="160" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="912" y="288" width="160" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="928" y="314" class="d-sub" font-weight="600" fill="#2d3142">执行方式</text>
+        <text x="928" y="334" class="d-mono" fill="#5a6580">native · feature-exec</text>
+
+        <!-- ============ notes inside outer bands ============ -->
+        <text x="56" y="496" class="d-mono" fill="#5a6580">search: trigger text / id / link · thread reference · ticket title</text>
+        <text x="104" y="448" class="d-sub" fill="#5a6580">New project · New requirement · New discussion 都是对话框，留在列表上</text>
+        <text x="152" y="406" class="d-sub" fill="#5a6580">过滤：待处理 / 已确认 / 已关闭 / 全部，默认待处理</text>
+
+        <!-- ============ annotation ============ -->
+        <text x="40" y="556" class="d-annot" fill="#bf4520">每一层只放该层能做的动作，别把四层的按钮堆到一行里。</text>
+        <text x="40" y="580" class="d-annot" fill="#5a6580">项目栏在最上面：切换项目会换掉 Discussions 与 Requirements，但不换页签。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <rect x="112" y="658" width="20" height="12" rx="3" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.015" stroke-opacity="0.30"/>
+        <text x="140" y="668" class="d-sub" fill="#4f5d75">一层范围</text>
+        <rect x="248" y="658" width="20" height="12" rx="3" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <text x="276" y="668" class="d-sub" fill="#4f5d75">你现在看到的屏幕</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/005-panel.md</text>
+      </svg>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>讨论到需求 · dsh-superagent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+    .container { max-width: 1360px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; max-width: 940px; }
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.2vw + 0.8rem, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin-bottom: 0.65rem;
+    }
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch;
+    }
+    .diagram-container {
+      width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+    .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+    .d-sub { font-family: var(--font-sans); font-size: 12px; }
+    .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+    .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+    .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+    .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+    .cards {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 0.95fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 1100px) { .cards { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: 1.15rem;
+    }
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.52rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.55rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.ink { background: var(--color-ink); }
+    .card h3 { font-size: 0.9rem; font-weight: 600; letter-spacing: -0.005em; }
+    .card p { color: var(--color-muted); font-size: 0.82rem; line-height: 1.55; margin-bottom: 0.6rem; }
+    .card ul { color: var(--color-muted); font-size: 0.82rem; line-height: 1.6; list-style: none; }
+    .card li { margin-bottom: 0.32rem; padding-left: 0.9rem; position: relative; }
+    .card li::before { content: '—'; position: absolute; left: 0; color: rgba(45,49,66,0.25); font-size: 0.75rem; }
+    .card code {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--color-ink);
+      background: rgba(45,49,66,0.04);
+      padding: 0.05rem 0.2rem;
+      border-radius: 2px;
+    }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    @media print {
+      .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+      svg { min-width: 0; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>  <div class="container">
+    <header class="header">
+      <p class="header-eyebrow">DSH Superagent · 005 Panel · discussion → requirement</p>
+      <h1>一段对话，变成一个可以授权的记录</h1>
+      <p class="subtitle">讨论只是对话：每条消息由 Answerer 直接回答，永远不产生工单。人点一次 Send to issue，对话的文本才被搬进需求记录——标题取第一行，正文取全文，图片跟着走，来源双向链接。空的地方就是空的，不猜。</p>
+    </header>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="discussion-to-requirement-title discussion-to-requirement-desc">
+        <title id="discussion-to-requirement-title">从讨论到需求：一段对话如何变成结构化记录</title>
+        <desc id="discussion-to-requirement-desc">数据流图：讨论里的消息由 Answerer 逐条回答，人点 Send to issue 后把文本预填进需求对话框，提交后成为带标题、正文、图片与来源链接的需求记录，两处编号标出哪段文字落进哪个字段。</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ paths ============ -->
+        <line x1="440" y1="290" x2="520" y2="290" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="800" y1="290" x2="880" y2="290" stroke="#bf4520" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+
+        <!-- ============ discussion (source utterance) ============ -->
+        <rect x="64" y="150" width="376" height="280" rx="8" fill="#f5f5f5"/>
+        <rect x="64" y="150" width="376" height="280" rx="8" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="80" y="178" class="d-name" fill="#2d3142">讨论</text>
+        <text x="160" y="178" class="d-sub" fill="#5a6580">自己的 Thread，Answerer 逐条回答</text>
+        <text x="80" y="196" class="d-mono" fill="#5a6580">local:d-… · 不产生 Ticket，也不进 Eval</text>
+
+        <rect x="80" y="212" width="344" height="52" rx="4" fill="rgba(45,49,66,0.04)" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="92" y="232" class="d-sub" fill="#2d3142"><tspan class="d-arrow" fill="#5a6580">① 人　</tspan>登录页在移动端会把按钮挤出屏幕</text>
+        <text x="92" y="252" class="d-sub" fill="#4f5d75">顺手把截图贴了上来（1 张）</text>
+
+        <rect x="104" y="272" width="320" height="44" rx="4" fill="none" stroke="rgba(45,49,66,0.12)" stroke-width="0.8" stroke-dasharray="4,3"/>
+        <text x="116" y="298" class="d-sub" fill="#5a6580">回答：已在 375px 宽度下复现，问题在栅格</text>
+
+        <rect x="80" y="324" width="344" height="52" rx="4" fill="rgba(45,49,66,0.04)" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="92" y="344" class="d-sub" fill="#2d3142"><tspan class="d-arrow" fill="#5a6580">② 人　</tspan>只要 375 和 768 两个断点，别改设计稿</text>
+        <text x="92" y="364" class="d-sub" fill="#4f5d75">这条约束决定验收标准</text>
+
+        <text x="80" y="404" class="d-mono" fill="#5a6580">messages are Triggers, stored, never evaluated</text>
+
+        <!-- ============ transformation ============ -->
+        <rect x="520" y="250" width="280" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="520" y="250" width="280" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="528" y="260" width="64" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="560" y="269" class="d-tag" fill="#5a6580" text-anchor="middle">HUMAN STEP</text>
+        <text x="536" y="292" class="d-name" fill="#2d3142">Send to issue</text>
+        <text x="536" y="312" class="d-sub" fill="#5a6580">预填对话框，文本仍可改</text>
+        <text x="536" y="326" class="d-mono" fill="#5a6580">one discussion → at most one requirement</text>
+
+        <!-- ============ artifact ============ -->
+        <rect x="880" y="150" width="360" height="320" rx="8" fill="#f5f5f5"/>
+        <rect x="880" y="150" width="360" height="320" rx="8" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.2"/>
+        <rect x="896" y="162" width="72" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.50)" stroke-width="0.8"/>
+        <text x="932" y="171" class="d-tag" fill="#bf4520" text-anchor="middle">REQUIREMENT</text>
+        <text x="896" y="196" class="d-name" fill="#2d3142">需求 local:q-…</text>
+        <text x="896" y="214" class="d-mono" fill="#5a6580">title · body · images · source · state</text>
+
+        <line x1="896" y1="226" x2="1224" y2="226" stroke="rgba(191,69,32,0.30)" stroke-width="0.8"/>
+
+        <text x="896" y="250" class="d-arrow" fill="#5a6580">TITLE</text>
+        <text x="1072" y="250" class="d-sub" fill="#2d3142" text-anchor="end">① 第一行，≤ 200 字</text>
+        <text x="896" y="266" class="d-mono" fill="#5a6580">whitespace collapsed</text>
+
+        <text x="896" y="296" class="d-arrow" fill="#5a6580">BODY</text>
+        <text x="1072" y="296" class="d-sub" fill="#2d3142" text-anchor="end">全文，含 ② 的约束</text>
+        <text x="896" y="312" class="d-mono" fill="#5a6580">the dialog can still edit it</text>
+
+        <text x="896" y="342" class="d-arrow" fill="#5a6580">IMAGES</text>
+        <text x="1072" y="342" class="d-sub" fill="#2d3142" text-anchor="end">0–4 张 · ≤ 5 MiB</text>
+        <text x="896" y="358" class="d-mono" fill="#5a6580">png · jpeg · webp · gif</text>
+
+        <text x="896" y="388" class="d-arrow" fill="#5a6580">SOURCE</text>
+        <text x="1072" y="388" class="d-sub" fill="#2d3142" text-anchor="end">③ 这条讨论，双向链接</text>
+        <text x="896" y="404" class="d-mono" fill="#5a6580">empty when created directly</text>
+
+        <text x="896" y="434" class="d-arrow" fill="#5a6580">STATE</text>
+        <text x="1072" y="434" class="d-sub" fill="#2d3142" text-anchor="end">Open → 对齐 → 已确认</text>
+        <text x="896" y="450" class="d-mono" fill="#5a6580">execution: native by default</text>
+
+        <!-- ============ annotations ============ -->
+        <text x="64" y="476" class="d-annot" fill="#bf4520">回答不是字段提取：Answerer 只回答问题，不写记录。</text>
+        <text x="64" y="500" class="d-annot" fill="#5a6580">需求一旦存在，Send to issue 换成 Open requirement；讨论关掉也不影响它。</text>
+        <text x="64" y="530" class="d-mono" fill="#5a6580">①②③ = 这段文字落进了哪个字段；没有的字段留空，不推断</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <rect x="112" y="658" width="20" height="12" rx="3" fill="#ffffff" stroke="#2d3142" stroke-width="0.8"/>
+        <text x="140" y="668" class="d-sub" fill="#4f5d75">对话（不是字段）</text>
+        <rect x="296" y="658" width="20" height="12" rx="3" fill="rgba(191,69,32,0.08)" stroke="#bf4520" stroke-width="1.2"/>
+        <text x="324" y="668" class="d-sub" fill="#4f5d75">可授权的记录</text>
+        <line x1="464" y1="664" x2="492" y2="664" stroke="#5a6580" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="500" y="668" class="d-sub" fill="#4f5d75">回答（不写记录）</text>
+        <text x="664" y="668" class="d-sub" fill="#5a6580">编号 = 出处映射</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/005-panel.md § Discussions</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <article class="card">
+        <p class="eyebrow">Why separate</p>
+        <div class="card-header"><span class="card-dot coral"></span><h3>讨论从不产生授权</h3></div>
+        <ul>
+          <li>讨论的消息是普通 Trigger，存在 Thread 上，永不进 Eval</li>
+          <li>Answerer 是只读 Session：没有 <code>orchestrator_align</code>，也没有工单</li>
+          <li>授权只从 Eval 的 accept 出现，需求提交后才走那条路</li>
+        </ul>
+      </article>
+      <article class="card">
+        <p class="eyebrow">The handoff</p>
+        <div class="card-header"><span class="card-dot ink"></span><h3>人做的那一步</h3></div>
+        <ul>
+          <li>Send to issue 是面板动作，不是 Agent 的判断</li>
+          <li>预填的文本仍可编辑，提交时一起带上图片与讨论 id</li>
+          <li>一个讨论最多一个需求，之后按钮变成 Open requirement</li>
+        </ul>
+      </article>
+      <article class="card">
+        <p class="eyebrow">No invention</p>
+        <div class="card-header"><span class="card-dot muted"></span><h3>空字段就留空</h3></div>
+        <ul>
+          <li>没贴图 → 0 张；直接创建 → 没有来源讨论</li>
+          <li>标题只从第一行生成，不会“总结”出一句</li>
+          <li>缺的信息变成对齐阶段的一个问题，而不是猜一个值</li>
+        </ul>
+      </article>
+    </div>
+
+    <footer class="footer">
+      <span>dsh-superagent · discussion → requirement · 对应 docs/005-panel.md、docs/001-domain.md</span>
+      <span>1 conversation · 1 human step · 5 fields</span>
+    </footer>
+  </div>
+
+</body>
+</html>

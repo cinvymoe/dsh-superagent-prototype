@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="source-onboarding-title source-onboarding-desc" id="source-onboarding-root">
+        <title id="source-onboarding-title">新增一个 Source 的泳道：作者、SourceContext 与 Engine</title>
+        <desc id="source-onboarding-desc">泳道图：作者依次完成事件映射、配置与健康、翻译消息、回复通道、注册与测试；其中映射交给 Engine 的 Intake，配置、翻译与回复分别交给 SourceContext 的问题条目、读位置与 Outbox 收据。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #source-onboarding-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #source-onboarding-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #source-onboarding-root .container { max-width: 1360px; margin: 0 auto; }
+      #source-onboarding-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #source-onboarding-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #source-onboarding-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #source-onboarding-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #source-onboarding-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #source-onboarding-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #source-onboarding-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #source-onboarding-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #source-onboarding-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #source-onboarding-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #source-onboarding-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #source-onboarding-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #source-onboarding-root .card-dot.coral { background: var(--color-accent); }
+      #source-onboarding-root .card-dot.muted { background: var(--color-muted); }
+      #source-onboarding-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#source-onboarding-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="source-onboarding-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="source-onboarding-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="source-onboarding-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ lanes ============ -->
+        <rect x="40" y="120" width="1200" height="112" fill="none"/>
+        <rect x="40" y="232" width="1200" height="112" fill="none"/>
+        <rect x="40" y="344" width="1200" height="112" fill="#2d3142" fill-opacity="0.02"/>
+        <line x1="40" y1="120" x2="1240" y2="120" stroke="#2d3142" stroke-width="1" stroke-opacity="0.30"/>
+        <line x1="40" y1="232" x2="1240" y2="232" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <line x1="40" y1="344" x2="1240" y2="344" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <line x1="40" y1="456" x2="1240" y2="456" stroke="#2d3142" stroke-width="1" stroke-opacity="0.30"/>
+        <line x1="152" y1="120" x2="152" y2="456" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+
+        <!-- lane labels -->
+        <text x="48" y="168" class="d-tag" fill="#5a6580" letter-spacing="0.12em">AUTHOR</text>
+        <text x="48" y="188" class="d-sub" font-weight="600" fill="#2d3142">作者</text>
+        <text x="48" y="206" class="d-mono" fill="#5a6580">src/sources/&lt;kind&gt;</text>
+
+        <text x="48" y="280" class="d-tag" fill="#5a6580" letter-spacing="0.12em">HOST</text>
+        <text x="48" y="300" class="d-sub" font-weight="600" fill="#2d3142">SourceContext</text>
+        <text x="48" y="318" class="d-mono" fill="#5a6580">narrow interface</text>
+
+        <text x="48" y="392" class="d-tag" fill="#5a6580" letter-spacing="0.12em">CORE</text>
+        <text x="48" y="412" class="d-sub" font-weight="600" fill="#2d3142">Engine</text>
+        <text x="48" y="430" class="d-mono" fill="#5a6580">intake · gate</text>
+
+        <!-- ============ connectors ============ -->
+        <line x1="344" y1="176" x2="376" y2="176" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+        <line x1="568" y1="176" x2="600" y2="176" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+        <line x1="792" y1="176" x2="824" y2="176" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+        <line x1="1016" y1="176" x2="1048" y2="176" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+        <line x1="248" y1="208" x2="248" y2="368" stroke="#bf4520" stroke-width="1.4" marker-end="url(#source-onboarding-arrow-accent)"/>
+        <line x1="472" y1="208" x2="472" y2="256" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+        <line x1="696" y1="208" x2="696" y2="256" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+        <line x1="920" y1="208" x2="920" y2="256" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+
+        <!-- handoff labels -->
+        <rect x="256" y="260" width="72" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="292" y="272" class="d-label" fill="#bf4520" text-anchor="middle">交给 Intake</text>
+        <rect x="480" y="220" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="500" y="232" class="d-label" fill="#4f5d75" text-anchor="middle">报问题</text>
+        <rect x="704" y="220" width="52" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="730" y="232" class="d-label" fill="#4f5d75" text-anchor="middle">存读位置</text>
+        <rect x="928" y="220" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="948" y="232" class="d-label" fill="#4f5d75" text-anchor="middle">发消息</text>
+
+        <!-- ============ author lane ============ -->
+        <rect x="152" y="144" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="152" y="144" width="192" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="164" y="162" class="d-tag" fill="#5a6580">STEP 01</text>
+        <text x="164" y="182" class="d-sub" font-weight="600" fill="#2d3142">事件映射</text>
+        <text x="164" y="200" class="d-mono" fill="#5a6580">payload → Trigger</text>
+
+        <rect x="376" y="144" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="376" y="144" width="192" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="388" y="162" class="d-tag" fill="#5a6580">STEP 02</text>
+        <text x="388" y="182" class="d-sub" font-weight="600" fill="#2d3142">配置与健康</text>
+        <text x="388" y="200" class="d-mono" fill="#5a6580">schema · fields · facts</text>
+
+        <rect x="600" y="144" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="600" y="144" width="192" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="612" y="162" class="d-tag" fill="#5a6580">STEP 03</text>
+        <text x="612" y="182" class="d-sub" font-weight="600" fill="#2d3142">翻译与范围</text>
+        <text x="612" y="200" class="d-mono" fill="#5a6580">messages → Triggers</text>
+
+        <rect x="824" y="144" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="144" width="192" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="836" y="162" class="d-tag" fill="#5a6580">STEP 04</text>
+        <text x="836" y="182" class="d-sub" font-weight="600" fill="#2d3142">回复通道</text>
+        <text x="836" y="200" class="d-mono" fill="#5a6580">Channel.send</text>
+
+        <rect x="1048" y="144" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="1048" y="144" width="192" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="1060" y="162" class="d-tag" fill="#5a6580">STEP 05</text>
+        <text x="1060" y="182" class="d-sub" font-weight="600" fill="#2d3142">注册与测试</text>
+        <text x="1060" y="200" class="d-mono" fill="#5a6580">plugin entry · specs</text>
+
+        <!-- ============ host lane ============ -->
+        <rect x="376" y="256" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="376" y="256" width="192" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="388" y="274" class="d-tag" fill="#5a6580">HOST API</text>
+        <text x="388" y="294" class="d-sub" font-weight="600" fill="#2d3142">问题与健康</text>
+        <text x="388" y="312" class="d-mono" fill="#5a6580">problem() · health</text>
+
+        <rect x="600" y="256" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="600" y="256" width="192" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="612" y="274" class="d-tag" fill="#5a6580">HOST API</text>
+        <text x="612" y="294" class="d-sub" font-weight="600" fill="#2d3142">读位置与元数据</text>
+        <text x="612" y="312" class="d-mono" fill="#5a6580">state · meta</text>
+
+        <rect x="824" y="256" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="256" width="192" height="64" rx="6" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="836" y="274" class="d-tag" fill="#5a6580">HOST API</text>
+        <text x="836" y="294" class="d-sub" font-weight="600" fill="#2d3142">收据与重试</text>
+        <text x="836" y="312" class="d-mono" fill="#5a6580">send → outbox</text>
+
+        <!-- ============ engine lane ============ -->
+        <rect x="152" y="368" width="192" height="64" rx="6" fill="#f5f5f5"/>
+        <rect x="152" y="368" width="192" height="64" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03"/>
+        <text x="164" y="386" class="d-tag" fill="#5a6580">CORE</text>
+        <text x="164" y="406" class="d-sub" font-weight="600" fill="#2d3142">Intake 去重与扇出</text>
+        <text x="164" y="424" class="d-mono" fill="#5a6580">trigger id = idempotence</text>
+
+        <!-- ============ annotations ============ -->
+        <text x="40" y="508" class="d-annot" fill="#bf4520">SourceContext 是唯一的窄接口：它看不见 Engine 的规则。</text>
+        <text x="40" y="532" class="d-annot" fill="#5a6580">Source 只负责“什么算事件”和“往哪写”，准入与路由都在 Gate 和 Eval。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <line x1="112" y1="664" x2="140" y2="664" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#source-onboarding-arrow)"/>
+        <text x="148" y="668" class="d-sub" fill="#4f5d75">同一车道内的顺序</text>
+        <line x1="324" y1="664" x2="352" y2="664" stroke="#bf4520" stroke-width="1.4" marker-end="url(#source-onboarding-arrow-accent)"/>
+        <text x="360" y="668" class="d-sub" fill="#4f5d75">跨车道交接（最要紧的一处）</text>
+        <rect x="616" y="658" width="20" height="12" rx="3" fill="#ffffff" stroke="#4f5d75" stroke-width="1"/>
+        <text x="644" y="668" class="d-sub" fill="#4f5d75">宿主提供的接口</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/008-cookbook.md</text>
+      </svg>

@@ -272,6 +272,8 @@ A Ticket's question is answered by a Session forked from its worker Session at t
 
 ## Dependency rules
 
+The figure [`diagrams/module-dependencies.html`](../diagrams/module-dependencies.html) draws those rules as one ranked graph.
+
 - **Explicit, narrow dependencies.** Each class receives an interface that names what it uses, mostly as `Pick` types of other classes: `ExecutorHost`, `AssessorHost`, `SessionsHost`, `SettingsHost`, `SetupHost`, `PassesHost` and `OutboxHost` for the core classes, and `HttpHost`, `MainToolsHost`, `ExecutorToolsHost`, `ResourceHost`, `LinkHost` and `SourceContextDeps` for the glue, with the Engine as the `Pick` of the role that calls it. The Runtime passes itself only behind such an interface. A Source plugin injects the `orchestrator` service, which its type names as a `SourceHost`: the registry and `context(kind)`; its kind's code sees only its `SourceContext`.
 - **What may import what.** `src/core` imports nothing outside itself apart from Node's hashing, and does no I/O. `src/sources` imports nothing from `src/app`. The panel imports only types from the host side, and the plain values of `src/admission.ts`, `src/limits.ts`, `src/setup.ts`, `src/navigation.ts`, `src/sources/host.ts`, `src/core/errors.ts`, `src/core/reasons.ts` and the filter lists and requirement-image URL of `src/app/api.ts`.
 - **One writer per state.** Each kind of state has one writer, and the others read it or ask that writer.
@@ -504,6 +506,8 @@ The requirement view also documents its derived state: the requirement state tag
 `tests/fixtures/` holds what several tests share: `host.ts`, a simulated DeepSeek Harness host; `panel-server.ts` and `panel.tsx`, the fake management API and the panel around a page; `deployment.ts`, a resolved deployment; `git.ts`, the environment of every git the tests start, which names no repository; and `async.ts`.
 
 ## Persistence
+
+Two figures cover it: [`diagrams/schema-core.html`](../diagrams/schema-core.html) for the aggregate tables, and [`diagrams/schema-queues.html`](../diagrams/schema-queues.html) for the queue, receipt, audit and key-value tables.
 
 One SQLite file, `<stateDir>/orchestrator.sqlite`, which only the Store opens. Requirement images are files under `<stateDir>/local-images/<issue id>/`; the issue record keeps their ids, original names, media types and byte counts.
 

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="prompt-assembly-title prompt-assembly-desc" id="prompt-assembly-root">
+        <title id="prompt-assembly-title">提示词的拼装：团队段、内置段、技能、角色组装与版本</title>
+        <desc id="prompt-assembly-desc">分层图：提示词由团队段覆盖内置段，技能按 Source 注入，再由角色组装成主 Session、对齐、执行与讨论四份文本，每次保存留下一个版本，默认值变更单独标记。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #prompt-assembly-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #prompt-assembly-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #prompt-assembly-root .container { max-width: 1360px; margin: 0 auto; }
+      #prompt-assembly-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #prompt-assembly-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #prompt-assembly-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #prompt-assembly-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #prompt-assembly-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #prompt-assembly-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #prompt-assembly-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #prompt-assembly-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #prompt-assembly-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #prompt-assembly-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #prompt-assembly-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #prompt-assembly-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #prompt-assembly-root .card-dot.coral { background: var(--color-accent); }
+      #prompt-assembly-root .card-dot.muted { background: var(--color-muted); }
+      #prompt-assembly-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#prompt-assembly-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="prompt-assembly-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="prompt-assembly-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="prompt-assembly-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ layer stack ============ -->
+        <rect x="64" y="136" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="208" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="280" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="352" width="720" height="72" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <rect x="64" y="424" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="136" width="720" height="360" fill="none" stroke="#2d3142" stroke-width="1"/>
+
+        <text x="64" y="122" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">ASSEMBLY ↓</text>
+        <line x1="44" y1="160" x2="44" y2="472" stroke="#5a6580" stroke-width="1" marker-end="url(#prompt-assembly-arrow)"/>
+
+        <text x="80" y="176" class="d-arrow" fill="#5a6580">P1</text>
+        <text x="124" y="170" class="d-name" fill="#2d3142">团队段</text>
+        <text x="124" y="190" class="d-sub" fill="#4f5d75">提交披露行 · review bot · commit author · merge 条件</text>
+        <text x="768" y="176" class="d-mono" fill="#5a6580" text-anchor="end">team text</text>
+
+        <text x="80" y="248" class="d-arrow" fill="#5a6580">P2</text>
+        <text x="124" y="242" class="d-name" fill="#2d3142">内置段与模板</text>
+        <text x="124" y="262" class="d-sub" fill="#4f5d75">每段一行文本；模板的占位符必须填</text>
+        <text x="768" y="248" class="d-mono" fill="#5a6580" text-anchor="end">built-in parts</text>
+
+        <text x="80" y="320" class="d-arrow" fill="#5a6580">P3</text>
+        <text x="124" y="314" class="d-name" fill="#2d3142">技能</text>
+        <text x="124" y="334" class="d-sub" fill="#4f5d75">打包的 SKILL.md，只给相应的 Source 注册</text>
+        <text x="768" y="320" class="d-mono" fill="#5a6580" text-anchor="end">skills</text>
+
+        <text x="80" y="392" class="d-arrow" fill="#bf4520">P4</text>
+        <text x="124" y="386" class="d-name" fill="#2d3142">角色组装</text>
+        <text x="124" y="406" class="d-sub" fill="#2d3142">固定段序 + 实现授权：align 只提案，execute 拿着策略</text>
+        <text x="768" y="392" class="d-mono" fill="#bf4520" text-anchor="end">compose per role</text>
+
+        <text x="80" y="464" class="d-arrow" fill="#5a6580">P5</text>
+        <text x="124" y="458" class="d-name" fill="#2d3142">版本与覆盖</text>
+        <text x="124" y="478" class="d-sub" fill="#4f5d75">每次保存留一版；默认值变更会被单独标记</text>
+        <text x="768" y="464" class="d-mono" fill="#5a6580" text-anchor="end">versions</text>
+
+        <!-- ============ role column ============ -->
+        <text x="824" y="122" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">FOUR COMPOSITIONS</text>
+
+        <rect x="824" y="136" width="416" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="136" width="416" height="84" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="146" width="44" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="854" y="155" class="d-tag" fill="#5a6580" text-anchor="middle">MAIN</text>
+        <text x="840" y="176" class="d-name" fill="#2d3142">主 Session</text>
+        <text x="840" y="198" class="d-sub" fill="#4f5d75">共享规则 + 路由指南</text>
+        <text x="840" y="214" class="d-mono" fill="#5a6580">no implementation mandate</text>
+
+        <rect x="824" y="232" width="416" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="232" width="416" height="84" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="242" width="48" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="856" y="251" class="d-tag" fill="#5a6580" text-anchor="middle">ALIGN</text>
+        <text x="840" y="272" class="d-name" fill="#2d3142">对齐工单</text>
+        <text x="840" y="294" class="d-sub" fill="#4f5d75">composeAlign：对齐指南，不含实现授权</text>
+        <text x="840" y="310" class="d-mono" fill="#5a6580">plan, never implement</text>
+
+        <rect x="824" y="328" width="416" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="328" width="416" height="84" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="338" width="48" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="856" y="347" class="d-tag" fill="#5a6580" text-anchor="middle">SLICE</text>
+        <text x="840" y="368" class="d-name" fill="#2d3142">slice 工单</text>
+        <text x="840" y="390" class="d-sub" fill="#4f5d75">composeExecute：策略交接（native / feature-exec）</text>
+        <text x="840" y="406" class="d-mono" fill="#5a6580">the Ticket pins the strategy</text>
+
+        <rect x="824" y="424" width="416" height="84" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="424" width="416" height="84" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="434" width="60" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="862" y="443" class="d-tag" fill="#5a6580" text-anchor="middle">DISCUSS</text>
+        <text x="840" y="464" class="d-name" fill="#2d3142">讨论 Session</text>
+        <text x="840" y="486" class="d-sub" fill="#4f5d75">composeDiscuss：讨论指南，不动工单</text>
+        <text x="840" y="502" class="d-mono" fill="#5a6580">answers, never aligns</text>
+
+        <!-- ============ annotation ============ -->
+        <text x="64" y="524" class="d-annot" fill="#bf4520">团队段只能覆盖同名内置段，改不了程序里的固定通知。</text>
+        <text x="64" y="548" class="d-annot" fill="#5a6580">升级改了默认文本时，面板把新旧默认放在一起比，让你选。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <rect x="112" y="658" width="20" height="12" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="140" y="668" class="d-sub" fill="#4f5d75">拼装层</text>
+        <rect x="228" y="658" width="20" height="12" rx="2" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <text x="256" y="668" class="d-sub" fill="#4f5d75">角色差异真正发生的地方</text>
+        <text x="476" y="668" class="d-sub" fill="#5a6580">团队可改：P1 · P2（默认文本）· P3 的选择</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/004-prompts.md</text>
+      </svg>
