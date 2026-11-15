@@ -199,13 +199,13 @@ export class Runtime extends Service implements SourceHost {
       const passes = this.passes = new Passes({ engine: { receive: trigger => engine.receive(trigger), evaluateDue }, effects,
         health: this.runtimeHealth, lifetime: this.lifetime, configured: () => setup.configured(), closing: () => this.closing() })
       this.discussions = new Discussions({ store, stateDir: machine.stateDir, receive: trigger => this.passes.receive(trigger),
-        answer: (discussion, text, triggerId) => { this.answers.accept(discussion, text, triggerId) },
+        answer: (discussion, text, triggerId, images) => { this.answers.accept(discussion, text, triggerId, images) },
         // A deleted discussion stops its own read-only Session; an unknown one is already gone and needs no archive.
         archive: sessionId => ctx.workspaceRegistry.archiveSession(sessionId as SessionId, { stopActivity: true }),
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       // A discussion answers in its own read-only Session, in the project's own checkout when it names one, never in a worker slot.
       this.answers = new Answers({ discussions: this.discussions, lifetime: this.lifetime,
-        answerer: new Answerer({ sessions, workspace: discussion =>
+        answerer: new Answerer({ sessions, stateDir: machine.stateDir, workspace: discussion =>
           discussionWorkspace(machine.stateDir, store.get(KV.local.project(discussion.project)), discussion.id),
         lifetime: this.lifetime }),
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })

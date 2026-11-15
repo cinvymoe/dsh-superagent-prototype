@@ -250,8 +250,11 @@ function routes(runtime: HttpHost): Routes {
       return { discussions: runtime.discussions.list(project) }
     },
     'POST local/discussions': async ({ body }) => {
-      const input = z.object({ body: z.string().max(20_000), project: z.string().min(1), author: z.string().trim().max(80).optional() })
-        .parse(await body())
+      // A discussion may open with images alone, and its images travel base64-encoded, so it reads the larger body limit.
+      const input = z.object({ body: z.string().max(20_000).optional().default(''), project: z.string().min(1),
+        author: z.string().trim().max(80).optional(),
+        images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional() })
+        .parse(await body(REQUIREMENT_BODY_BYTES))
       return { discussion: runtime.discussions.create(input) }
     },
     'GET local/discussions/:id': ({ params }) => {
@@ -264,8 +267,11 @@ function routes(runtime: HttpHost): Routes {
         replies: runtime.store.receipts.thread('local', runtime.discussions.thread(discussion.id)) }
     },
     'POST local/discussions/:id/comments': async ({ params, body }) => {
-      const input = z.object({ text: z.string().trim().min(1).max(20_000) }).parse(await body())
-      const discussion = runtime.discussions.comment(params.id, input.text)
+      // A comment may be images alone; the text may be empty while images are present.
+      const input = z.object({ text: z.string().max(20_000).optional().default(''),
+        images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional() })
+        .parse(await body(REQUIREMENT_BODY_BYTES))
+      const discussion = runtime.discussions.comment(params.id, input.text, input.images ?? [])
       if (!discussion) throw new RouteError(404, 'Local discussion not found')
       return { discussion }
     },
@@ -387,10 +393,13 @@ function routes(runtime: HttpHost): Routes {
 function decoded(segment: string): string {
   try { return decodeURIComponent(segment) } catch { throw new RouteError(400, 'A path segment has a malformed escape') }
 }
-/** The ids of a stored requirement image request (`local/issues/<id>/images/<image id>`), or undefined for any other path. */
-function imageRequest(method: string, segments: string[]): { id: string; imageId: string } | undefined {
-  if (method !== 'GET' || segments.length !== 5 || segments[0] !== 'local' || segments[1] !== 'issues' || segments[3] !== 'images') return undefined
-  return { id: decoded(segments[2]!), imageId: decoded(segments[4]!) }
+/** The kind and ids of a stored image request (`local/issues/<id>/images/<image id>` or the discussion equivalent). */
+type ImageRequest = { kind: 'issue' | 'discussion'; id: string; imageId: string }
+/** The stored image request a path names, or undefined for any other request. */
+function imageRequest(method: string, segments: string[]): ImageRequest | undefined {
+  if (method !== 'GET' || segments.length !== 5 || segments[0] !== 'local' || segments[3] !== 'images') return undefined
+  if (segments[1] !== 'issues' && segments[1] !== 'discussions') return undefined
+  return { kind: segments[1] === 'issues' ? 'issue' : 'discussion', id: decoded(segments[2]!), imageId: decoded(segments[4]!) }
 }
 /** Writes one stored image as its own media type, never cached and never sniffed differently by a browser. */
 function imageResponse(res: ServerResponse, image: { bytes: Buffer; mediaType: string }): void {
@@ -423,8 +432,10 @@ export function registerHttp(ctx: Context, runtime: HttpHost): () => void {
         // Requirement images answer their bytes rather than JSON; every other route goes through the typed table.
         const image = imageRequest(req.method ?? 'GET', segments)
         if (image) {
-          const found = runtime.local.image(image.id, image.imageId)
-          if (!found) throw new RouteError(404, 'Local issue image not found')
+          const found = image.kind === 'issue'
+            ? runtime.local.image(image.id, image.imageId)
+            : runtime.discussions.image(image.id, image.imageId)
+          if (!found) throw new RouteError(404, image.kind === 'issue' ? 'Local issue image not found' : 'Local discussion image not found')
           imageResponse(res, found)
           return
         }

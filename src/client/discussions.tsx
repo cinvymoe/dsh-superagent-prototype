@@ -2,11 +2,12 @@
  * The discussion pages of the current project: list discussions and open one, where its exchange reads on the left and
  * its result panel on the right can send that result to a requirement.
  */
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import type { Receipt } from '../app/store.ts'
-import { projectRepositories, type LocalAnswer, type LocalDiscussion } from '../sources/local-format.ts'
-import { usePoll } from './api.ts'
+import { projectRepositories, type LocalAnswer, type LocalDiscussion, type LocalImage } from '../sources/local-format.ts'
+import { discussionImage, usePoll } from './api.ts'
 import { Button, Icon, Modal, Tag } from './controls.tsx'
+import { PasteImageField, useImagePaste } from './image-paste.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { RequirementDialog } from './requirement-dialog.tsx'
 import { errorText, type T } from './text.ts'
@@ -26,6 +27,33 @@ function answerTag(t: T, answer: LocalAnswer | undefined) {
   return answer.state === 'answered' ? <Tag tone="success">{t('discussion.answered')}</Tag>
     : answer.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
     : <Tag tone="neutral">{answer.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>
+}
+
+/** One stored discussion image: read its bytes through the same-origin API and show them as a blob URL. */
+function DiscussionImage({ discussionId, image }: { discussionId: string; image: LocalImage }) {
+  const [url, setUrl] = useState<string>()
+  useEffect(() => {
+    let active = true
+    let objectUrl: string | undefined
+    discussionImage(discussionId, image.id).then(blob => {
+      // Revoke immediately when the component unmounted while the bytes were in flight.
+      if (!active) return
+      objectUrl = URL.createObjectURL(blob)
+      setUrl(objectUrl)
+    }, () => {})
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [discussionId, image.id])
+  return url ? <img className="dt-requirement-image" src={url} alt={image.name} />
+    : <span className="dt-image-placeholder" aria-hidden="true" />
+}
+
+/** The images one message attached, in submission order, each named with its file; nothing when it attached none. */
+function DiscussionImages({ discussionId, images }: { discussionId: string; images?: LocalImage[] }) {
+  if (!images?.length) return null
+  return <div className="dt-image-gallery">{images.map(image => <figure key={image.id} className="dt-image-card">
+    <DiscussionImage discussionId={discussionId} image={image} />
+    <figcaption className="dt-image-caption">{image.name}</figcaption>
+  </figure>)}</div>
 }
 
 /** One message of a discussion with its answer, a reply an older discussion already recorded, or a message recorded before answers were. */
@@ -52,14 +80,16 @@ function NewDiscussionDialog({ onClose }: { onClose: () => void }) {
   const { projects } = usePanelData()
   const active = projects.find(item => item.id === project) ?? projects[0]
   const [body, setBody] = useState('')
+  const paste = useImagePaste()
   const [busy, setBusy] = useState(false)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const text = body.trim()
-    if (!text || busy || !active) return
+    if ((!text && !paste.images.length) || busy || !active) return
     setBusy(true)
     try {
-      const { discussion } = await call('POST local/discussions', { body: { body: text, project: active.id } })
+      const { discussion } = await call('POST local/discussions', { body: { body: text, project: active.id,
+        ...(paste.images.length ? { images: paste.images.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}) } })
       onClose()
       navigate({ page: 'discussions', id: discussion.id })
     } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
@@ -68,12 +98,11 @@ function NewDiscussionDialog({ onClose }: { onClose: () => void }) {
     description={t('discussion.newHint')}>
     {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}
     {active && <form className="dt-form" onSubmit={event => { void submit(event) }}>
-      <textarea className="dt-textarea" value={body} maxLength={20000} rows={5}
-        placeholder={t('discussion.newPlaceholder')} aria-label={t('discussion.newPlaceholder')}
-        onChange={event => setBody(event.target.value)} />
+      <PasteImageField state={paste} value={body} onChange={setBody} maxLength={20000} rows={5}
+        placeholder={t('discussion.newPlaceholder')} ariaLabel={t('discussion.newPlaceholder')} disabled={busy} />
       <div className="dt-actions">
         <Button type="submit" variant="primary" size="sm" icon={<Icon name="plus" size={14} />}
-          disabled={busy || !body.trim() || !active}>{t('discussion.create')}</Button>
+          disabled={busy || (!body.trim() && !paste.images.length) || !active}>{t('discussion.create')}</Button>
         <Button type="button" variant="ghost" size="sm" onClick={onClose}>{t('cancel')}</Button>
       </div>
     </form>}
@@ -126,6 +155,7 @@ export function DiscussionDetail({ id }: { id: string }) {
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/discussions/:id', { id }), [id])
   const [comment, setComment] = useState('')
+  const paste = useImagePaste()
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -139,8 +169,13 @@ export function DiscussionDetail({ id }: { id: string }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const text = comment.trim()
-    if (!text || busy) return
-    await act(async () => { await call('POST local/discussions/:id/comments', { id, body: { text } }); setComment('') })
+    if ((!text && !paste.images.length) || busy) return
+    await act(async () => {
+      await call('POST local/discussions/:id/comments', { id, body: { text,
+        ...(paste.images.length ? { images: paste.images.map(({ name, mediaType, data }) => ({ name, mediaType, data })) } : {}) } })
+      setComment('')
+      paste.clear()
+    })
   }
   // The Answerer's open questions: one card, answered in place, sent back as a single message of this discussion.
   const ask = (discussion?.asks ?? []).find(item => item.state === 'open')
@@ -177,6 +212,7 @@ export function DiscussionDetail({ id }: { id: string }) {
             <span className="dt-mono">{discussion.id}</span>
             {data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}</span>}</div>
           <MarkdownLite text={discussion.body} />
+          <DiscussionImages discussionId={discussion.id} images={discussion.images} />
         </section>
 
         <Section title={t('discussion.messages')} count={shown.length}>
@@ -206,11 +242,10 @@ export function DiscussionDetail({ id }: { id: string }) {
           </section>}
           {/* The box sits above the list, so a submitted message appears first, directly under it. */}
           <form className="dt-form dt-timeline-form" onSubmit={event => { void submit(event) }}>
-            <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
-              placeholder={t('discussion.commentPlaceholder')} aria-label={t('discussion.commentPlaceholder')}
-              onChange={event => setComment(event.target.value)} />
+            <PasteImageField state={paste} value={comment} onChange={setComment} maxLength={20000} rows={3}
+              placeholder={t('discussion.commentPlaceholder')} ariaLabel={t('discussion.commentPlaceholder')} disabled={busy} />
             <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
-              disabled={busy || !comment.trim()}>{t('discussion.comment')}</Button></div>
+              disabled={busy || (!comment.trim() && !paste.images.length)}>{t('discussion.comment')}</Button></div>
           </form>
           <p className="dt-hint">{t('discussion.eachMessage')}</p>
           {shown.length === 0 && <p className="dt-hint">{t('discussion.unanswered')}</p>}
@@ -235,6 +270,7 @@ export function DiscussionDetail({ id }: { id: string }) {
                     : item.answer.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
                     : <Tag tone="neutral">{item.answer.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>}</div>
                 <MarkdownLite text={item.answer.text} />
+                <DiscussionImages discussionId={discussion.id} images={item.answer.images} />
                 {item.answer.answer !== undefined && <div className="dt-answer">
                   <MarkdownLite text={item.answer.answer} /></div>}
                 {item.answer.state === 'failed' && <div className="dt-actions">
