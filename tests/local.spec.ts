@@ -123,6 +123,8 @@ describe('the local issue board', () => {
     }
     expect(code('Bad', [image('bad.bmp', 'image/bmp', Buffer.from('BM'))])).toBe('issueImageType')
     expect(code('Bad', [image('big.png', 'image/png', Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]))])).toBe('issueImageSize')
+    expect(code('Bad', Array.from({ length: 5 }, (_value, index) => image(`${index}.png`, 'image/png', PNG))))
+      .toBe('issueImageCount')
     expect(code('   ', [])).toBe('issueCommentText')
     expect(triggers).toHaveLength(1)
     expect(issues.get(issue.id)).toEqual(issue)
