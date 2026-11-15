@@ -330,6 +330,11 @@ export interface Ticket {
    * opens a discussion about it, and the person hands that discussion to an Aligner from the panel.
    */
   mode?: 'work' | 'align'
+  /**
+   * The local project it belongs to, pinned when it is accepted. A project's own executor settings and workspace read it;
+   * a ticket from a Source without projects, such as GitHub or Feishu, has none and executes under the global settings.
+   */
+  project?: string
   /** Tickets that must have ended before this one launches, by ticket id. */
   dependsOn?: string[]
   /**

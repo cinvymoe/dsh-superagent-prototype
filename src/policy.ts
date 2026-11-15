@@ -176,6 +176,20 @@ export const ExecutorConfigSchema = z.object({
   blockedCommands: z.array(CommandNameSchema).default([]),
 }).strict()
 export const SourceInstanceSchema = z.object({ enabled: z.boolean().default(true), config: z.record(z.string(), z.unknown()).default({}) }).strict()
+/**
+ * A project's overrides of the process-wide settings: the fields a local project may change for its own Tickets, and nothing
+ * else. Every field is optional and carries no default, so an absent field means "keep the global value" rather than "reset it".
+ * Where a project runs, how it prepares and what it blocks are already the project's own fields, so the executor override holds
+ * only the model; authorization stays global on purpose, because one Policy and one policy version judge every Trigger.
+ */
+export const ProjectExecutorSchema = z.object({
+  model: RoleModelSchema.nullable().optional(),
+}).strict()
+export const ProjectOverrideSchema = z.object({
+  paused: z.boolean().optional(),
+  executor: ProjectExecutorSchema.optional(),
+}).strict()
+export type ProjectOverride = z.infer<typeof ProjectOverrideSchema>
 export const SettingsSchema = z.object({
   paused: z.boolean().default(false),
   sources: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), SourceInstanceSchema).default({}),
@@ -183,6 +197,8 @@ export const SettingsSchema = z.object({
   eval: EvalConfigSchema.default(() => EvalConfigSchema.parse({})),
   executor: ExecutorConfigSchema.default(() => ExecutorConfigSchema.parse({})),
   agents: AgentsConfigSchema.default(() => AgentsConfigSchema.parse({})),
+  /** Per-project overrides, keyed by local project id; a project without an entry reads the global settings unchanged. */
+  projects: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), ProjectOverrideSchema).default({}),
 }).strict()
 export type Settings = z.infer<typeof SettingsSchema>
 export type SettingsBlock = 'policy' | 'eval' | 'executor' | 'agents' | `source:${string}`
@@ -196,6 +212,22 @@ export const POLICY_REVISION = 'mandate-v3'
  */
 export function policyVersion(settings: Settings): string {
   return key(POLICY_REVISION, JSON.stringify({ rules: settings.policy.rules, mode: settings.eval.mode, sources: settings.policy.sources }))
+}
+/**
+ * The settings one local project executes under: the stored settings with that project's `projects[id]` overrides applied.
+ * A ticket without a project, or a project with no entry, reads the stored settings unchanged, so nothing changes for an
+ * existing installation until a person saves an override; authorization (`policy`) is never overridden, because one Policy
+ * and one policy version judge every Trigger.
+ */
+export function settingsFor(settings: Settings, project?: string): Settings {
+  const override = project === undefined ? undefined : settings.projects[project]
+  if (!override) return settings
+  const model = override.executor?.model
+  return {
+    ...settings,
+    paused: override.paused ?? settings.paused,
+    executor: model === undefined ? settings.executor : { ...settings.executor, model },
+  }
 }
 export function allowedSender(settings: Settings, actor: ActorRef): z.infer<typeof AllowedSchema> | undefined {
   return settings.policy.sources[actor.source]?.allowed.find(entry => sameName(entry.id, actor.id))

@@ -14,7 +14,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { lockSync } from 'proper-lockfile'
 import { Engine, key, reasonText, UserError, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
-import { allowedSender, settingsPolicy } from '../policy.ts'
+import { allowedSender, settingsFor, settingsPolicy } from '../policy.ts'
 import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
 import { packagePath, packageRoot } from '../infra/paths.ts'
@@ -254,8 +254,10 @@ export class Runtime extends Service implements SourceHost {
    * project, so their execution keeps the chain's deployment and the Executor's root.
    */
   ticketProject(ticket: Ticket): LocalProject | undefined {
+    // The project is pinned on the ticket when it is accepted; only tickets accepted before that field read their trigger.
     const trigger = sourceTrigger(this, ticket)
-    return typeof trigger?.meta.project === 'string' ? this.local.project(trigger.meta.project) : undefined
+    const id = ticket.project ?? (typeof trigger?.meta.project === 'string' ? trigger.meta.project : undefined)
+    return id === undefined ? undefined : this.local.project(id)
   }
   /** The GitHub chain of the message that started a ticket, which is absent for a Source without chains. */
   originChain(ticket: Ticket): string | undefined {
@@ -310,7 +312,7 @@ export class Runtime extends Service implements SourceHost {
     const trigger = sourceTrigger(this, ticket)
     const { sources } = this
     const deployment = this.ticketDeployment(ticket)
-    return ticketEnvironment({ deployment, sources, settings: this.store.settings(), ticket, project: this.ticketProject(ticket),
+    return ticketEnvironment({ deployment, sources, settings: settingsFor(this.store.settings(), ticket.project), ticket, project: this.ticketProject(ticket),
       ...trigger ? { trigger } : {} })
   }
   checkSetup(): void { this.setup.check() }
@@ -342,7 +344,8 @@ export class Runtime extends Service implements SourceHost {
     if (currentAlignment(issue)?.status === 'confirmed') throw new UserError('alignmentConfirmed')
     const ticket = this.engine.acceptAlignment({ source: 'local', id: issue.id }, { issueId: issue.id, title: issue.title,
       triggerIds: this.local.humanTriggers(issue.id), actor: { source: 'local', id: discussion.author },
-      scope: `align · ${issue.title}`, note: `Discussion ${discussion.id}, concluded in panel:\n${answered.answer}` })
+      scope: `align · ${issue.title}`, note: `Discussion ${discussion.id}, concluded in panel:\n${answered.answer}`,
+      ...(issue.project === undefined ? {} : { project: issue.project }) })
     this.discussions.handoff(id, { answerId: answered.id, text: answered.answer, ticketId: ticket.id, at: now() })
     return ticket
   }
@@ -365,7 +368,7 @@ export class Runtime extends Service implements SourceHost {
     const alignment = issue ? currentAlignment(issue) : undefined
     if (!input || !alignment) throw new Error('No confirmed alignment to dispatch')
     return this.engine.acceptPlan({ source: 'local', id: issueId }, { issueId, triggerIds: input.triggerIds, actor: input.actor,
-      execution: input.execution,
+      execution: input.execution, ...(issue?.project === undefined ? {} : { project: issue.project }),
       slices: alignment.slices.map(slice => ({ id: slice.id, title: slice.title, outcome: slice.outcome,
         acceptance: slice.acceptance, dependsOn: slice.dependsOn, lane: slice.lane })) })
   }

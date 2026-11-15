@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="project-isolation-title project-isolation-desc" id="project-isolation-root">
         <title id="project-isolation-title">项目隔离的边界：哪些配置在进程里只有一份</title>
-        <desc id="project-isolation-desc">嵌套图：外层是全局作用域，含唯一的 Engine 与 SQLite、单个 Router 主会话、单份设置与提示词、全局并发槽位；内层是两个项目各自的作用域，只有仓库链与目录命令、以及需求讨论工单数据按项目分开，设置与槽位尚未下沉。</desc>
+        <desc id="project-isolation-desc">嵌套图：外层是全局作用域，含唯一的 Engine 与 SQLite、单个 Router 主会话、策略与提示词的唯一副本、全局并发槽位；内层是两个项目各自的作用域，仓库链、目录命令、executor 覆盖项与需求讨论工单数据都按项目分开，策略、槽位与 Router 尚未下沉。</desc>
         <defs>
       <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
       #project-isolation-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
@@ -70,10 +70,10 @@
         <rect x="656" y="130" width="52" height="12" rx="2" fill="none" stroke="#bf4520" stroke-width="0.8" stroke-opacity="0.60"/>
         <text x="682" y="139" class="d-tag" fill="#bf4520" text-anchor="middle">CONFIG</text>
         <text x="664" y="164" class="d-name" fill="#2d3142">设置 · 策略 · 提示词</text>
-        <text x="664" y="186" class="d-sub" fill="#5a6580">单份 revision，没有项目维度</text>
+        <text x="664" y="186" class="d-sub" fill="#5a6580">单份 revision；executor 已可被项目覆盖</text>
         <text x="664" y="206" class="d-mono" fill="#5a6580">settings: policy / eval / executor</text>
         <text x="664" y="226" class="d-mono" fill="#5a6580">agents · prompts · paused</text>
-        <text x="664" y="250" class="d-mono" fill="#bf4520">缺 projects[&lt;id&gt;] 覆盖层</text>
+        <text x="664" y="250" class="d-mono" fill="#bf4520">policy / eval / agents 仍无项目维度</text>
 
         <!-- node: pool -->
         <rect x="940" y="120" width="268" height="148" rx="6" fill="#f5f5f5"/>
@@ -98,8 +98,8 @@
 
         <rect x="88" y="412" width="512" height="84" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
         <text x="104" y="434" class="d-name" fill="#2d3142">执行配置</text>
-        <text x="104" y="454" class="d-sub" fill="#5a6580">仓库链 · worktreeRoot · prepare · 额外 blockedCommands</text>
-        <text x="104" y="474" class="d-mono" fill="#5a6580">project.chain / worktreeRoot / prepare / blockedCommands</text>
+        <text x="104" y="454" class="d-sub" fill="#5a6580">仓库链 · worktreeRoot · 可覆盖 executor model 与 paused</text>
+        <text x="104" y="474" class="d-mono" fill="#5a6580">project.chain / worktreeRoot / projects[id].executor</text>
 
         <rect x="88" y="504" width="512" height="76" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
         <text x="104" y="526" class="d-name" fill="#2d3142">项目数据</text>
@@ -113,8 +113,8 @@
 
         <rect x="680" y="412" width="512" height="84" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
         <text x="696" y="434" class="d-name" fill="#2d3142">执行配置</text>
-        <text x="696" y="454" class="d-sub" fill="#5a6580">同上的四个字段，各项目互不影响</text>
-        <text x="696" y="474" class="d-mono" fill="#5a6580">chain · worktreeRoot · prepare · blockedCommands</text>
+        <text x="696" y="454" class="d-sub" fill="#5a6580">未设置的字段沿用全局，改一个不影响另一个</text>
+        <text x="696" y="474" class="d-mono" fill="#5a6580">projects[id].executor.model · paused</text>
 
         <rect x="680" y="504" width="512" height="76" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.04" stroke-opacity="0.20"/>
         <text x="696" y="526" class="d-name" fill="#2d3142">项目数据</text>
@@ -122,6 +122,6 @@
         <text x="696" y="566" class="d-mono" fill="#5a6580">同一套表，不同 project 值</text>
 
         <!-- ============ the gap, said once ============ -->
-        <text x="64" y="660" class="d-annot" fill="#bf4520">缺口：设置、槽位与 Router 会话都只有一份——目标是把它们挪进每个项目的圈里。</text>
-        <text x="64" y="686" class="d-mono" fill="#5a6580">判据：一个项目的配置改动，是否可能改变另一个项目的行为？现在会；这就是还没隔离的部分。</text>
+        <text x="64" y="660" class="d-annot" fill="#bf4520">缺口：policy / eval / agents、槽位与 Router 会话仍只有一份——目标是把它们也挪进每个项目的圈里。</text>
+        <text x="64" y="686" class="d-mono" fill="#5a6580">判据：一个项目的配置改动，是否可能改变另一个项目的行为？执行项已不会；策略、槽位、Router 仍会。</text>
       </svg>

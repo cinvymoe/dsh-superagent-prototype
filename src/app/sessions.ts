@@ -22,6 +22,7 @@ import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { LocalDiscussion } from '../sources/local-format.ts'
 import { discussionTools } from './tools/discussion.ts'
 import type { Discussions } from './discussions.ts'
+import { settingsFor } from '../policy.ts'
 import type { Store } from './store.ts'
 import { KV } from '../kv.ts'
 import type { RegisterTool, Tool } from './tools/tool.ts'
@@ -160,7 +161,8 @@ export class Sessions {
    * sets `danger-full-access` permissions, and renames it to `title`. An `answerer` marks the Session as a discussion's own
    * Answerer, which is decorated read-only and never holds a Ticket.
    */
-  async ensure(id: string, cwd: string, title: string, role: 'orchestrator' | 'worker', answerer?: LocalDiscussion): Promise<Agent> {
+  async ensure(id: string, cwd: string, title: string, role: 'orchestrator' | 'worker', answerer?: LocalDiscussion,
+    project?: string): Promise<Agent> {
     const ctx = this.ctx
     if (answerer) this.answerers.set(id, answerer)
     let result = await ctx.sessionController.resolveAgent(id as SessionId)
@@ -172,7 +174,7 @@ export class Sessions {
       result = await ctx.sessionController.resolveAgent(id as SessionId)
     }
     if ('error' in result) throw result.error
-    const settings = this.host.store.settings()
+    const settings = settingsFor(this.host.store.settings(), project)
     await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? roleModel(settings, 'main')
       : roleModel(settings, answerer ? 'answerer' : 'worker'))
     await this.decorate(result.agent)

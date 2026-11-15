@@ -10,7 +10,7 @@ import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Execu
   from '../core/index.ts'
 import type { Deployment, Machine } from '../deployment.ts'
 import { runAsWorker, verifyDirectory } from '../infra/environment.ts'
-import type { Settings } from '../policy.ts'
+import { settingsFor, type Settings } from '../policy.ts'
 import type { Store } from '../app/store.ts'
 import { Later, type Effects } from '../app/effects.ts'
 import { resolvedExecutionRoot, type Variable } from '../app/execution-environment.ts'
@@ -286,7 +286,9 @@ export class DshExecutor implements Executor {
     const chain = ticket.execution?.chain ?? (typeof source?.meta.chain === 'string' ? source.meta.chain : undefined)
     const deployment = this.host.deploymentForTicket?.(ticket) ?? this.host.deploymentFor?.(chain)
     const projectRoot = this.host.worktreeRoot?.(ticket)
-    return { ...ticket, execution: ticketExecution(ticket, outcome, this.host.store.settings(), this.host.machine.stateDir, deployment, projectRoot) }
+    // The ticket's own project may override the executor's model, directory, prepare command and blocked commands.
+    return { ...ticket, execution: ticketExecution(ticket, outcome, settingsFor(this.host.store.settings(), ticket.project),
+      this.host.machine.stateDir, deployment, projectRoot) }
   }
   /**
    * Runs the ticket's prepare command — its local project's own, otherwise the `executor.prepare` setting — for a new
@@ -306,7 +308,7 @@ export class DshExecutor implements Executor {
     else await mkdir(root, { recursive: true })
     // A local project's own prepare command replaces the Executor's setting; a blank one or a ticket without one keeps it.
     const project = this.host.prepareCommand?.(ticket)?.trim()
-    const command = project || this.host.store.settings().executor.prepare.trim()
+    const command = project || settingsFor(this.host.store.settings(), ticket.project).executor.prepare.trim()
     // The prepare command and the worker shell that follows it read the same project and chain shims and credential helper.
     const env = { ...(this.host.environmentForTicket?.(ticket) ?? this.host.workerEnvironment()), ...Object.fromEntries(this.host.environment(ticket).map(variable => [variable.key, variable.value])) }
     // Enforce a timeout so a hung prepare command (such as on a credential prompt) fails the ticket instead of holding a worker slot indefinitely.
@@ -334,6 +336,8 @@ export class DshExecutor implements Executor {
     // A planned slice waits for the tickets its dependencies became; the launch retries until they end.
     const waiting = ticket.dependsOn?.filter(id => { const dependency = this.host.store.tickets.get(id); return dependency && liveTicket(dependency) })
     if (waiting?.length) throw new Later()
+    // A paused project holds its own tickets' launches; the effect retries until the pause ends, as a paused process does.
+    if (settingsFor(this.host.store.settings(), ticket.project).paused) throw new Later()
     this.slots.reserve(ticketId, 'launch')
     try { await this.launch(ticket, assignment); this.transient.delete(`launch:${assignmentId}`) }
     catch (error) {
@@ -375,7 +379,7 @@ export class DshExecutor implements Executor {
         try {
           // Recreate the worker session if it was externally deleted.
           if (!this.host.context.agents.get(sessionId as SessionId)) {
-            await this.host.sessions.ensure(sessionId, ticket.execution?.directory ?? '', ticket.title, 'worker')
+            await this.host.sessions.ensure(sessionId, ticket.execution?.directory ?? '', ticket.title, 'worker', undefined, ticket.project)
           }
           if (input) await this.deliverInput(ticket, assignment, input)
         } catch (error) {
@@ -501,7 +505,7 @@ export class DshExecutor implements Executor {
     }
     if (!current()) return
     const sessionId = workerSessionId(ticket.id)
-    const agent = await this.host.sessions.ensure(sessionId, workspace, ticket.title, 'worker')
+    const agent = await this.host.sessions.ensure(sessionId, workspace, ticket.title, 'worker', undefined, ticket.project)
     if (!current()) return
     // The background work of the Assignment this one replaces stops first, so its end does not clear this one's message.
     await this.stopped(ticket.id)

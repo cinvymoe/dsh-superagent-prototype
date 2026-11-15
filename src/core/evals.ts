@@ -342,7 +342,7 @@ export class Evals extends EnginePart {
    * The trigger ids are the local issue's human messages, which give the tickets their channels and thread subscription.
    */
   acceptPlan(thread: Thread, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[]; execution?: ExecutionStrategy;
-    at?: string }): Ticket[] {
+    project?: string; at?: string }): Ticket[] {
     if (!input.triggerIds.length) throw new UserError('planNeedsTriggers')
     const at = input.at ?? this.now()
     const execution = input.execution ?? DEFAULT_EXECUTION_STRATEGY
@@ -364,6 +364,7 @@ export class Evals extends EnginePart {
       this.tickets.create(ticketId, decision.id, mandate, evaluation, { kind: 'accept', title: `${slice.id} · ${slice.title}`,
         scope: mandate.scope, reason: { code: 'explicitRouted' }, mode: 'work', name: sliceName(slice),
         plan: { issueId: input.issueId, sliceId: slice.id, acceptance: slice.acceptance, execution },
+        ...(input.project === undefined ? {} : { project: input.project }),
         ...(dependsOn.length ? { dependsOn } : {}) }, at)
       const created = this.repo.tickets.get(ticketId)
       if (created) tickets.push(created)
@@ -377,7 +378,7 @@ export class Evals extends EnginePart {
    * the discussion's conclusion into its briefing.
    */
   acceptAlignment(thread: Thread, input: { issueId: string; title: string; triggerIds: string[]; actor: ActorRef; scope?: string;
-    name?: string; note?: string; at?: string }): Ticket {
+    name?: string; note?: string; project?: string; at?: string }): Ticket {
     if (!input.triggerIds.length) throw new UserError('planNeedsTriggers')
     const ticketId = alignTicketId(input.issueId)
     const existing = this.repo.tickets.get(ticketId)
@@ -392,7 +393,7 @@ export class Evals extends EnginePart {
     const decision = this.record(thread, evaluation, { kind: 'accept', reason: [{ code: 'explicitRouted' }], mandate, ticketId })
     this.tickets.create(ticketId, decision.id, mandate, evaluation, { kind: 'accept', title: input.title, scope: mandate.scope,
       reason: { code: 'explicitRouted' }, mode: 'align', name: input.name ?? alignName(input.title),
-      ...(input.note ? { note: input.note } : {}) }, at)
+      ...(input.note ? { note: input.note } : {}), ...(input.project === undefined ? {} : { project: input.project }) }, at)
     const created = this.repo.tickets.get(ticketId)
     if (!created) throw new Error('The aligner ticket was not created')
     return created
