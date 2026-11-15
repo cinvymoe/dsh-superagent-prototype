@@ -6,8 +6,14 @@ import { join } from 'node:path'
 import type { LocalAnswer, LocalDiscussion, LocalProject } from '../sources/local-format.ts'
 import type { Sessions } from './sessions.ts'
 
-/** How long one answer may take before it is recorded as failed; a person may retry it. */
+/** How long one answer may run without a single new Session event before it counts as stalled; a person may retry it. */
 export const ANSWER_TIMEOUT_MS = 120_000
+
+/**
+ * The longest one answer may take overall, even while it keeps producing output. Image messages and long read-only
+ * research legitimately run for minutes, so the wait follows the Session's events instead of a fixed turn budget.
+ */
+export const ANSWER_LIMIT_MS = 30 * 60_000
 
 /**
  * The directory a discussion's Answerer Session runs in: the project's configured worktree root when it is an existing
@@ -42,7 +48,10 @@ export interface AnswererHost {
   readonly sessions: Pick<Sessions, 'ensureAnswerer' | 'prompt'>
   /** Host lifetime; an aborted wait leaves the answer `queued` for the next start. */
   readonly lifetime?: AbortSignal
+  /** How long the answer may stay silent before it is treated as stalled. */
   readonly timeoutMs?: number
+  /** The overall cap, so an answer that keeps streaming forever still settles. */
+  readonly limitMs?: number
 }
 
 /**
@@ -69,9 +78,14 @@ export class Answerer implements DiscussionAnswerer {
       const attempt = (this.attempts.get(answer.id) ?? 0) + 1
       this.attempts.set(answer.id, attempt)
       await this.host.sessions.prompt(sessionId, `answer:${answer.id}:${attempt}`, text, 'queue')
-      const idle = await this.untilIdle(agent, this.host.timeoutMs ?? ANSWER_TIMEOUT_MS, options.signal)
-      if (!idle) return { ok: false, reason: 'timeout',
-        message: `The discussion Answerer did not finish within ${Math.round((this.host.timeoutMs ?? ANSWER_TIMEOUT_MS) / 1000)}s` }
+      const quiet = this.host.timeoutMs ?? ANSWER_TIMEOUT_MS
+      const idle = await this.untilIdle(agent, quiet, this.host.limitMs ?? ANSWER_LIMIT_MS, options.signal)
+      if (idle === 'aborted') return { ok: false, reason: 'timeout', message: 'The discussion Answerer was interrupted' }
+      if (idle === 'stalled') {
+        // A turn that stopped producing output is cancelled, so the Session is not left driving into the next answer.
+        try { agent.cancel({ kind: 'hook', reason: 'discussion-answer-timeout' }) } catch { /* the turn may have just ended */ }
+        return { ok: false, reason: 'timeout', message: `The discussion Answerer produced no output for ${Math.round(quiet / 1000)}s` }
+      }
       const reply = this.answerOf(agent.session.snapshotEvents(), from)
       return reply ? { ok: true, answer: reply } : { ok: false, reason: 'empty-answer', message: 'The discussion Answerer produced no text' }
     } catch (error) {
@@ -79,22 +93,41 @@ export class Answerer implements DiscussionAnswerer {
     }
   }
 
-  /** Whether `agent` reaches idle before the timeout or an abort; a failed turn reads as idle. */
-  private async untilIdle(agent: Agent, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
-    const signals = [signal, this.host.lifetime].filter((item): item is AbortSignal => item !== undefined)
-    const limit = AbortSignal.any([...signals, AbortSignal.timeout(timeoutMs)])
-    return await new Promise<boolean>(resolve => {
-      let settled = false
-      const finish = (idle: boolean) => {
-        if (settled) return
-        settled = true
-        limit.removeEventListener('abort', aborted)
-        resolve(idle)
+  /**
+   * The state the answer's turn reaches: `idle` when it settles, `stalled` when the Session appends nothing for `quietMs`,
+   * `aborted` when the host stops. Each new event restarts the silence window, so a long answer that keeps streaming, such
+   * as one that reads a pasted image and reasons over it, is not cut off by a fixed budget. A failed turn reads as idle.
+   */
+  private async untilIdle(agent: Agent, quietMs: number, limitMs: number, signal?: AbortSignal): Promise<'idle' | 'stalled' | 'aborted'> {
+    const stop = AbortSignal.any([signal, this.host.lifetime].filter((item): item is AbortSignal => item !== undefined))
+    const started = Date.now()
+    let seq = agent.session.snapshotEvents().at(-1)?.seq ?? -1
+    for (;;) {
+      if (stop.aborted) return 'aborted'
+      const outcome = await Promise.race([
+        agent.whenIdle().then(() => 'idle' as const, () => 'idle' as const),
+        this.pause(quietMs, stop).then(() => 'quiet' as const),
+      ])
+      if (outcome === 'idle') return 'idle'
+      if (stop.aborted) return 'aborted'
+      const next = agent.session.snapshotEvents().at(-1)?.seq ?? -1
+      // A new event means the turn is still working: the silence window starts again from here.
+      if (next !== seq) {
+        seq = next
+        if (Date.now() - started >= limitMs) return 'stalled'
+        continue
       }
-      const aborted = () => { finish(false) }
-      if (limit.aborted) { finish(false); return }
-      limit.addEventListener('abort', aborted, { once: true })
-      agent.whenIdle().then(() => finish(true), () => finish(true))
+      return 'stalled'
+    }
+  }
+
+  /** Wait `ms`, returning early when `stop` aborts. */
+  private async pause(ms: number, stop: AbortSignal): Promise<void> {
+    if (stop.aborted) return
+    await new Promise<void>(resolve => {
+      const done = (): void => { clearTimeout(timer); stop.removeEventListener('abort', done); resolve() }
+      const timer = setTimeout(done, ms)
+      stop.addEventListener('abort', done, { once: true })
     })
   }
 

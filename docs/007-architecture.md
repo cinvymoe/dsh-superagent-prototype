@@ -447,6 +447,7 @@ The requirement view also documents its derived state: the requirement state tag
 
 | Test | Covers |
 | --- | --- |
+| `tests/answerer.spec.ts` | The discussion Answerer's wait: a turn that keeps appending events is followed past the two-minute silence window, a turn that produces nothing is reported and cancelled, an interrupted answer reads as interrupted, and the overall cap stops a turn that keeps streaming |
 | `tests/core-engine.spec.ts` | Domain rules on in-memory repositories: receiving, Eval, fan-out, resume and stop, interrupted Assignments, the pause, Policy changes, reports and outcomes, attaching, replies, failed deliveries and dismissed problems |
 | `tests/stage.spec.ts` | The Ticket stages, row by row |
 | `tests/local.spec.ts` | The local issue board: projects including an optional worktree root, an optional prepare command and optional extra blocked commands with their command-name and worker-command refusals, a requirement submitted with a title or a description only and with stored images, its comments as human Triggers, image refusals, title derivation, the Aligner's proposal rounds with supersede, rejection feedback and legacy-record reading, and a person's review and closing, the requirement execution mode read, written before dispatch and locked once Tickets exist, and its question records — `asked` returned before the port answers, `answered` and `failed` written in the background, a retried failure, the refusals of another requirement's or an unstarted Ticket, and the question limit |
