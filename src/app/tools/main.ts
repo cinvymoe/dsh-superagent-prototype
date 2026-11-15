@@ -52,7 +52,7 @@ const RouteItemSchema = z.object({
   worktree_name: z.string().nullish().describe(`accept: ${WorktreeNameSchema.description ?? ''}`),
   acknowledgement: z.string().nullish().describe(`accept: one brief sentence of at most ${IM_WORDS} words naming the concrete change and intended result in the source language. It is posted as a reply to the original source on acceptance, so do not quote the source; quote an earlier proposal briefly only when the trigger merely confirms it and the sentence does not already state it. No generic I will handle it.`),
   note: z.string().nullish().describe(`accept and attach: ${RoutingNoteSchema.description ?? ''}`),
-  mode: z.enum(['work', 'align']).nullish().describe('accept: align for a local requirement that needs its plan confirmed before execution; work otherwise.'),
+  mode: z.enum(['work', 'align', 'discuss']).nullish().describe('accept: for a local requirement, discuss when it needs talking through before anyone can plan it, otherwise align, which is the default; work for anything else. Never work for a local requirement.'),
   reason: z.string().nullish().describe('ignore and stop: why, at most 500 characters; an ignore needs it.'),
 }).strict()
 type RouteItem = z.infer<typeof RouteItemSchema>
@@ -65,7 +65,7 @@ const FIELDS: Record<Field, { check: z.ZodType; reads: readonly Kind[]; needs: r
   worktree_name: { check: WorktreeNameSchema, reads: ['accept'], needs: ['accept'] },
   acknowledgement: { check: AcknowledgementSchema, reads: ['accept'], needs: ['accept'] },
   note: { check: RoutingNoteSchema, reads: ['accept', 'attach'], needs: [] },
-  mode: { check: z.enum(['work', 'align']), reads: ['accept'], needs: [] },
+  mode: { check: z.enum(['work', 'align', 'discuss']), reads: ['accept'], needs: [] },
   reason: { check: z.string().max(500), reads: ['ignore', 'stop'], needs: ['ignore'] },
 }
 /** Why an item cannot run: a field its kind needs is missing, or one it reads breaks its limit. */
@@ -98,6 +98,9 @@ function route(host: MainToolsHost, item: RouteItem, decided: ReadonlyMap<string
       const before = host.store.triggers.disposition(item.trigger_id)?.decisionId
       const decision = host.engine.decide(item.trigger_id, { kind: 'accept', title: item.title!, scope: item.title!, reason: { code: 'explicitRouted' },
         acknowledgement: item.acknowledgement!, name: item.worktree_name!, ...note, ...(item.mode ? { mode: item.mode } : {}) })
+      // A local requirement talked through first opens a discussion and no ticket; the person hands its conclusion to the Aligner.
+      if (decision.kind === 'discuss') return { decision: decision.kind, triggerIds: decision.triggerIds,
+        reason: 'Discussion opened about the requirement: it is answered read-only, and the person hands its conclusion to the Aligner in the panel' }
       // A Decision that created no ticket is the item's refusal; one that existed before keeps what it was accepted with.
       if (decision.kind !== 'accept' || !decision.ticketId) return { refused: `Ticket was not created: ${reasonText(decision.reason)}` }
       if (decision.id === before) {

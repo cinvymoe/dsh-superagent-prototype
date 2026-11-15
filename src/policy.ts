@@ -70,8 +70,11 @@ export type Rule = z.infer<typeof RuleSchema>
 export const RoleModelSchema = z.object({ provider: z.string().trim().min(1), model: z.string().trim().min(1), reasoningEffort: z.string().trim().min(1).optional() }).strict()
 export type RoleModel = z.infer<typeof RoleModelSchema>
 
-/** The three Agent roles a person configures; an Executor Session's subagents inherit its tools. */
-export const AGENT_ROLES = ['main', 'aligner', 'executor'] as const
+/**
+ * The three Agent roles a person configures: the main Session, a Ticket's worker (alignment and execution alike), and a
+ * discussion's Answerer. A worker's subagents inherit its tools.
+ */
+export const AGENT_ROLES = ['main', 'worker', 'answerer'] as const
 export type AgentRole = typeof AGENT_ROLES[number]
 /** A plugin's id: a stable lower-case slug shared by the built-in catalog and stored plugins. */
 export const AgentPluginIdSchema = z.string().trim().regex(/^[a-z][a-z0-9-]{0,63}$/)
@@ -91,14 +94,19 @@ export const AgentPluginSchema = z.object({
 }).strict()
 export type AgentPlugin = z.infer<typeof AgentPluginSchema>
 /**
- * The plugins each role enables before a person changes the block, reproducing the tool surface the per-tool catalog
- * had: the main Session's image and billion-context compression tools, and a worker's image, web, skills, todo and
- * subagent tools. `agent-tools.ts` holds the built-in definitions these ids name.
+ * The plugins each role enables before a person changes the block: the main Session's image and billion-context
+ * compression tools, and a worker's image, web, skills, todo, subagent and compression tools. A worker enables
+ * billion-context too: it is a long-lived Session whose context only grows, an Executor that cannot compress runs to
+ * its window and pays for every turn at full size, and this profile's host refuses the native compaction it would
+ * otherwise fall back on (billion-context answers that call with a terminal `dsh_compaction_refused`). The Answerer
+ * starts from a worker's set — it is an ordinary standard-mode Session whose tool set the runtime narrows to reading,
+ * which drops the compression tools anyway — so compress never reaches it. `agent-tools.ts` holds the built-in
+ * definitions these ids name.
  */
 export const DEFAULT_ENABLED_PLUGINS: Readonly<Record<AgentRole, readonly string[]>> = {
   main: ['image', 'billion-context'],
-  aligner: ['image', 'web', 'skills', 'todo', 'subagents'],
-  executor: ['image', 'web', 'skills', 'todo', 'subagents'],
+  worker: ['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'],
+  answerer: ['image', 'web', 'skills', 'todo', 'subagents'],
 }
 /**
  * billion-context's ACP compression tools. They are registered by the host's `billion-context` plugin, so a role that
@@ -113,7 +121,7 @@ export const COMPRESSION_TOOLS = ['compress', 'decompress', 'search_context', 'a
  */
 export const DEFAULT_AGENT_PLUGINS: readonly AgentPlugin[] = [
   { id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
-    tools: [...COMPRESSION_TOOLS], roles: ['main'] },
+    tools: [...COMPRESSION_TOOLS], roles: ['main', 'worker'] },
 ]
 /** One role's overrides: its model when set (null inherits the role's default model) and the plugins it enables. */
 const agentRoleConfig = (role: AgentRole) => z.object({
@@ -127,8 +135,8 @@ const agentRoleConfig = (role: AgentRole) => z.object({
 const agentsConfig = z.object({
   plugins: z.array(AgentPluginSchema).default(() => DEFAULT_AGENT_PLUGINS.map(plugin => ({ ...plugin, tools: [...plugin.tools] }))),
   main: agentRoleConfig('main').default(() => agentRoleConfig('main').parse({})),
-  aligner: agentRoleConfig('aligner').default(() => agentRoleConfig('aligner').parse({})),
-  executor: agentRoleConfig('executor').default(() => agentRoleConfig('executor').parse({})),
+  worker: agentRoleConfig('worker').default(() => agentRoleConfig('worker').parse({})),
+  answerer: agentRoleConfig('answerer').default(() => agentRoleConfig('answerer').parse({})),
 }).strict()
 /**
  * A role may name a seeded plugin the stored list lost (a configuration saved before the plugin became stored, or a stored

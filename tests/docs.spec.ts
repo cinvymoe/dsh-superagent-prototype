@@ -260,7 +260,7 @@ describe('discussion documentation', () => {
   it('states in the domain document that a discussion is its own record and names it in the glossary', () => {
     const domain = prose('docs/001-domain.md')
     expect(domain).toContain('A discussion is not a requirement record')
-    expect(domain).toContain('it creates at most one requirement, which a person does explicitly and which links the two records')
+    expect(domain).toContain('either direction links the two records and keeps the discussion about one requirement')
     expect(domain).toContain('| Discussion | 讨论 |')
   })
   it('states the discuss Ticket mode and its answering session in the execution document', () => {

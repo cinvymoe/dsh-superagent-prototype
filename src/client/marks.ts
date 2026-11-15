@@ -50,6 +50,8 @@ const DECISION_MARKS: Record<Outcome, Omit<Mark, 'label'>> = {
   accept: { dot: 'done', icon: 'decision', tone: 'success' }, reopen: { dot: 'done', icon: 'refresh', tone: 'success' },
   stop: { dot: 'idle', icon: 'stop', tone: 'danger' }, ignore: { dot: 'idle', icon: 'dismiss', tone: 'neutral' },
   unavailable: { dot: 'warning', icon: 'alert', tone: 'warning' }, wouldAccept: { dot: 'idle', icon: 'dismiss', tone: 'warning' },
+  // A requirement the Router decided to talk through before anyone plans it: no ticket follows, only a discussion.
+  discuss: { dot: 'ongoing', icon: 'decision', tone: 'neutral' },
 }
 /** Maps a Decision outcome to its visual mark, distinguishing `wouldAccept` (an ignore that observe mode would have accepted). */
 export function decisionMark(t: T, outcome: Outcome): Mark {

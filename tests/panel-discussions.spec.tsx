@@ -112,6 +112,23 @@ it('closes the discussion from its result panel and hides the action afterwards'
   expect(all('button').some(item => item.textContent?.trim() === zh['discussion.close'])).toBe(false)
 })
 
+it('hands a requirement\'s discussion conclusion to the Aligner from its result panel, once', async () => {
+  server.localProjects = [PROJECT]
+  const talk = localDiscussion('Design the layout', 'Design the layout\n\nDetails', PROJECT.id, 'd-handoff')
+  server.localDiscussions = [{ ...talk, issueId: 'q-created', updatedAt: '2026-09-24T00:00:00Z',
+    answers: [localDiscussionAnswer(talk, 'Design the layout', '2026-09-24T00:00:00Z')] }]
+  server.localIssues = [{ ...localIssue('Design the layout', 'Design the layout\n\nDetails'), id: 'q-created', discussionId: 'd-handoff' }]
+  at({ page: 'discussions', id: 'd-handoff' })
+  await mount()
+  await click(button(zh['discussion.handoff']))
+  const posted = server.requests.find(request => request.path === 'local/discussions/d-handoff/handoff')
+  expect(posted?.method).toBe('POST')
+  // The panel shows the alignment ticket it started and never offers a second hand-off.
+  expect(text()).toContain(zh['discussion.handoffTo'].replace('{ticket}', 't-align-d-handoff'))
+  expect(all('button').some(item => item.textContent?.trim() === zh['discussion.handoff'])).toBe(false)
+  expect(all('button').some(item => item.textContent?.trim() === zh['discussion.handedOff'])).toBe(true)
+})
+
 it('sends a discussion result to a requirement dialog and creates it, linked back to the discussion', async () => {
   server.localProjects = [PROJECT]
   server.localDiscussions = [{ ...localDiscussion('Design the layout', 'Design the layout\n\nDetails from the discussion', PROJECT.id,

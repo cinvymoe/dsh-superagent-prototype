@@ -1830,8 +1830,9 @@ it('applies a saved agents block to the main Session, a running Executor and its
   expect(restricts.get('child-1')).toEqual([{ allow: workerTools }])
   // Saving the block reinstalls each restriction at once; the next step reads it, and a step in flight keeps its tools.
   const saved = runtime.store.settings()
-  const value = { main: { model: null, enabledPlugins: ['billion-context'] }, aligner: saved.agents.aligner,
-    executor: { model: null, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] } }
+  const value = { main: { model: null, enabledPlugins: ['billion-context'] },
+    worker: { model: null, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] }, answerer: saved.agents.answerer,
+    plugins: saved.agents.plugins }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   const executorTools = workerTools.filter(name => name !== 'web_search')
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS.filter(name => name !== 'read_image') })
@@ -1850,7 +1851,7 @@ it('applies a saved agents block to the main Session, a running Executor and its
 it('applies a role\'s stored plugin tools to the main Session and an Executor with its subagents, gaining and losing them on save', async () => {
   // A plugin registers a tool after the Sessions exist, as billion-context does; it is not in any built-in plugin.
   lateTools.push('plugin_tool')
-  const stored = { id: 'extra-tools', name: 'Extra tools', tools: ['plugin_tool'], roles: ['main', 'executor'] as const }
+  const stored = { id: 'extra-tools', name: 'Extra tools', tools: ['plugin_tool'], roles: ['main', 'worker'] as const }
   ;(runtime as unknown as { ctx: Context }).ctx.emit('tools/change')
   // Without a configured added tool the allow lists stay exactly the catalog lists.
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
@@ -1864,7 +1865,8 @@ it('applies a role\'s stored plugin tools to the main Session and an Executor wi
   // Saving the block adds the tool at each Session's next step, its subagent included.
   const saved = runtime.store.settings()
   const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'extra-tools'] },
-    aligner: saved.agents.aligner, executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'extra-tools'] } }
+    worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'extra-tools'] },
+    answerer: saved.agents.answerer }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, 'plugin_tool'] })
   expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: [...workerTools, 'plugin_tool'] })
@@ -1874,7 +1876,7 @@ it('applies a role\'s stored plugin tools to the main Session and an Executor wi
   expect(restricts.get(next.sessionId)).toEqual([{ allow: [...workerTools, 'plugin_tool'] }])
   // Removing it loses it at the next step of every running Session, the subagent and main Session included.
   const removed = { ...value, plugins: [], main: { ...value.main, enabledPlugins: ['image', 'billion-context'] },
-    executor: { ...value.executor, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }
+    worker: { ...value.worker, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }
   await runtime.settings.save('agents', removed, runtime.store.blockRevision('agents'), 'panel')
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: MAIN_TOOLS })
   expect(restricts.get(running.sessionId)!.at(-1)).toEqual({ allow: workerTools })
@@ -1884,10 +1886,11 @@ it('applies a role\'s stored plugin tools to the main Session and an Executor wi
 
 it('ignores an added tool the host stops providing, without admitting other tools or throwing', async () => {
   lateTools.push('plugin_tool')
-  const stored = { id: 'extra-tools', name: 'Extra tools', tools: ['plugin_tool'], roles: ['main', 'executor'] as const }
+  const stored = { id: 'extra-tools', name: 'Extra tools', tools: ['plugin_tool'], roles: ['main', 'worker'] as const }
   const saved = runtime.store.settings()
   const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'extra-tools'] },
-    aligner: saved.agents.aligner, executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'extra-tools'] } }
+    worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'extra-tools'] },
+    answerer: saved.agents.answerer }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   const running = await acceptedTicket()
   expect(restricts.get(runtime.masterId)!.at(-1)).toEqual({ allow: [...MAIN_TOOLS, 'plugin_tool'] })
@@ -1910,7 +1913,8 @@ it('keeps a stored plugin tool the host never registered out of every allow list
   const stored = { id: 'ghost', name: 'Ghost tools', tools: ['ghost_tool'] }
   const saved = runtime.store.settings()
   const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'ghost'] },
-    aligner: saved.agents.aligner, executor: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ghost'] } }
+    worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ghost'] },
+    answerer: saved.agents.answerer }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   const running = await acceptedTicket()
   const workerTools = ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill']
@@ -1940,18 +1944,18 @@ it('seeds each role\'s model override into new Sessions only, leaving a running 
   const selection = (id: string) => (agents.get(id)! as unknown as Modelled).session.snapshotEvents()
     .filter(event => event.type === 'model/selection').map(event => event.data)
   const mainModel = { provider: 'main-provider', model: 'main-model' }
-  const executorModel = { provider: 'executor-provider', model: 'executor-model' }
+  const workerModel = { provider: 'executor-provider', model: 'executor-model' }
   expect(selection(runtime.masterId)).toEqual([])
   const first = await acceptedTicket()
   expect(selection(first.sessionId)).toEqual([])
   // Saving overrides changes no running Session's model: an existing Session keeps the model it started with.
   await runtime.settings.save('agents', { ...runtime.store.settings().agents, main: { model: mainModel, enabledPlugins: ['image', 'billion-context'] },
-    executor: { model: executorModel, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }, runtime.store.blockRevision('agents'), 'panel')
+    worker: { model: workerModel, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }, runtime.store.blockRevision('agents'), 'panel')
   expect(selection(runtime.masterId)).toEqual([])
   expect(selection(first.sessionId)).toEqual([])
   // A Ticket accepted after the save creates its Executor Session on the executor's effective model.
   const second = await acceptedTicket(feishu('2', '@bot 修第二个'))
-  expect(selection(second.sessionId)).toEqual([executorModel])
+  expect(selection(second.sessionId)).toEqual([workerModel])
   // A started process seeds the main Session it creates with the main role's override.
   await restart()
   await runtime.ready

@@ -25,14 +25,14 @@ type SettingsBody = { blocks: { agents: { revision: number; value: AgentsConfig 
 type HistoryBody = { items: { block: string; changes: { code: string; items?: string[] }[] | null }[] }
 
 it('catalogs each Agent role and the built-in plugin groups that reproduce the previous tool surface', () => {
-  expect([...AGENT_ROLES]).toEqual(['main', 'aligner', 'executor'])
+  expect([...AGENT_ROLES]).toEqual(['main', 'worker', 'answerer'])
   expect(BUILTIN_PLUGINS.map(plugin => plugin.id)).toEqual(['image', 'web', 'skills', 'todo', 'subagents',
     'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   expect(AGENT_TOOLS.main.preset).toBe('dsh-superagent-router')
-  expect(AGENT_TOOLS.aligner.preset).toBe('dsh-superagent-worker')
-  expect(AGENT_TOOLS.executor.preset).toBe('dsh-superagent-worker')
+  expect(AGENT_TOOLS.worker.preset).toBe('dsh-superagent-worker')
+  expect(AGENT_TOOLS.answerer.preset).toBe('dsh-superagent-worker')
   expect([...AGENT_TOOLS.main.required]).toEqual(['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'])
-  expect([...AGENT_TOOLS.executor.required]).toEqual(REQUIRED_TOOLS.executor)
+  expect([...AGENT_TOOLS.worker.required]).toEqual(REQUIRED_TOOLS.worker)
   // An applicable plugin never declares a required tool of that role, so no switch can take one away.
   for (const role of AGENT_ROLES) {
     const applicable = BUILTIN_PLUGINS.filter(plugin => plugin.roles.includes(role))
@@ -40,57 +40,63 @@ it('catalogs each Agent role and the built-in plugin groups that reproduce the p
   }
   // A new database starts on the plugin defaults that reproduce the per-tool surface it replaced.
   expect(emptyAgents.main.enabledPlugins).toEqual(['image', 'billion-context'])
-  expect(emptyAgents.aligner.enabledPlugins).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
-  expect(emptyAgents.executor.enabledPlugins).toEqual(DEFAULT_ENABLED_PLUGINS.executor)
+  expect(emptyAgents.worker.enabledPlugins).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'])
+  expect(emptyAgents.answerer.enabledPlugins).toEqual(DEFAULT_ENABLED_PLUGINS.answerer)
   // billion-context is a stored definition now, so a fresh block seeds it and the panel may edit or remove it.
   expect(emptyAgents.plugins).toEqual(DEFAULT_AGENT_PLUGINS.map(plugin => ({ ...plugin, tools: [...plugin.tools] })))
 })
 
-it('seeds billion-context as an editable stored plugin that only the main role can enable', () => {
+it('seeds billion-context as an editable stored plugin that the main role and a worker can enable', () => {
   const seeded = emptyAgents.plugins.find(plugin => plugin.id === 'billion-context')!
-  expect(seeded).toMatchObject({ roles: ['main'], tools: COMPRESSION_TOOLS })
+  // A worker enables it so a long-lived Executor can fold its own history, which this host's refusal of native compaction
+  // leaves it no other way to do; the Answerer stays out, its runtime whitelist keeping the read-only tools only.
+  expect(seeded).toMatchObject({ roles: ['main', 'worker'], tools: COMPRESSION_TOOLS })
   // The catalog marks it stored rather than code-owned, still reports the host's six compression tools for it, and offers it
   // to the main role alone.
   const catalog = agentCatalog(emptyAgents, [...MAIN_TOOLS, ...COMPRESSION_TOOLS].map(name => ({ name, description: '' })))
   expect(catalog.plugins.find(plugin => plugin.id === 'billion-context')).toMatchObject({ builtIn: false, provided: true, missingTools: [] })
-  expect(catalog.roles.find(role => role.role === 'executor')!.plugins).not.toContain('billion-context')
+  expect(catalog.roles.find(role => role.role === 'worker')!.plugins).toContain('billion-context')
+  expect(catalog.roles.find(role => role.role === 'answerer')!.plugins).not.toContain('billion-context')
   // A config that never enables it keeps no definition, so a person may delete it and it stays deleted.
-  const without = closeAgentsPlugins(settingsOf({ ...emptyAgents, plugins: [], main: { ...emptyAgents.main, enabledPlugins: ['image'] } }))
+  const without = closeAgentsPlugins(settingsOf({ ...emptyAgents, plugins: [],
+    main: { ...emptyAgents.main, enabledPlugins: ['image'] },
+    worker: { ...emptyAgents.worker, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }))
   expect(without.plugins).toEqual([])
 })
 
-it('reproduces the old tool set of every role exactly from the default plugin list', () => {
+it('reproduces the work tool set of every role from the default plugin list, widening the worker by compression', () => {
   // The main Session keeps its seven built-ins plus billion-context's six compression tools, in the order it always got them.
   expect(roleTools('main', emptyAgents)).toEqual([...MAIN_TOOLS, ...COMPRESSION_TOOLS])
   expect(new Set(roleTools('main', emptyAgents))).toEqual(new Set([...MAIN_TOOLS, ...COMPRESSION_TOOLS]))
-  // Both workers keep exactly the old work tool set, in catalog order.
-  expect(roleTools('aligner', emptyAgents)).toEqual(WORK_TOOLS)
-  expect(roleTools('executor', emptyAgents)).toEqual(WORK_TOOLS)
+  // The worker keeps the work tool set in catalog order and appends the compression tools it now enables; the Answerer,
+  // which starts from the same plugins, keeps the work set alone and loses the rest to its read-only whitelist at runtime.
+  expect(roleTools('worker', emptyAgents)).toEqual([...WORK_TOOLS, ...COMPRESSION_TOOLS])
+  expect(roleTools('answerer', emptyAgents)).toEqual(WORK_TOOLS)
   // The built-in groups together account for every optional tool; nothing was lost in the move from per-tool switches.
   // The runtime-mounted capabilities add tools these presets never register, so they stay out of that accounting.
   expect(new Set([...BUILTIN_PLUGINS.filter(plugin => plugin.providedBy !== 'mount'), ...emptyAgents.plugins].flatMap(plugin => plugin.tools)))
-    .toEqual(new Set([...WORK_TOOLS.filter(name => !REQUIRED_TOOLS.executor.includes(name)), ...COMPRESSION_TOOLS]))
+    .toEqual(new Set([...WORK_TOOLS.filter(name => !REQUIRED_TOOLS.worker.includes(name)), ...COMPRESSION_TOOLS]))
 })
 
 it('mounts the capability plugins a role enables with the configuration each module needs, never as allow-list names', () => {
-  const withCapabilities = roleOf(emptyAgents, 'executor', [...emptyAgents.executor.enabledPlugins,
+  const withCapabilities = roleOf(emptyAgents, 'worker', [...emptyAgents.worker.enabledPlugins,
     'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   // Nothing is mounted until someone enables it, so the default surface stays exactly as it was.
-  expect(capabilityMounts('executor', emptyAgents)).toEqual([])
+  expect(capabilityMounts('worker', emptyAgents)).toEqual([])
   // A module is mounted once per Session, in the catalog order the role saved, and the forked subagent runs on the same
   // preset as the Session that starts it.
-  expect(capabilityMounts('executor', withCapabilities)).toEqual([
+  expect(capabilityMounts('worker', withCapabilities)).toEqual([
     { id: 'ask-user', module: '@deepseek-ai/dsh-tool-ask-user', config: { mode: 'timed', timeout: 120 } },
     { id: 'present', module: '@deepseek-ai/dsh-tool-present', config: {} },
     { id: 'web-fetch', module: '@deepseek-ai/dsh-tool-web', config: { search: false, fetch: true } },
     { id: 'fork-subagent', module: '@deepseek-ai/dsh-tool-subagent',
-      config: { provider: 'fork', toolName: 'subagent_fork', agentPreset: AGENT_TOOLS.executor.preset } },
+      config: { provider: 'fork', toolName: 'subagent_fork', agentPreset: AGENT_TOOLS.worker.preset } },
   ])
   // The main Session is a person's Session, so it asks and can block; a worker asks on a timeout instead.
   expect(capabilityMounts('main', roleOf(emptyAgents, 'main', [...emptyAgents.main.enabledPlugins, 'ask-user'])))
     .toEqual([{ id: 'ask-user', module: '@deepseek-ai/dsh-tool-ask-user', config: { mode: 'legacy' } }])
   // A capability never enters the allow list: its tools live in the Session's own scope, which `restrict` cannot mask.
-  expect(roleTools('executor', withCapabilities)).toEqual(WORK_TOOLS)
+  expect(roleTools('worker', withCapabilities)).toEqual([...WORK_TOOLS, ...COMPRESSION_TOOLS])
   // The catalog still marks it as provided and names its tools, so the panel can show what enabling it brings.
   const catalog = agentCatalog(withCapabilities, WORK_TOOLS.map(name => ({ name, description: '' })))
   expect(catalog.plugins.find(plugin => plugin.id === 'fork-subagent')).toMatchObject({ builtIn: true, provided: true,
@@ -98,21 +104,26 @@ it('mounts the capability plugins a role enables with the configuration each mod
 })
 
 it('closes an enabled plugin over its declared dependencies when a block is saved', () => {
-  const stored = { id: 'lint-plus', name: 'Lint plus', tools: ['plugin_lint'], requires: ['ask-user'], roles: ['executor'] as AgentRole[] }
+  const stored = { id: 'lint-plus', name: 'Lint plus', tools: ['plugin_lint'], requires: ['ask-user'], roles: ['worker'] as AgentRole[] }
   const drafted = AgentsConfigSchema.parse({ ...emptyAgents, plugins: [stored],
-    executor: { ...emptyAgents.executor, enabledPlugins: [...emptyAgents.executor.enabledPlugins, 'lint-plus'] } })
+    worker: { ...emptyAgents.worker, enabledPlugins: [...emptyAgents.worker.enabledPlugins, 'lint-plus'] } })
   const agents = closeAgentsPlugins(drafted)
   // The save adds the dependency the plugin declares without adding it twice, and closing again changes nothing.
-  expect(agents.executor.enabledPlugins).toEqual([...emptyAgents.executor.enabledPlugins, 'ask-user', 'lint-plus'])
-  expect(closeAgentsPlugins(agents).executor.enabledPlugins).toEqual(agents.executor.enabledPlugins)
+  // This block defines neither billion-context nor its own default, so the closure keeps the enabled id it cannot resolve
+  // at the end rather than dropping it.
+  expect(agents.worker.enabledPlugins)
+    .toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'lint-plus', 'billion-context'])
+  expect(closeAgentsPlugins(agents).worker.enabledPlugins).toEqual(agents.worker.enabledPlugins)
   // A dependency that does not apply to the same role cannot be pulled across, so such a save is refused.
-  const crossRole = { ...stored, requires: ['billion-context'] }
-  const refused = { ...emptyAgents, plugins: [crossRole],
-    executor: { ...emptyAgents.executor, enabledPlugins: [...emptyAgents.executor.enabledPlugins, 'lint-plus'] } }
-  expect(closeAgentPlugins('executor', refused)).toEqual([...emptyAgents.executor.enabledPlugins, 'lint-plus'])
+  const mainOnly = { id: 'deps-main', name: 'Deps main', tools: ['plugin_lint'], roles: ['main'] as AgentRole[] }
+  const crossRole = { ...stored, requires: ['deps-main'] }
+  const refused = { ...emptyAgents, plugins: [...emptyAgents.plugins, mainOnly, crossRole],
+    worker: { ...emptyAgents.worker, enabledPlugins: [...emptyAgents.worker.enabledPlugins, 'lint-plus'] } }
+  expect(closeAgentPlugins('worker', refused))
+    .toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'billion-context', 'lint-plus'])
   expect(() => validateAgentPlugins(closeAgentsPlugins(AgentsConfigSchema.parse(refused))))
     .toThrow(expect.objectContaining({ code: 'agentsPluginRequires',
-      values: expect.objectContaining({ role: 'executor', requires: 'lint-plus -> billion-context' }) }))
+      values: expect.objectContaining({ role: 'worker', requires: 'lint-plus -> deps-main' }) }))
 })
 
 it('adds a plugin\'s tools, drops them when its switch is off, deduplicates names and keeps the catalog order', () => {
@@ -121,68 +132,75 @@ it('adds a plugin\'s tools, drops them when its switch is off, deduplicates name
   const withoutCompression = roleOf(emptyAgents, 'main', ['image'])
   expect(roleTools('main', withoutCompression)).toEqual(MAIN_TOOLS)
   // Turning web off takes both of its tools and leaves the rest of the worker surface untouched.
-  const withoutWeb = roleOf(emptyAgents, 'executor', ['image', 'skills', 'todo', 'subagents'])
-  expect(roleTools('executor', withoutWeb)).toEqual(WORK_TOOLS.filter(name => name !== 'web_search' && name !== 'web_fetch'))
-  const withoutImage = roleOf(emptyAgents, 'executor', ['web', 'skills', 'todo', 'subagents'])
-  expect(roleTools('executor', withoutImage)).not.toContain('read_image')
+  const withoutWeb = roleOf(emptyAgents, 'worker', ['image', 'skills', 'todo', 'subagents', 'billion-context'])
+  expect(roleTools('worker', withoutWeb))
+    .toEqual([...WORK_TOOLS.filter(name => name !== 'web_search' && name !== 'web_fetch'), ...COMPRESSION_TOOLS])
+  const withoutImage = roleOf(emptyAgents, 'worker', ['web', 'skills', 'todo', 'subagents', 'billion-context'])
+  expect(roleTools('worker', withoutImage)).not.toContain('read_image')
   // A stored plugin may repeat a tool another one declares, or a required one: it is named once, in catalog position.
   const extra = settingsOf({ ...emptyAgents, plugins: [{ id: 'extra', name: 'Extra', tools: ['plugin_lint', 'read_image', 'bash', 'web_search'] }],
-    executor: { ...emptyAgents.executor, enabledPlugins: [...emptyAgents.executor.enabledPlugins, 'extra'] } })
-  const tools = roleTools('executor', extra)
-  expect(tools).toEqual([...WORK_TOOLS, 'plugin_lint'])
+    worker: { ...emptyAgents.worker, enabledPlugins: [...emptyAgents.worker.enabledPlugins, 'extra'] } })
+  const tools = roleTools('worker', extra)
+  expect(tools).toEqual([...WORK_TOOLS, ...COMPRESSION_TOOLS, 'plugin_lint'])
   expect(tools.filter(name => name === 'read_image')).toHaveLength(1)
   // Runtime reading stays lenient: an unknown or inapplicable plugin id contributes nothing rather than throwing.
   expect(roleTools('main', roleOf(emptyAgents, 'main', ['missing', 'web']))).toEqual(REQUIRED_TOOLS.main)
-  expect(roleTools('executor', roleOf(emptyAgents, 'executor', ['billion-context']))).toEqual(REQUIRED_TOOLS.executor)
+  expect(roleTools('worker', roleOf(emptyAgents, 'worker', ['billion-context']))).toEqual([...REQUIRED_TOOLS.worker, ...COMPRESSION_TOOLS])
 })
 
-it('resolves each role\'s model through its own override, then the role default, an aligner following the executor', () => {
+it('resolves each role\'s model through its own override, then the role default, an Answerer following the worker', () => {
   const evalModel = { provider: 'eval-provider', model: 'eval-model' }
   const executionModel = { provider: 'execution-provider', model: 'execution-model' }
   const mainModel = { provider: 'main-provider', model: 'main-model' }
-  const alignerModel = { provider: 'aligner-provider', model: 'aligner-model' }
+  const answererModel = { provider: 'answerer-provider', model: 'answerer-model' }
   const value = (agents: Record<string, unknown>) => SettingsSchema.parse({ eval: { model: evalModel }, executor: { model: executionModel }, agents })
   expect(roleModel(value({}), 'main')).toEqual(evalModel)
   expect(roleModel(value({ main: { model: mainModel } }), 'main')).toEqual(mainModel)
-  expect(roleModel(value({}), 'executor')).toEqual(executionModel)
-  expect(roleModel(value({ executor: { model: mainModel } }), 'executor')).toEqual(mainModel)
-  // An aligner with no override follows the executor's effective model, override or default.
-  expect(roleModel(value({}), 'aligner')).toEqual(executionModel)
-  expect(roleModel(value({ executor: { model: mainModel } }), 'aligner')).toEqual(mainModel)
-  expect(roleModel(value({ aligner: { model: alignerModel } }), 'aligner')).toEqual(alignerModel)
+  expect(roleModel(value({}), 'worker')).toEqual(executionModel)
+  expect(roleModel(value({ worker: { model: mainModel } }), 'worker')).toEqual(mainModel)
+  // An Answerer with no override follows the worker's effective model, override or default.
+  expect(roleModel(value({}), 'answerer')).toEqual(executionModel)
+  expect(roleModel(value({ worker: { model: mainModel } }), 'answerer')).toEqual(mainModel)
+  expect(roleModel(value({ answerer: { model: answererModel } }), 'answerer')).toEqual(answererModel)
 })
 
-it('applies an aligner\'s own plugin switches to its alignment and discussion Sessions while the executor keeps its set', async () => {
+it('applies a worker\'s own plugin switches to every Ticket Session and an Answerer\'s to discussions', async () => {
   h = await startRuntime()
   const project = h.runtime.local.createProject({ name: 'Demo', repository: 'deepseek-ai/dsh-superagent-prototype' })
   const issue = h.runtime.local.create({ title: 'Align the local board', body: 'Requirements arrive in the panel.', project: project.id })
   await h.runtime.idle()
-  const alignerModel = { provider: 'align-provider', model: 'align-model' }
-  const value = settingsOf({ ...emptyAgents, aligner: { model: alignerModel,
-    enabledPlugins: ['web', 'skills', 'todo', 'subagents'] } })
+  const workerModel = { provider: 'work-provider', model: 'work-model' }
+  const answererModel = { provider: 'answer-provider', model: 'answer-model' }
+  const value = settingsOf({ ...emptyAgents,
+    worker: { model: workerModel, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] },
+    answerer: { model: answererModel, enabledPlugins: ['web', 'skills', 'todo', 'subagents'] } })
   expect(await h.api('PUT', 'settings/agents', { value, revision: 0 })).toMatchObject({ status: 200 })
   const llm = (h.ctx as unknown as { llm: { resolveCallConfig: ReturnType<typeof vi.fn> } }).llm
   llm.resolveCallConfig.mockClear()
   const triggerId = h.runtime.store.read.threadTriggers(`local:${issue.id}`, 1)[0]!.id
+  // Alignment runs on the worker role now: its model and plugin switches, including the web group switched off here.
   const align = await h.route({ kind: 'accept', trigger_id: triggerId, title: 'Align the local board', worktree_name: 'align-local-board',
     acknowledgement: '收到，先做需求对齐。', mode: 'align' }) as { ticket: { ticket_id: string } }
   await h.runtime.idle()
-  expect(llm.resolveCallConfig).toHaveBeenCalledWith(alignerModel)
+  expect(llm.resolveCallConfig).toHaveBeenCalledWith(workerModel)
   const alignAllow = h.restrictions.get(`worker-${align.ticket.ticket_id}`)!.at(-1)!
-  expect(alignAllow).not.toContain('read_image')
   expect(alignAllow).toContain('bash')
-  // A discussion's Answerer reuses the aligner's model and switches: read-only, narrowed to the aligner's own plugins, no alignment tool.
+  expect(alignAllow).toContain('read_image')
+  expect(alignAllow).not.toContain('web_search')
+  // A discussion's Answerer uses its own model and switches: read-only, narrowed to its own plugins, no alignment tool.
   const discussion = h.runtime.discussions.create({ body: 'Discuss the split', project: project.id })
   const answerer = `answerer-${discussion.id}`
   await vi.waitFor(() => expect(h!.agents.get(answerer)?.status).toBe('running'))
-  expect(llm.resolveCallConfig).toHaveBeenCalledWith(alignerModel)
+  expect(llm.resolveCallConfig).toHaveBeenCalledWith(answererModel)
   const answererAllow = h.restrictions.get(answerer)!.at(-1)!
   expect(answererAllow).not.toContain('read_image')
   expect(answererAllow).toContain('read')
   expect(answererAllow).not.toContain('bash')
   expect(h.tools.get(answerer)!.has('orchestrator_align')).toBe(false)
   const work = await h.acceptedTicket(feishu('2', '@bot 修一下回归'))
-  expect(h.restrictions.get(work.sessionId)!.at(-1)).toContain('read_image')
+  const workAllow = h.restrictions.get(work.sessionId)!.at(-1)!
+  expect(workAllow).toContain('read_image')
+  expect(workAllow).not.toContain('web_search')
 })
 
 it('returns the agents block with its revision, the shared plugin catalog and each role\'s plugin scope in GET settings', async () => {
@@ -191,11 +209,13 @@ it('returns the agents block with its revision, the shared plugin catalog and ea
   expect(status).toBe(200)
   const settings = body as unknown as SettingsBody
   expect(settings.blocks.agents).toEqual({ revision: 0, value: emptyAgents })
-  expect(settings.agents.roles.map(entry => entry.role)).toEqual(['main', 'aligner', 'executor'])
+  expect(settings.agents.roles.map(entry => entry.role)).toEqual(['main', 'worker', 'answerer'])
   expect(settings.agents.roles[0]).toMatchObject({ preset: 'dsh-superagent-router', required: REQUIRED_TOOLS.main,
     plugins: ['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
     enabledPlugins: ['image', 'billion-context'] })
-  expect(settings.agents.roles[2]).toMatchObject({ required: REQUIRED_TOOLS.executor,
+  expect(settings.agents.roles[1]).toMatchObject({ required: REQUIRED_TOOLS.worker,
+    plugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'] })
+  expect(settings.agents.roles[2]).toMatchObject({ required: REQUIRED_TOOLS.answerer,
     plugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'] })
   // The shared catalog marks the built-in groups and the tools this host does not register.
   expect(settings.agents.plugins.map(plugin => [plugin.id, plugin.builtIn, plugin.provided]))
@@ -210,7 +230,7 @@ it('returns the agents block with its revision, the shared plugin catalog and ea
   // tool allow list: the Session mounts it instead.
   expect(settings.agents.roles.map(entry => entry.plugins)).toEqual([
     ['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
-    ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'],
+    ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
     ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent']])
   expect(settings.agents.ungroupedTools).toEqual([])
 })
@@ -261,17 +281,17 @@ it('saves a plugin declaring a tool the host does not register, and marks the to
   h = await startRuntime()
   const { store } = h.runtime
   const ghost = { id: 'ghost', name: 'Ghost tools', tools: ['ghost_tool'] }
-  const value = settingsOf({ ...emptyAgents, plugins: [ghost], executor: { ...emptyAgents.executor,
-    enabledPlugins: [...emptyAgents.executor.enabledPlugins, 'ghost'] } })
+  const value = settingsOf({ ...emptyAgents, plugins: [ghost], worker: { ...emptyAgents.worker,
+    enabledPlugins: [...emptyAgents.worker.enabledPlugins, 'ghost'] } })
   expect(await h.api('PUT', 'settings/agents', { value, revision: 0 })).toMatchObject({ status: 200, body: { saved: true } })
   const settings = (await h.api('GET', 'settings')).body as unknown as SettingsBody
   expect(settings.agents.plugins.find(plugin => plugin.id === 'ghost')).toMatchObject({ provided: false, missingTools: ['ghost_tool'] })
   expect(settings.agents.availableTools).not.toContain('ghost_tool')
   // The declaration stays in the role's configured surface; each Session drops it because the host cannot resolve it.
-  expect(roleTools('executor', store.settings().agents)).toContain('ghost_tool')
+  expect(roleTools('worker', store.settings().agents)).toContain('ghost_tool')
   const history = (await h.api('GET', 'policy/history')).body as unknown as HistoryBody
   expect(history.items[0]!.changes).toEqual(expect.arrayContaining([{ code: 'agentPluginAdded', items: ['Ghost tools'] },
-    { code: 'agentExecutorPluginEnabled', items: ['Ghost tools'] }]))
+    { code: 'agentWorkerPluginEnabled', items: ['Ghost tools'] }]))
 })
 
 it('saves a valid plugin value, increments the block revision and diffs plugin enable, disable, add and remove', async () => {
@@ -303,7 +323,7 @@ it('refuses an invalid plugin catalog or role scope on save with a localized err
   h = await startRuntime()
   const { store } = h.runtime
   const put = (agents: unknown) => h!.api('PUT', 'settings/agents', { value: agents, revision: store.blockRevision('agents') })
-  const withPlugins = (plugins: unknown[], role: keyof AgentsConfig = 'executor', enabledPlugins = emptyAgents.executor.enabledPlugins) =>
+  const withPlugins = (plugins: unknown[], role: keyof AgentsConfig = 'worker', enabledPlugins = emptyAgents.worker.enabledPlugins) =>
     settingsOf({ ...emptyAgents, plugins, [role]: { ...emptyAgents[role], enabledPlugins } })
   const plugin = (over: Record<string, unknown>) => ({ id: 'extra', name: 'Extra', tools: ['plugin_lint'], ...over })
   expect(await put(withPlugins([plugin({}), plugin({})]))).toMatchObject({ status: 400,
@@ -317,12 +337,12 @@ it('refuses an invalid plugin catalog or role scope on save with a localized err
   expect(await put(withPlugins([plugin({ tools: ['bash'] })]))).toMatchObject({ status: 400,
     body: { code: 'agentsPluginRequiredTool', values: { plugin: 'extra', tools: expect.stringContaining('bash') } } })
   // A role cannot name an unknown plugin, nor a known one that does not apply to it.
-  expect(await put(settingsOf({ ...emptyAgents, executor: { ...emptyAgents.executor, enabledPlugins: ['missing'] } })))
-    .toMatchObject({ status: 400, body: { code: 'agentsUnknownPlugin', values: { role: 'executor', plugins: 'missing' } } })
+  expect(await put(settingsOf({ ...emptyAgents, worker: { ...emptyAgents.worker, enabledPlugins: ['missing'] } })))
+    .toMatchObject({ status: 400, body: { code: 'agentsUnknownPlugin', values: { role: 'worker', plugins: 'missing' } } })
   expect(await put(settingsOf({ ...emptyAgents, main: { ...emptyAgents.main, enabledPlugins: ['web'] } })))
     .toMatchObject({ status: 400, body: { code: 'agentsPluginRole', values: { role: 'main', plugins: 'web' } } })
-  expect(await put(settingsOf({ ...emptyAgents, executor: { ...emptyAgents.executor, enabledPlugins: ['billion-context'] } })))
-    .toMatchObject({ status: 400, body: { code: 'agentsPluginRole', values: { role: 'executor', plugins: 'billion-context' } } })
+  expect(await put(settingsOf({ ...emptyAgents, answerer: { ...emptyAgents.answerer, enabledPlugins: ['billion-context'] } })))
+    .toMatchObject({ status: 400, body: { code: 'agentsPluginRole', values: { role: 'answerer', plugins: 'billion-context' } } })
   // A role model the live provider cannot resolve is refused before anything is stored.
   const llm = (h.ctx as unknown as { llm: { resolveCallConfig: ReturnType<typeof vi.fn> } }).llm
   llm.resolveCallConfig.mockImplementationOnce(() => Promise.reject(new Error('no such model')))
@@ -340,20 +360,20 @@ it('still reads a plugin block that names a tool the host no longer registers, a
   h = await startRuntime(seeded => {
     const settings = seeded.settings()
     seeded.saveSettings({ ...settings, agents: { ...settings.agents,
-      plugins: [{ id: 'imported-executor', name: 'Imported executor tools', tools: ['uninstalled_plugin_tool'], roles: ['executor'] }],
-      executor: { ...settings.agents.executor, enabledPlugins: [...settings.agents.executor.enabledPlugins, 'imported-executor'] } } })
+      plugins: [{ id: 'imported-worker', name: 'Imported worker tools', tools: ['uninstalled_plugin_tool'], roles: ['worker'] }],
+      worker: { ...settings.agents.worker, enabledPlugins: [...settings.agents.worker.enabledPlugins, 'imported-worker'] } } })
   })
   expect(h.runtime.store.settings().agents.plugins[0]!.tools).toEqual(['uninstalled_plugin_tool'])
   const settings = (await h.api('GET', 'settings')).body as unknown as SettingsBody
-  expect(settings.blocks.agents.value.executor.enabledPlugins).toContain('imported-executor')
-  expect(settings.agents.plugins.find(plugin => plugin.id === 'imported-executor')!.missingTools).toEqual(['uninstalled_plugin_tool'])
+  expect(settings.blocks.agents.value.worker.enabledPlugins).toContain('imported-worker')
+  expect(settings.agents.plugins.find(plugin => plugin.id === 'imported-worker')!.missingTools).toEqual(['uninstalled_plugin_tool'])
   // An old-style role block is no longer accepted: the migration converts it before a save can read it again.
   expect(AgentsConfigSchema.safeParse({ main: { disabledTools: [] } }).success).toBe(false)
 })
 
 it('validates plugin declarations and role scopes through the exported check', () => {
   const plugin = (over: Record<string, unknown>) => ({ id: 'extra', name: 'Extra', tools: ['plugin_lint'], ...over })
-  const agents = (plugins: unknown[], role: keyof AgentsConfig = 'executor', enabledPlugins = [...emptyAgents.executor.enabledPlugins]) =>
+  const agents = (plugins: unknown[], role: keyof AgentsConfig = 'worker', enabledPlugins = [...emptyAgents.worker.enabledPlugins]) =>
     settingsOf({ ...emptyAgents, plugins, [role]: { ...emptyAgents[role], enabledPlugins } })
   expect(() => agentCatalog(agents([plugin({})]))).not.toThrow()
   // An unknown id or an inapplicable built-in group is refused only through a save, not while reading.

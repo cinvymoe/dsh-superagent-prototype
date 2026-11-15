@@ -57,18 +57,18 @@ it('adds Agents between Execution and Prompts and keeps the group when the panel
   expect(current()).toBe(zh['settingsGroup.agents'])
 })
 
-it('lists the three roles with required tools and plugin switches, and says subagents inherit the executor\'s plugins', async () => {
+it('lists the three roles with required tools and plugin switches, and says subagents inherit the worker\'s plugins', async () => {
   await open()
   expect(all('[data-agent-role]').map(item => item.querySelector('.dt-block-title')?.textContent))
-    .toEqual([zh['agentRole.main'], zh['agentRole.aligner'], zh['agentRole.executor']])
+    .toEqual([zh['agentRole.main'], zh['agentRole.worker'], zh['agentRole.answerer']])
   expect(text()).toContain(zh.agentsIntroShort)
   expect(zh.agentsIntroShort).toContain('插件')
   expect(zh.agentsIntroShort).toContain('子代理')
   // A role offers only its applicable plugins, and every switch that is not a required tool belongs to a plugin row.
   expect(pluginIds('main')).toEqual(['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'])
-  expect(pluginIds('aligner')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
-  expect(pluginIds('executor')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
-  for (const role of ['main', 'aligner', 'executor']) {
+  expect(pluginIds('worker')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'])
+  expect(pluginIds('answerer')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
+  for (const role of ['main', 'worker', 'answerer']) {
     expect(all(`[data-agent-role="${role}"] [role="switch"]:not([disabled])`).every(item => !!item.closest('[data-agent-plugin]'))).toBe(true)
     expect(card(role).querySelector('[data-plugin-tool]')).toBeNull()
   }
@@ -81,9 +81,9 @@ it('lists the three roles with required tools and plugin switches, and says suba
 
 it('shows each plugin\'s tools and whether this host provides them', async () => {
   await open()
-  expect(pluginRow('executor', 'web').getAttribute('data-plugin-state')).toBe('enabled')
-  expect(pluginRow('executor', 'web').getAttribute('data-plugin-provided')).toBe('true')
-  expect(pluginRow('executor', 'web').textContent).toContain(`${zh.agentPluginTools}: web_search, web_fetch`)
+  expect(pluginRow('worker', 'web').getAttribute('data-plugin-state')).toBe('enabled')
+  expect(pluginRow('worker', 'web').getAttribute('data-plugin-provided')).toBe('true')
+  expect(pluginRow('worker', 'web').textContent).toContain(`${zh.agentPluginTools}: web_search, web_fetch`)
   // A preset group is always available; billion-context comes from a host plugin this fixture does not register.
   expect(pluginRow('main', 'billion-context').getAttribute('data-plugin-provided')).toBe('false')
   expect(pluginRow('main', 'billion-context').textContent).toContain(zh.agentPluginUnavailable)
@@ -94,36 +94,36 @@ it('shows each plugin\'s tools and whether this host provides them', async () =>
   expect(pluginRow('main', 'image').textContent).toContain(zh.agentPluginDisabled)
 })
 
-it('shows the Executor\'s running load and links to Execution settings instead of editing concurrency here', async () => {
+it('shows the worker\'s running load and links to Execution settings instead of editing concurrency here', async () => {
   await open()
-  const load = [...card('executor').querySelectorAll('.dt-lv')].find(item => item.textContent?.startsWith(zh.executingLabel))
+  const load = [...card('worker').querySelectorAll('.dt-lv')].find(item => item.textContent?.startsWith(zh.executingLabel))
   expect(load?.textContent).toBe(`${zh.executingLabel} 2 / 3`)
   // Concurrency has one place: the Execution group.
   expect(all('input[type="number"]')).toEqual([])
-  await click(find(zh.agentChangeConcurrency, '[data-agent-role="executor"] button'))
+  await click(find(zh.agentChangeConcurrency, '[data-agent-role="worker"] button'))
   expect(current()).toBe(zh['settingsGroup.execution'])
   expect(field<HTMLInputElement>(zh.maxWorkers).value).toBe('3')
 })
 
-it('shows the model a blank override inherits, follows an executor override, and restores inheritance in one click', async () => {
+it('shows the model a blank override inherits, follows a worker override, and restores inheritance in one click', async () => {
   server.settings = { ...server.settings, eval: { ...server.settings.eval, model: { provider: 'eval-provider', model: 'eval-model' } },
     executor: { ...server.settings.executor, model: { provider: 'exec-provider', model: 'exec-model', reasoningEffort: 'high' } } }
   await open()
   expect(inheritedLine('main')).toContain('eval-provider / eval-model')
-  expect(inheritedLine('aligner')).toContain('exec-provider / exec-model · high')
-  expect(inheritedLine('executor')).toContain('exec-provider / exec-model · high')
-  // An executor override moves the aligner with it, while the executor's own blank field keeps inheriting Execution settings.
-  await pick('executor', 'provider', 'worker-provider'); await pick('executor', 'model', 'worker-model')
-  await pick('executor', 'effort', 'high')
-  expect(inheritedLine('aligner')).toContain('worker-provider / worker-model · high')
-  expect(inheritedLine('executor')).toContain('exec-provider / exec-model · high')
+  expect(inheritedLine('answerer')).toContain('exec-provider / exec-model · high')
+  expect(inheritedLine('worker')).toContain('exec-provider / exec-model · high')
+  // A worker override moves the Answerer with it, while the worker's own blank field keeps inheriting Execution settings.
+  await pick('worker', 'provider', 'worker-provider'); await pick('worker', 'model', 'worker-model')
+  await pick('worker', 'effort', 'high')
+  expect(inheritedLine('answerer')).toContain('worker-provider / worker-model · high')
+  expect(inheritedLine('worker')).toContain('exec-provider / exec-model · high')
   // One click on Restore inheritance clears a role's override again.
   await pick('main', 'provider', 'other-provider'); await pick('main', 'model', 'other-model')
   await click(find(zh.agentRestoreInherit, '[data-agent-role="main"] button'))
   expect(selects('main').map(select => select.value)).toEqual(['', '', ''])
   await click(zh.save)
   expect(server.settings.agents.main.model).toBeNull()
-  expect(server.settings.agents.executor.model).toEqual({ provider: 'worker-provider', model: 'worker-model',
+  expect(server.settings.agents.worker.model).toEqual({ provider: 'worker-provider', model: 'worker-model',
     reasoningEffort: 'high' })
 })
 
@@ -139,10 +139,10 @@ it('offers real provider, model and effort selects, grouped by provider until on
   expect(optionText(model!)).toEqual([zh.modelInherit, 'Worker model', 'Worker fast', 'Other model'])
   expect(effort!.disabled).toBe(true)
   // A chosen provider narrows its own model select, while the other roles keep the grouped full list.
-  await pick('aligner', 'provider', 'worker-provider')
-  expect(optionText(selects('aligner')[1]!)).toEqual([zh.modelInherit, 'Worker model', 'Worker fast'])
-  await pick('aligner', 'model', 'worker-fast')
-  await pick('aligner', 'provider', '')
+  await pick('answerer', 'provider', 'worker-provider')
+  expect(optionText(selects('answerer')[1]!)).toEqual([zh.modelInherit, 'Worker model', 'Worker fast'])
+  await pick('answerer', 'model', 'worker-fast')
+  await pick('answerer', 'provider', '')
   // Picking a model names its provider and switches effort to that model's efforts.
   await pick('main', 'model', 'other-model')
   expect(provider!.value).toBe('other-provider')
@@ -191,35 +191,35 @@ it('localizes a catalog failure, disables the model dropdowns, and still restore
 
 it('toggles plugins per role and saves enabledPlugins in catalog order', async () => {
   await open()
-  const before = server.settings.agents.executor.enabledPlugins
-  expect(before).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
+  const before = server.settings.agents.worker.enabledPlugins
+  expect(before).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'])
   // Turning one plugin off removes only its tools' plugin id; turning it back on restores the catalog order.
-  await click(pluginSwitch('executor', 'web'))
-  expect(pluginSwitch('executor', 'web').getAttribute('aria-checked')).toBe('false')
-  await click(pluginSwitch('executor', 'image'))
+  await click(pluginSwitch('worker', 'web'))
+  expect(pluginSwitch('worker', 'web').getAttribute('aria-checked')).toBe('false')
+  await click(pluginSwitch('worker', 'image'))
   await click(pluginSwitch('main', 'billion-context'))
   await click(zh.save)
   const sent = server.requests.find(request => request.path === 'settings/agents' && request.method === 'PUT')!
   const { value, revision } = sent.body as { value: AgentsConfig; revision: number }
   expect(revision).toBe(0)
-  expect(value.executor.enabledPlugins).toEqual(['skills', 'todo', 'subagents'])
+  expect(value.worker.enabledPlugins).toEqual(['skills', 'todo', 'subagents', 'billion-context'])
   expect(value.main.enabledPlugins).toEqual(['image'])
-  expect(value.aligner.enabledPlugins).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
+  expect(value.answerer.enabledPlugins).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
   expect(server.settings.agents).toMatchObject({ main: { enabledPlugins: ['image'] },
-    executor: { enabledPlugins: ['skills', 'todo', 'subagents'] } })
+    worker: { enabledPlugins: ['skills', 'todo', 'subagents', 'billion-context'] } })
   // A reloaded view keeps the saved switches; turning one back on keeps the catalog order rather than the click order.
-  expect(pluginSwitch('executor', 'web').getAttribute('aria-checked')).toBe('false')
-  await click(pluginSwitch('executor', 'web'))
+  expect(pluginSwitch('worker', 'web').getAttribute('aria-checked')).toBe('false')
+  await click(pluginSwitch('worker', 'web'))
   await click(zh.save)
   // The image plugin stays off from the first save; the re-enabled web plugin returns at its catalog position.
-  expect(server.settings.agents.executor.enabledPlugins).toEqual(['web', 'skills', 'todo', 'subagents'])
+  expect(server.settings.agents.worker.enabledPlugins).toEqual(['web', 'skills', 'todo', 'subagents', 'billion-context'])
 })
 
 it('shows only plugin switches, with no per-tool add list or optional tool switch', async () => {
   server.registeredTools = []
   await open()
   expect(document.querySelector('[data-plugin-tool]')).toBeNull()
-  for (const role of ['main', 'aligner', 'executor']) expect(card(role).textContent).toContain(zh.agentPlugins)
+  for (const role of ['main', 'worker', 'answerer']) expect(card(role).textContent).toContain(zh.agentPlugins)
 })
 
 it('keeps the plugin draft and shows the localized reason when a save enables an inapplicable plugin', async () => {
@@ -252,7 +252,7 @@ it('keeps the draft and shows the conflict when another save changed the same Ag
 it('shows the save bar only while the Agents block has edits', async () => {
   await open()
   expect(all('.dt-savebar')).toHaveLength(0)
-  await click(pluginSwitch('aligner', 'web'))
+  await click(pluginSwitch('answerer', 'web'))
   expect(all('.dt-savebar')).toHaveLength(1)
   await click(zh.discard)
   expect(all('.dt-savebar')).toHaveLength(0)
@@ -261,13 +261,13 @@ it('shows the save bar only while the Agents block has edits', async () => {
 it('lists an Agents save with its role, model and plugin change lines', async () => {
   server.history = { current: 4, policyVersion: 'abcdef1234567890', items: [{ revision: 4, savedAt: '2026-09-22T00:00:00Z',
     source: 'panel', policyVersion: 'abcdef1234567890', policyChanged: false, notified: [], block: 'agents',
-    changes: [{ code: 'agentExecutorModel' }, { code: 'agentMainPluginEnabled', items: ['image'] },
-      { code: 'agentAlignerPluginDisabled', items: ['web'] }, { code: 'agentPluginAdded', items: ['extra'] }] }] }
+    changes: [{ code: 'agentWorkerModel' }, { code: 'agentMainPluginEnabled', items: ['image'] },
+      { code: 'agentAnswererPluginDisabled', items: ['web'] }, { code: 'agentPluginAdded', items: ['extra'] }] }] }
   await open()
   await click(zh.configHistory)
-  expect(text()).toContain(zh['change.agentExecutorModel'])
+  expect(text()).toContain(zh['change.agentWorkerModel'])
   expect(text()).toContain(zh['change.agentMainPluginEnabled'].replace('{items}', 'image'))
-  expect(text()).toContain(zh['change.agentAlignerPluginDisabled'].replace('{items}', 'web'))
+  expect(text()).toContain(zh['change.agentAnswererPluginDisabled'].replace('{items}', 'web'))
   expect(text()).toContain(zh['change.agentPluginAdded'].replace('{items}', 'extra'))
 })
 
@@ -295,7 +295,7 @@ it('adds a custom plugin from an MCP suggestion, enables it and keeps it after a
   await click(pluginSwitch('main', 'magpie'))
   await click(zh.save)
   expect(server.settings.agents.plugins.find(plugin => plugin.id === 'magpie')).toMatchObject({ name: 'magpie',
-    tools: ['mcp__magpie__call_tool', 'mcp__magpie__repos'], roles: ['main', 'aligner', 'executor'] })
+    tools: ['mcp__magpie__call_tool', 'mcp__magpie__repos'], roles: ['main', 'worker', 'answerer'] })
   expect(server.settings.agents.main.enabledPlugins).toContain('magpie')
   // A reload reads the stored plugin back from the catalog.
   await open()
@@ -308,10 +308,10 @@ it('confirms before deleting an enabled custom plugin and clears it from every r
   await click(find(zh.agentAddPlugin, 'button'))
   await click(find(zh.agentPluginUseSuggestion, '[data-plugin-suggestion="family:feature_exec"] button'))
   await click(find(zh.agentPluginAddConfirm, '[role="dialog"] button'))
-  await click(pluginSwitch('executor', 'feature-exec'))
+  await click(pluginSwitch('worker', 'feature-exec'))
   await click(zh.save)
   await settle()
-  expect(server.settings.agents.executor.enabledPlugins).toContain('feature-exec')
+  expect(server.settings.agents.worker.enabledPlugins).toContain('feature-exec')
   await click(find(zh.agentPluginDeleteLabel.replace('{name}', 'feature_exec'), 'button'))
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain(zh.agentPluginDeleteTitle)
   // Cancelling keeps the plugin; confirming removes it and its enable entries together.
@@ -321,10 +321,10 @@ it('confirms before deleting an enabled custom plugin and clears it from every r
   await click(find(zh.confirm, '[role="dialog"] button'))
   await click(zh.save)
   expect(server.settings.agents.plugins.some(plugin => plugin.id === 'feature-exec')).toBe(false)
-  expect(server.settings.agents.executor.enabledPlugins).not.toContain('feature-exec')
+  expect(server.settings.agents.worker.enabledPlugins).not.toContain('feature-exec')
   await open()
   expect(document.querySelector('[data-custom-plugin="feature-exec"]')).toBeNull()
-  expect(pluginIds('executor')).not.toContain('feature-exec')
+  expect(pluginIds('worker')).not.toContain('feature-exec')
 })
 
 it('saves a plugin that declares a tool the host lacks and marks it unavailable', async () => {
@@ -339,7 +339,7 @@ it('saves a plugin that declares a tool the host lacks and marks it unavailable'
   expect(document.querySelector('[data-custom-plugin="ghost-tools"]')?.textContent).toContain(zh.agentPluginUnavailable)
   await open()
   // The declared name stays visible on each role row, marked and listed as one this host does not provide.
-  const row = pluginRow('executor', 'ghost-tools')
+  const row = pluginRow('worker', 'ghost-tools')
   expect(row.textContent).toContain(zh.agentPluginUnavailable)
   expect(row.querySelector('[data-plugin-tools]')?.textContent).toContain('ghost_tool')
 })
@@ -350,7 +350,7 @@ it('shows the Agents group and its role copy in English', async () => {
   expect(current()).toBe(en['settingsGroup.agents'])
   expect(text()).toContain(en.agentsIntroShort)
   expect(all('[data-agent-role]').map(item => item.querySelector('.dt-block-title')?.textContent))
-    .toEqual([en['agentRole.main'], en['agentRole.aligner'], en['agentRole.executor']])
+    .toEqual([en['agentRole.main'], en['agentRole.worker'], en['agentRole.answerer']])
   expect(text()).toContain(en.agentRequiredTools)
   expect(text()).toContain(en.agentPlugins)
 })

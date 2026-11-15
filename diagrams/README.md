@@ -1,7 +1,23 @@
-# Router / Worker 设计图
+# dsh-superagent 设计图
 
-> 对应源码版本：`/data/project/dsh-superagent`（截至 2026-11-06，含工作区中未提交的多链路改动）。
+> 对应源码版本：`/data/project/dsh-superagent`（截至 2026-11-15，含工作区中未提交的 agents / capabilities 改动）。
 > Router 在代码与提示词里叫 **主 Session / `orchestrator`**；Worker 叫 **Executor Session / `worker`**。
+
+## 文档 → 图（先看这张表）
+
+| 文档 | 图 | 讲什么 |
+| --- | --- | --- |
+| [007 架构总览](../docs/007-architecture.md) | [current-architecture](./current-architecture.html) · [router-worker](./router-worker-architecture.html) · [agent-dispatch](./agent-dispatch-worker.html) | 当前实现的角色与链路；两张早期 Router/Worker 视角 |
+| [001 领域模型](../docs/001-domain.md) | **[domain-model](./domain-model.html)** | 七个概念、八条关系、授权链只有一处出口 |
+| [002 授权](../docs/002-authorization.md) | **[authorization-flow](./authorization-flow.html)** | 一条 Trigger 的两种去向：订阅扇出 vs Eval |
+| [003 执行 · 阶段](../docs/003-execution.md) | **[ticket-state](./ticket-state.html)** | Ticket 的七个阶段与恢复；Assignment 平行时间线 |
+| [003 执行 · 失败](../docs/003-execution.md) | **[failure-recovery](./failure-recovery.html)** | 过路性重试 / 挂起 / 恢复，以及四条横切规则 |
+| [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | **[agent-capabilities](./agent-capabilities.html)** | 三个角色的工具集怎么按插件拼出来 |
+| [006 部署](../docs/006-deployment.md) | **[deployment-topology](./deployment-topology.html)** | 一个进程、一个状态目录、两个外部账号 |
+| 讨论双管线（提案） | [discussion-issue-isolation](./discussion-issue-isolation.svg) | 讨论与需求的隔离目标形态 |
+
+> 加粗的六张是按文档编号补齐的图，改动对应文档的规则时请一起改（见仓库根目录 `AGENTS.md`）。
+> 所有图都是自包含 HTML（内联 SVG + 内联 CSS + Google Fonts），同名 `.svg` / `.png` 为导出件。
 
 
 ## 图 0：编辑版总览（2026-11-10 重设计）
@@ -96,6 +112,54 @@ flowchart TB
   K -.->|reportRelay / notice| R
   T -.->|订阅扇出| K
 ```
+
+## 图 4：领域模型（001）
+
+[![七个概念，一条授权链](./domain-model.png)](./domain-model.html)
+
+- 七个实体：Source、Trigger、Thread、Eval · Decision、Ticket（Mandate 记在票上）、Assignment、Channel；Subscription 画成 Thread ↔ Ticket 的 N:M 关系。
+- 读法：Source → Trigger / Thread → Eval →（accept）Ticket → Assignment，Channel 把 ack / reply / PR 折线回写 Source。
+- 关键点：Policy 只以版本号进入 Mandate；订阅扇出只带上下文；Ticket 状态由 Ticket 自己定义，不跟随 Session。
+
+## 图 5：授权流程（002）
+
+[![一条 Trigger，只有两种去向](./authorization-flow.png)](./authorization-flow.html)
+
+- 读法：Trigger 先扇出到订阅的 Ticket（上下文，无授权）；只有没被 Ticket 拥有的消息才进 Gate → Eval → Decision。
+- Gate 给三档强度（explicit / inferred / not admitted），accept mode（off / observe / auto）决定推断档能不能成为候选。
+- 四种 Decision 里只有 accept 会新建 Ticket + Mandate；其余只记录，不动已有授权。
+
+## 图 6：Ticket 状态机（003）
+
+[![阶段就是它在等谁](./ticket-state.png)](./ticket-state.html)
+
+- 七个阶段：Queued、Working、Waiting、Blocked / Failed、Awaiting answer、Awaiting review、Ended。
+- 人回答或写消息会把 Blocked / Awaiting answer 拉回 Working；Ended 只接受人（或面板 attach）的消息，按同一 Mandate 恢复，不重新 Eval。
+- 面板 Stop 是命令：任意 open 阶段直接 Ended 并撤销 Mandate；Assignment 的 `pending → running → ended` 是与 Ticket 平行的另一条时间线，见页内卡片。
+
+## 图 7：失败与恢复（003）
+
+[![失败先分类，再决定谁去动它](./failure-recovery.png)](./failure-recovery.html)
+
+- 判定「过路性」：408 / 429 / 5xx、连接被拒或重置、超时；launch 重跑、turn 续跑，**prepare 失败不重试**；三次用尽后挂起。
+- 挂起只停自动投递，不停工具；人的消息、Retry 或新的非失败 Report 都会以一个新 Assignment 恢复。
+- 横切四条：重启、先落库再执行（effect 2s→60s / 消息 5s→300s）、暂停处理、连续三次失败才升级为系统问题。
+
+## 图 8：部署拓扑（006）
+
+[![一个进程，一个状态目录，两个外部账号](./deployment-topology.png)](./deployment-topology.html)
+
+- 两个边界：本机（操作系统的登录用户）与外部账号服务；六个节点：进程、SQLite、三类 Session、工单目录、GitHub、可选 Feishu。
+- 构件带版本：`panel 127.0.0.1:3082`、`bundle dsh 0.2.1`、`orchestrator.sqlite schema 13`、`gh ≥ 2.48`、`lark-cli 1.0.90`。
+- 跨边界两条：`HTTPS:443`（gh / git）与 `lark-cli`；本机内两条：`in-process` 与 `sqlite`、`cwd`。
+
+## 图 9：Agent 能力分层（003 / 005 / 007）
+
+[![一个 Session 的工具集是五层拼出来的](./agent-capabilities.png)](./agent-capabilities.html)
+
+- 五层拼装：必需核心工具 → 内置插件组 → 运行期挂载能力 → 存储插件（billion-context / 自定义）→ slice 固定执行策略。
+- 右侧三列是角色默认值：main（只读核心 + image + billion-context）、worker（工作核心 + image/web/skills/todo/subagents + billion-context，subagent 继承）、answerer（只读，无 `orchestrator_align`）。
+- 保存 `agents` 后，运行中的 Session 在下一个 step 重装 allow list；宿主没注册的工具被滤掉，进行中的 step 保持原样。
 
 ## 图 3：讨论与 Issue 双管线隔离（设计提案，未实施）
 

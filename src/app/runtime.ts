@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { lockSync } from 'proper-lockfile'
-import { Engine, key, reasonText, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
+import { Engine, key, reasonText, UserError, type EngineForSettings, type ReceiveResult, type Ticket, type Trigger } from '../core/index.ts'
 import { allowedSender, settingsPolicy } from '../policy.ts'
 import { SourceRegistry } from '../sources/registry.ts'
 import { Commands } from '../infra/commands.ts'
@@ -179,6 +179,11 @@ export class Runtime extends Service implements SourceHost {
           const followed = !this.quiet && (event.type === 'trigger.received' || event.type === 'ticket.resumed' || event.type === 'trigger.followup')
           const followup = followed ? followupNotice(store, sources, event.data.triggerId) : undefined
           if (followup) sessions.relay(followup.id, followup.text)
+          // A local requirement the Router decided to talk through first opens a discussion about itself, and no ticket.
+          if (event.type === 'decision.recorded' && event.data.kind === 'discuss') {
+            const issueId = event.data.threadKey.startsWith('local:') ? event.data.threadKey.slice('local:'.length) : undefined
+            if (issueId) effects.enqueue('discussion', event.data.decisionId, { issueId })
+          }
           // Notify the ticket's conversations whenever it ends via a pull request.
           const ended = event.type === 'ticket.ended' ? store.tickets.get(event.data.ticketId) : undefined
           if (ended && setup.configured()) {
@@ -201,6 +206,8 @@ export class Runtime extends Service implements SourceHost {
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       this.local = new LocalIssues({ store, stateDir: machine.stateDir, discussions: this.discussions,
         receive: trigger => this.passes.receive(trigger) })
+      // A discussion the Router asked for is opened after the decision's transaction commits, so it never holds an Eval open.
+      effects.handle('discussion', async ({ issueId }) => { this.openDiscussion(issueId) })
       // Asking is answered in the background, so a request never waits for a forked Session; a stop leaves the question `asked`.
       this.localQuestions = new LocalQuestions({ store, local: this.local,
         answers: new Questions({ context: ctx, store, sessions, lifetime: this.lifetime }), lifetime: this.lifetime,
@@ -303,6 +310,37 @@ export class Runtime extends Service implements SourceHost {
   }
   checkSetup(): void { this.setup.check() }
   receive(trigger: Trigger): ReceiveResult { return this.passes.receive(trigger) }
+  /**
+   * Open the discussion a requirement needs before it can be aligned: its own Thread, answered by the read-only Answerer, with
+   * the requirement named on both records. A requirement that already talks in a discussion keeps it; a discussion never
+   * becomes a ticket, so nothing here takes a worker slot.
+   */
+  private openDiscussion(issueId: string): void {
+    const issue = this.local.get(issueId)
+    if (!issue?.project || issue.discussionId !== undefined) return
+    const discussion = this.discussions.create({ project: issue.project, author: issue.author, issueId: issue.id,
+      title: issue.title, body: this.local.discussionBody(issue.id) })
+    this.local.linkDiscussion(issue.id, discussion.id)
+  }
+  /**
+   * Hand a discussion's conclusion to the Aligner: the requirement's alignment ticket, whose briefing carries the answered
+   * message the person confirmed. A discussion that is about no requirement, or whose latest message is unanswered, is refused;
+   * a requirement whose alignment is already confirmed needs no Aligner.
+   */
+  handOffDiscussion(id: string): Ticket {
+    const discussion = this.discussions.get(id)
+    if (!discussion) throw new UserError('unknownDiscussion', { discussion: id })
+    const issue = discussion.issueId ? this.local.get(discussion.issueId) : undefined
+    if (!issue) throw new UserError('discussionUnlinked', { discussion: id })
+    const answered = [...(discussion.answers ?? [])].reverse().find(answer => answer.state === 'answered' && answer.answer)
+    if (!answered?.answer) throw new UserError('discussionUnanswered', { discussion: id })
+    if (currentAlignment(issue)?.status === 'confirmed') throw new UserError('alignmentConfirmed')
+    const ticket = this.engine.acceptAlignment({ source: 'local', id: issue.id }, { issueId: issue.id, title: issue.title,
+      triggerIds: this.local.humanTriggers(issue.id), actor: { source: 'local', id: discussion.author },
+      scope: `align · ${issue.title}`, note: `Discussion ${discussion.id}, concluded in panel:\n${answered.answer}` })
+    this.discussions.handoff(id, { answerId: answered.id, text: answered.answer, ticketId: ticket.id, at: now() })
+    return ticket
+  }
   /** Dispatch the confirmed slices of a local requirement as execution tickets; repeated calls reuse their tickets. */
   dispatchPlan(issueId: string): Ticket[] {
     const input = this.local.planInput(issueId)
@@ -353,7 +391,7 @@ export class Runtime extends Service implements SourceHost {
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },
       configured: () => setup.configured(), links: () => runtime.links(), ticketEnvironment: ticket => runtime.ticketEnvironment(ticket),
       checkSetup: () => { setup.check() }, requestPass: () => { passes.request() }, models: () => this.ctx.sessionController.modelCatalog(),
-      dispatchPlan: (id: string) => runtime.dispatchPlan(id) }
+      dispatchPlan: (id: string) => runtime.dispatchPlan(id), handOffDiscussion: (id: string) => runtime.handOffDiscussion(id) }
   }
   /** Idempotent stop; concurrent or repeated calls share the same shutdown promise. */
   stop(): Promise<void> { return this.stopping ??= this.shutdown() }

@@ -1,5 +1,5 @@
 /**
- * Migrates a schema 10 or 11 database to schema 12 in a single transaction so runtime readers never convert legacy shapes.
+ * Migrates a schema 10, 11 or 12 database to schema 13 in a single transaction so runtime readers never convert legacy shapes.
  * Databases older than schema 10 are rejected: this version cannot migrate them.
  */
 import { basename } from 'node:path'
@@ -8,7 +8,7 @@ import { isoTime, said, type AcceptMode, type AdmissionCell, type ChannelRef, ty
   type Reason, type Thread, type Ticket, type TicketInput, type TriggerDisposition } from '../core/index.ts'
 import { feishuChatLink } from '../sources/feishu-channel.ts'
 import { POLL_HORIZON_MS } from '../sources/poll.ts'
-import { AGENT_ROLES, DEFAULT_ENABLED_PLUGINS, SettingsSchema, policyVersion, type SettingsOrigin } from '../policy.ts'
+import { DEFAULT_ENABLED_PLUGINS, SettingsSchema, policyVersion, type AgentRole, type SettingsOrigin } from '../policy.ts'
 import { BUILTIN_PLUGINS, FORBIDDEN_ADDED_TOOLS, REQUIRED_TOOLS } from './agent-tools.ts'
 import { autoMergeThreshold, teamDefaults } from './context.ts'
 import { PromptConfigSchema, type PromptConfig, type PromptVersion } from './prompts.ts'
@@ -18,7 +18,7 @@ import type { SettingsVersion, Store } from './store.ts'
 import { Versions } from './versions.ts'
 import { KV, type Key } from '../kv.ts'
 
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 /** The oldest database schema version this build can open and migrate directly. */
 export const OLDEST_SCHEMA = 10
 /** Returns an error message explaining why `version` cannot be opened: older schemas need a new state directory. */
@@ -95,6 +95,14 @@ export function migrateTo11(store: Store): void {
  * conversion also runs inside the schema 11 migration, so a schema 10 database reaches schema 12 in one open.
  */
 export function migrateTo12(store: Store): void {
+  step('the settings', () => { migrateSettingsRecords(store) })
+}
+
+/**
+ * Rename the current and historical settings records' Agent roles to `main`, `worker` and `answerer`: the same rewrite
+ * runs inside the earlier steps, so every supported database reaches schema 13 however old it is.
+ */
+export function migrateTo13(store: Store): void {
   step('the settings', () => { migrateSettingsRecords(store) })
 }
 /**
@@ -229,6 +237,11 @@ export function migrateSettings(value: unknown): unknown {
   })
 }
 /**
+ * The Agent role names a schema 12 block stores, mapped to the names this build uses: the executor role became the
+ * worker, which now carries alignment Tickets too, and the aligner role's read-only discussion duty became the answerer.
+ */
+const LEGACY_ROLES: Readonly<Record<string, AgentRole>> = { main: 'main', aligner: 'answerer', executor: 'worker' }
+/**
  * Convert the per-tool Agent block into the plugin block, narrowing rather than widening every role: a role starts on the
  * built-in defaults, a disabled built-in tool turns its whole plugin off (it may take a sibling tool with it), and the old
  * added tools become one stored plugin scoped to that role and stay enabled. A tool that was both disabled and added stays
@@ -236,28 +249,52 @@ export function migrateSettings(value: unknown): unknown {
  */
 export function migrateAgents(value: unknown): unknown {
   if (!isObject(value)) return value
-  const role = (name: string) => isObject(value[name]) ? value[name] as Stored : undefined
-  if (!AGENT_ROLES.some(name => { const entry = role(name); return entry !== undefined && ('disabledTools' in entry || 'addedTools' in entry) })) return value
+  const entryOf = (name: string) => isObject(value[name]) ? value[name] as Stored : undefined
+  if (!Object.keys(LEGACY_ROLES).some(name => { const entry = entryOf(name); return entry !== undefined && ('disabledTools' in entry || 'addedTools' in entry) })) return value
   const plugins: Stored[] = Array.isArray(value.plugins) ? value.plugins.filter(isObject) : []
   const result: Stored = { ...value, plugins }
-  for (const name of AGENT_ROLES) {
-    const old = role(name) ?? {}
+  for (const [name, role] of Object.entries(LEGACY_ROLES)) {
+    const old = entryOf(name) ?? {}
+    if (!('disabledTools' in old || 'addedTools' in old)) continue
     const { disabledTools, addedTools, ...rest } = old
     const disabled = Array.isArray(disabledTools) ? disabledTools.filter(item => typeof item === 'string') : []
     const enabled = Array.isArray(old.enabledPlugins) ? old.enabledPlugins.filter(item => typeof item === 'string')
-      : [...DEFAULT_ENABLED_PLUGINS[name]].filter(id => {
+      : [...DEFAULT_ENABLED_PLUGINS[role]].filter(id => {
         const plugin = BUILTIN_PLUGINS.find(item => item.id === id)
         return !plugin || !plugin.tools.some(tool => disabled.includes(tool))
       })
     const added = Array.isArray(addedTools) ? addedTools.filter(item => typeof item === 'string') : []
-    const imported = [...new Set(added)].filter(tool => !disabled.includes(tool) && !REQUIRED_TOOLS[name].includes(tool)
+    const imported = [...new Set(added)].filter(tool => !disabled.includes(tool) && !REQUIRED_TOOLS[role].includes(tool)
       && !FORBIDDEN_ADDED_TOOLS.includes(tool))
     if (imported.length > 0) {
-      const id = `imported-${name}`
-      if (!plugins.some(plugin => plugin.id === id)) plugins.push({ id, name: `Imported ${name} tools`, tools: imported, roles: [name] })
+      const id = `imported-${role}`
+      if (!plugins.some(plugin => plugin.id === id)) plugins.push({ id, name: `Imported ${role} tools`, tools: imported, roles: [role] })
       if (!enabled.includes(id)) enabled.push(id)
     }
-    result[name] = { ...rest, enabledPlugins: enabled }
+    result[role] = { ...rest, enabledPlugins: enabled }
+    if (role !== name) delete result[name]
+  }
+  return result
+}
+/**
+ * Rename a schema 12 `agents` block to this build's roles, including the role scopes of its stored plugins; a name the
+ * build already uses stays as it is, so running the step twice changes nothing.
+ */
+export function renameAgents(value: unknown): unknown {
+  if (!isObject(value)) return value
+  const result: Stored = { ...value }
+  for (const [name, role] of Object.entries(LEGACY_ROLES)) {
+    if (name === role || result[name] === undefined) continue
+    const entry = result[name]
+    delete result[name]
+    if (result[role] === undefined) result[role] = entry
+  }
+  if (Array.isArray(value.plugins)) {
+    result.plugins = value.plugins.map(plugin => {
+      if (!isObject(plugin) || !Array.isArray(plugin.roles)) return plugin
+      const roles = plugin.roles.map(role => typeof role === 'string' ? LEGACY_ROLES[role] ?? role : role)
+      return { ...plugin, roles: [...new Set(roles)] }
+    })
   }
   return result
 }
@@ -283,7 +320,7 @@ function withoutRemovedFields(value: Stored): Stored {
   // Rewrite environment variable prefixes from the project's earlier names in `prepare` commands.
   if (typeof kept.prepare === 'string') kept.prepare = kept.prepare.replace(/\bDSH_(?:TAG|GO|FREELANCER)_/g, 'DSH_SUPERAGENT_')
   return { ...rest, ...(typeof paused === 'boolean' ? { paused } : {}), ...(executor ? { executor: kept } : {}),
-    ...(instances ? { sources: instances } : {}), ...(agents !== undefined ? { agents: migrateAgents(agents) } : {}),
+    ...(instances ? { sources: instances } : {}), ...(agents !== undefined ? { agents: renameAgents(migrateAgents(agents)) } : {}),
     ...(policy ? { policy: { ...policyRest, ...(rules ? { rules } : {}), ...(parts ? { sources: parts } : {}) } } : {}) }
 }
 

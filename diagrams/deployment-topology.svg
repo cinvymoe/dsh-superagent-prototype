@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="deployment-topology-title deployment-topology-desc" id="deployment-topology-root">
+        <title id="deployment-topology-title">部署拓扑：本机进程、状态目录、工单目录与外部账号</title>
+        <desc id="deployment-topology-desc">部署图：本机运行一个 DeepSeek Harness profile，内含 Engine 与 SQLite 状态目录、main/worker/answerer 三类 Session、每个 Ticket 一个工单目录；它通过 gh 与 lark-cli 访问 GitHub 和 Feishu。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #deployment-topology-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #deployment-topology-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #deployment-topology-root .container { max-width: 1360px; margin: 0 auto; }
+      #deployment-topology-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #deployment-topology-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #deployment-topology-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #deployment-topology-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #deployment-topology-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #deployment-topology-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #deployment-topology-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #deployment-topology-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #deployment-topology-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #deployment-topology-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #deployment-topology-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #deployment-topology-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #deployment-topology-root .card-dot.coral { background: var(--color-accent); }
+      #deployment-topology-root .card-dot.muted { background: var(--color-muted); }
+      #deployment-topology-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#deployment-topology-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="deployment-topology-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="deployment-topology-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="deployment-topology-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ zones ============ -->
+        <rect x="40" y="80" width="744" height="390" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,4" fill-opacity="0.02" stroke-opacity="0.20"/>
+        <rect x="800" y="80" width="440" height="390" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,4" fill-opacity="0.02" stroke-opacity="0.20"/>
+
+        <!-- ============ connectors ============ -->
+        <line x1="376" y1="160" x2="440" y2="160" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#deployment-topology-arrow)"/>
+        <line x1="220" y1="288" x2="220" y2="232" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#deployment-topology-arrow)"/>
+        <line x1="596" y1="268" x2="596" y2="288" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#deployment-topology-arrow)"/>
+        <line x1="752" y1="160" x2="824" y2="160" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#deployment-topology-arrow-link)"/>
+        <path d="M 752,216 H 784 Q 792,216 792,224 V 348 Q 792,356 800,356 H 824"
+              fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#deployment-topology-arrow-link)"/>
+
+        <!-- ============ zone labels ============ -->
+        <rect x="56" y="74" width="196" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="64" y="86" class="d-label" fill="#5a6580">本机 · 操作系统的登录用户</text>
+        <rect x="816" y="74" width="140" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="824" y="86" class="d-label" fill="#5a6580">外部 · 账号与服务</text>
+
+        <!-- ============ arrow labels ============ -->
+        <rect x="382" y="138" width="56" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="410" y="149" class="d-arrow" fill="#4f5d75" text-anchor="middle">IN-PROCESS</text>
+
+        <rect x="228" y="246" width="44" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="250" y="257" class="d-arrow" fill="#4f5d75" text-anchor="middle">SQLITE</text>
+
+        <rect x="604" y="268" width="40" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="624" y="279" class="d-arrow" fill="#4f5d75" text-anchor="middle">CWD</text>
+
+        <rect x="760" y="138" width="56" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="788" y="149" class="d-arrow" fill="#2e5aa8" text-anchor="middle">HTTPS:443</text>
+
+        <rect x="740" y="268" width="48" height="14" rx="2" fill="#f5f5f5"/>
+        <text x="764" y="279" class="d-arrow" fill="#2e5aa8" text-anchor="middle">LARK-CLI</text>
+
+        <!-- ============ nodes ============ -->
+
+        <!-- DSH process -->
+        <rect x="64" y="120" width="312" height="112" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="120" width="312" height="112" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="72" y="130" width="36" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="90" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">HOST</text>
+        <text x="80" y="158" class="d-name" fill="#2d3142">DeepSeek Harness 进程</text>
+        <text x="80" y="162" class="d-sub" fill="#4f5d75"> </text>
+        <rect x="72" y="172" width="200" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="80" y="188" class="d-sub" fill="#2d3142">panel</text>
+        <text x="264" y="188" class="d-mono" fill="#5a6580" text-anchor="end">127.0.0.1:3082</text>
+        <rect x="72" y="200" width="200" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="80" y="216" class="d-sub" fill="#2d3142">bundle</text>
+        <text x="264" y="216" class="d-mono" fill="#5a6580" text-anchor="end">dsh 0.2.1</text>
+
+        <!-- Engine (focal) -->
+        <rect x="64" y="288" width="312" height="128" rx="6" fill="#f5f5f5"/>
+        <rect x="64" y="288" width="312" height="128" rx="6" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <rect x="72" y="298" width="36" height="12" rx="2" fill="none" stroke="#bf4520" stroke-width="0.8" stroke-opacity="0.50"/>
+        <text x="90" y="307" class="d-tag" fill="#bf4520" text-anchor="middle">STORE</text>
+        <text x="80" y="328" class="d-name" fill="#2d3142">Engine · SQLite</text>
+        <text x="80" y="346" class="d-sub" fill="#4f5d75">唯一状态写入者</text>
+        <rect x="72" y="356" width="200" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="80" y="372" class="d-sub" fill="#2d3142">orchestrator.sqlite</text>
+        <text x="264" y="372" class="d-mono" fill="#5a6580" text-anchor="end">schema 13</text>
+        <rect x="72" y="384" width="200" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="80" y="400" class="d-sub" fill="#2d3142">stateDir</text>
+        <text x="264" y="400" class="d-mono" fill="#5a6580" text-anchor="end">back up first</text>
+
+        <!-- Sessions -->
+        <rect x="440" y="120" width="312" height="148" rx="6" fill="#f5f5f5"/>
+        <rect x="440" y="120" width="312" height="148" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="448" y="130" width="36" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="466" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">PROC</text>
+        <rect x="704" y="130" width="36" height="12" rx="2" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" fill-opacity="0.05" stroke-opacity="0.30"/>
+        <text x="722" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">× 3</text>
+        <text x="456" y="158" class="d-name" fill="#2d3142">Sessions</text>
+        <text x="456" y="176" class="d-mono" fill="#5a6580">main · worker · answerer</text>
+        <rect x="448" y="190" width="288" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="456" y="206" class="d-sub" fill="#2d3142">worker-&lt;ticketId&gt;</text>
+        <text x="728" y="206" class="d-mono" fill="#5a6580" text-anchor="end">maxWorkers</text>
+        <rect x="448" y="218" width="288" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="456" y="234" class="d-sub" fill="#2d3142">answerer-&lt;discussion&gt;</text>
+        <text x="728" y="234" class="d-mono" fill="#5a6580" text-anchor="end">2 slots</text>
+
+        <!-- Ticket directories -->
+        <rect x="440" y="288" width="312" height="128" rx="6" fill="#f5f5f5"/>
+        <rect x="440" y="288" width="312" height="128" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="448" y="298" width="36" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="466" y="307" class="d-tag" fill="#5a6580" text-anchor="middle">DISK</text>
+        <text x="456" y="328" class="d-name" fill="#2d3142">工单目录</text>
+        <text x="456" y="346" class="d-sub" fill="#4f5d75">每个 Ticket 一个</text>
+        <rect x="448" y="356" width="288" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="456" y="372" class="d-sub" fill="#2d3142">worktree agent/&lt;short&gt;</text>
+        <text x="728" y="372" class="d-mono" fill="#5a6580" text-anchor="end">per Ticket</text>
+        <rect x="448" y="384" width="288" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="456" y="400" class="d-sub" fill="#2d3142">prepare（一次）</text>
+        <text x="728" y="400" class="d-mono" fill="#5a6580" text-anchor="end">sh · 10 min</text>
+
+        <!-- GitHub -->
+        <rect x="824" y="120" width="392" height="160" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="120" width="392" height="160" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <rect x="832" y="130" width="60" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.22"/>
+        <text x="862" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">MANAGED</text>
+        <text x="840" y="158" class="d-name" fill="#2d3142">GitHub.com</text>
+        <text x="840" y="176" class="d-sub" fill="#5a6580">agent 账号：notifications + 轮询</text>
+        <rect x="832" y="190" width="368" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="840" y="206" class="d-sub" fill="#2d3142">intake 仓库</text>
+        <text x="1192" y="206" class="d-mono" fill="#5a6580" text-anchor="end">Issues</text>
+        <rect x="832" y="218" width="368" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="840" y="234" class="d-sub" fill="#2d3142">code 仓库</text>
+        <text x="1192" y="234" class="d-mono" fill="#5a6580" text-anchor="end">branches · PR</text>
+        <rect x="832" y="246" width="368" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="840" y="262" class="d-sub" fill="#2d3142">gh（每个 chain 一个 CLI）</text>
+        <text x="1192" y="262" class="d-mono" fill="#5a6580" text-anchor="end">≥ 2.48</text>
+
+        <!-- Feishu -->
+        <rect x="824" y="300" width="392" height="112" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="300" width="392" height="112" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <rect x="832" y="310" width="60" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.22"/>
+        <text x="862" y="319" class="d-tag" fill="#5a6580" text-anchor="middle">OPTIONAL</text>
+        <text x="840" y="338" class="d-name" fill="#2d3142">Feishu / Lark</text>
+        <text x="840" y="356" class="d-sub" fill="#5a6580">bot 身份，不可当人用</text>
+        <rect x="832" y="368" width="368" height="24" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="840" y="384" class="d-sub" fill="#2d3142">lark-cli（bot 配置目录）</text>
+        <text x="1192" y="384" class="d-mono" fill="#5a6580" text-anchor="end">1.0.90</text>
+
+        <!-- ============ annotation ============ -->
+        <text x="40" y="516" class="d-annot" fill="#bf4520">要备份的只有 stateDir：数据库、锁、命令 shim、git 配置与工单目录。</text>
+        <text x="40" y="540" class="d-annot" fill="#5a6580">worker 以操作者身份跑命令，所以隔离靠独立的操作系统账号，不靠这个进程。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <rect x="112" y="656" width="20" height="14" rx="3" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,4" fill-opacity="0.02" stroke-opacity="0.30"/>
+        <text x="140" y="668" class="d-sub" fill="#4f5d75">环境 / 边界</text>
+        <rect x="272" y="658" width="16" height="12" rx="3" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="296" y="668" class="d-sub" fill="#4f5d75">主机 / 进程 / 存储</text>
+        <rect x="452" y="658" width="20" height="12" rx="4" fill="#2d3142" stroke="#4f5d75" stroke-width="0.8" fill-opacity="0.05"/>
+        <text x="480" y="668" class="d-sub" fill="#4f5d75">构件（名字 + 版本）</text>
+        <line x1="636" y1="664" x2="664" y2="664" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#deployment-topology-arrow-link)"/>
+        <text x="672" y="668" class="d-sub" fill="#4f5d75">跨边界协议</text>
+        <line x1="800" y1="664" x2="828" y2="664" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#deployment-topology-arrow)"/>
+        <text x="836" y="668" class="d-sub" fill="#4f5d75">本机内</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/006-deployment.md</text>
+      </svg>

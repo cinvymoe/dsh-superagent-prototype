@@ -214,13 +214,22 @@ export function DiscussionDetail({ id }: { id: string }) {
           <p className="dt-hint">{t('discussion.resultHint')}</p>
           <div className="dt-actions dt-result-actions">
             {discussion.issueId
-              ? <Button variant="primary" size="sm" icon={<Icon name="inbox" size={14} />}
-                onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
+              ? <>
+                {discussion.handoff
+                  ? <Button variant="outline" size="sm" icon={<Icon name="review" size={14} />} disabled>{t('discussion.handedOff')}</Button>
+                  : <Button variant="primary" size="sm" disabled={busy || !result} title={t('discussion.handoffHint')}
+                    icon={<Icon name="review" size={14} />}
+                    onClick={() => { void act(() => call('POST local/discussions/:id/handoff', { id })) }}>{t('discussion.handoff')}</Button>}
+                <Button variant="outline" size="sm" icon={<Icon name="inbox" size={14} />}
+                  onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
+              </>
               : <Button variant="primary" size="sm" disabled={busy}
                 icon={<Icon name="plus" size={14} />} onClick={() => setCreating(true)}>{t('discussion.sendIssue')}</Button>}
             {discussion.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
               onClick={() => { void act(() => call('POST local/discussions/:id/close', { id })) }}>{t('discussion.close')}</Button>}
           </div>
+          {discussion.handoff && <p className="dt-hint">
+            {t('discussion.handoffTo', { ticket: discussion.handoff.ticketId })}<When at={discussion.handoff.at} /></p>}
         </section>
       </aside>
     </div>

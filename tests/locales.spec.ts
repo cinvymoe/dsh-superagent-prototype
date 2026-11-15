@@ -28,7 +28,7 @@ it('names every health entry of dsh-superagent itself, which the overview shows 
   // Each entry by its writer: dsh-superagent, the model budget retries, every kind of the effect queue, Channel messages, the
   // Executor and the unavailable Evals of the last hour.
   const entries = { runtime: 0, models: 0, reply: 0, worker: 0, assessment: 0, launch: 0, delivery: 0, relay: 0,
-    notice: 0, evals: 0 } satisfies Record<EffectKind | 'runtime' | 'models' | 'reply' | 'worker' | 'evals', 0>
+    notice: 0, discussion: 0, evals: 0 } satisfies Record<EffectKind | 'runtime' | 'models' | 'reply' | 'worker' | 'evals', 0>
   expect(Object.keys(entries).filter(name => !(`health.${name}` in zh))).toEqual([])
 })
 
@@ -46,8 +46,8 @@ it('words the reasons agents read in the glossary\'s words: a sender on the list
 })
 
 it('words every change an agents save records, in both languages', () => {
-  const codes = ['agentMainModel', 'agentAlignerModel', 'agentExecutorModel', 'agentMainPluginEnabled', 'agentAlignerPluginEnabled',
-    'agentExecutorPluginEnabled', 'agentMainPluginDisabled', 'agentAlignerPluginDisabled', 'agentExecutorPluginDisabled',
+  const codes = ['agentMainModel', 'agentWorkerModel', 'agentAnswererModel', 'agentMainPluginEnabled', 'agentWorkerPluginEnabled',
+    'agentAnswererPluginEnabled', 'agentMainPluginDisabled', 'agentWorkerPluginDisabled', 'agentAnswererPluginDisabled',
     'agentPluginAdded', 'agentPluginRemoved']
   expect(codes.filter(code => !zh[`change.${code}` as DshSuperagentKey] || !en[`change.${code}` as DshSuperagentKey])).toEqual([])
 })

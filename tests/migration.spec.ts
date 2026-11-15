@@ -194,22 +194,24 @@ it('converts the per-tool Agent block into plugins, narrows each role and keeps 
   expect(agents.main.enabledPlugins).toEqual(['billion-context', 'imported-main'])
   expect(agents.plugins).toEqual(expect.arrayContaining([
     { id: 'imported-main', name: 'Imported main tools', tools: ['compress'], roles: ['main'] },
-    { id: 'imported-executor', name: 'Imported executor tools', tools: ['plugin_lint'], roles: ['executor'] },
+    { id: 'imported-worker', name: 'Imported worker tools', tools: ['plugin_lint'], roles: ['worker'] },
   ]))
-  expect(agents.executor.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents', 'imported-executor'])
-  // The migration only narrows: the new role sets are subsets of the old effective surface, which included the compression
-  // tools whenever the host provided them and the added tools after the catalog.
+  expect(agents.worker.enabledPlugins)
+    .toEqual(['image', 'skills', 'todo', 'subagents', 'billion-context', 'imported-worker'])
+  // The migration narrows the per-tool switches it converts: a disabled tool turns a whole group off, and the added tools
+  // follow the catalog. The one set it widens is the worker's, which gains the compression tools its new default enables.
   const old = {
     main: [...['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'], ...['compress', 'decompress', 'search_context',
       'acp_status', 'acp_cache', 'acp_read_original_image'], 'compress'],
-    executor: [...['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill',
+    worker: [...['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill',
       'web_search', 'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents',
-      'interrupt_agent'].filter(name => name !== 'web_search'), 'plugin_lint'],
+      'interrupt_agent'].filter(name => name !== 'web_search'), ...['compress', 'decompress', 'search_context', 'acp_status',
+      'acp_cache', 'acp_read_original_image'], 'plugin_lint'],
   }
-  const tools = (role: 'main' | 'executor') => roleTools(role, agents)
+  const tools = (role: 'main' | 'worker') => roleTools(role, agents)
   expect(new Set(tools('main'))).toEqual(new Set(old.main))
-  expect(tools('executor').every(name => old.executor.includes(name))).toBe(true)
-  expect(tools('executor')).toContain('plugin_lint')
+  expect(tools('worker').every(name => old.worker.includes(name))).toBe(true)
+  expect(tools('worker')).toContain('plugin_lint')
   // The historical snapshot is converted too, so the history panel reads it in the current shape.
   expect(store.settingsHistory().at(-1)!.settings.agents.main.enabledPlugins).toEqual(['billion-context'])
   store.close()
@@ -240,9 +242,46 @@ it('upgrades a schema 11 database in place, running only the Agent plugin conver
   // The historical revision is converted, so the history panel reads the plugin shape.
   expect(migrated.settingsHistory()[0]!.settings.agents.main.enabledPlugins).toEqual(['billion-context'])
   expect(migrated.settingsHistory()[0]!.settings.agents.plugins.map(plugin => plugin.id)).toEqual(['billion-context'])
-  expect(migrated.settingsHistory()[0]!.settings.agents.executor.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents'])
+  expect(migrated.settingsHistory()[0]!.settings.agents.worker.enabledPlugins)
+    .toEqual(['image', 'skills', 'todo', 'subagents', 'billion-context'])
   // The schema 11 records are otherwise untouched: the schema 10 steps run only for a schema 10 database.
   expect(migrated.tickets.get('t1')).toEqual(ticket)
+  migrated.close()
+})
+
+it('renames the schema 12 Agent roles in the current and historical settings, keeping every override', () => {
+  const path = join(directory, 'db.sqlite')
+  const store = new Store(path)
+  store.close()
+  const db = new DatabaseSync(path)
+  db.prepare("UPDATE kv SET value='12' WHERE key='schema'").run()
+  const version = (revision: number, settings: unknown) => JSON.stringify({ revision, savedAt: '', source: 'panel', policyVersion: '',
+    policyChanged: false, notified: [], settings })
+  // A schema 12 record names its roles main, aligner and executor; a stored plugin scopes itself the same way.
+  const legacy = { agents: {
+    plugins: [{ id: 'imported-executor', name: 'Imported executor tools', tools: ['plugin_lint'], roles: ['executor'] }],
+    main: { model: { provider: 'p', model: 'm' }, enabledPlugins: ['image', 'billion-context', 'imported-executor'] },
+    aligner: { model: null, enabledPlugins: ['image', 'web'] },
+    executor: { model: null, enabledPlugins: ['image', 'skills', 'imported-executor'] },
+  } }
+  db.prepare('INSERT INTO kv VALUES (?, ?)').run('settings-version:1', version(1, legacy))
+  db.prepare('INSERT OR REPLACE INTO kv VALUES (?, ?)').run('settings-revision', '1')
+  db.close()
+  const migrated = new Store(path)
+  expect(migrated.get('schema')).toBe(SCHEMA_VERSION)
+  const agents = migrated.settings().agents
+  // The alignment role became the Answerer, the execution role the worker, and the plugin scope followed it.
+  expect(agents.answerer.enabledPlugins).toEqual(['image', 'web'])
+  expect(agents.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-executor'])
+  expect(agents.main.enabledPlugins).toEqual(['image', 'billion-context', 'imported-executor'])
+  // billion-context is seeded back because the main Session still enables it.
+  expect(agents.plugins).toEqual(expect.arrayContaining([
+    { id: 'imported-executor', name: 'Imported executor tools', tools: ['plugin_lint'], roles: ['worker'] }]))
+  // The historical revision is renamed too, so the history panel diffs the current names.
+  const history = migrated.settingsHistory()[0]!.settings.agents
+  expect(history).not.toHaveProperty('executor')
+  expect(history).not.toHaveProperty('aligner')
+  expect(history.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-executor'])
   migrated.close()
 })
 
@@ -275,7 +314,7 @@ it('changes nothing when one step fails: the database stays at schema 10 as it w
     updatedAt: '2', mandate: mandate({ via: 'listed' }), meta: { sourceTriggerId: 'trig-1', workspace: '/w/fix-1' } }
   // The current settings must validate; an invalid value aborts the migration transaction.
   schema10(path, { settings: { executor: { maxWorkers: 'many' } } }, { ticket: [ticket] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 12 failed: the settings: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 13 failed: the settings: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t1'").get()!.value))).toMatchObject({ meta: { workspace: '/w/fix-1' } })
@@ -548,7 +587,7 @@ it('names the ticket it stopped at when a ticket does not read, and leaves the d
   const path = join(directory, 'db.sqlite')
   const { inputs: _inputs, ...broken } = ticket10('t9')
   schema10(path, {}, { ticket: [broken] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 12 failed: ticket t9: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 13 failed: ticket t9: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t9'").get()!.value))).toEqual(broken)

@@ -73,7 +73,7 @@ describe('resolving the strategy a slice Ticket pinned', () => {
   it('falls back to feature-exec for a mode the contract does not name, as for a Ticket that pinned nothing', () => {
     expect(resolveExecutionStrategy(plan({ mode: 'future' as never, version: EXECUTION_STRATEGY_REVISION }), serves)!.mode).toBe('feature-exec')
   })
-  it('has no strategy for a Ticket without a plan, such as an aligner', () => {
+  it('has no strategy for a Ticket without a plan', () => {
     expect(resolveExecutionStrategy(undefined, serves)).toBeUndefined()
     expect(resolveExecutionStrategy(undefined, bare)).toBeUndefined()
   })
@@ -105,10 +105,10 @@ describe('the worker a slice Ticket gets', () => {
   })
   it('keeps a feature-exec slice\'s execution tools while the executor turns its optional plugins off', () => {
     const off = { main: { model: null, enabledPlugins: ['image', 'billion-context'] },
-      aligner: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] },
-      executor: { model: null, enabledPlugins: ['skills', 'todo', 'subagents'] } }
+      worker: { model: null, enabledPlugins: ['skills', 'todo', 'subagents'] },
+      answerer: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }
     const { allow } = restricted(ticket(featureExec), true, off)
-    // The execution tools are not in the executor's catalog, so no save can turn them off; required tools stay too.
+    // The execution tools are not in the worker's catalog, so no save can turn them off; required tools stay too.
     expect(allow).toEqual(expect.arrayContaining(FEATURE_EXEC))
     expect(allow).toContain('bash')
     expect(allow).not.toContain('web_search')

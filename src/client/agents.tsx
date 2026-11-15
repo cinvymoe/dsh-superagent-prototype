@@ -1,7 +1,7 @@
 /**
- * Agents settings group: the main Session, the aligner and the executor with the model each inherits and the plugins each
- * enables, the shared custom plugin catalog a person may add to and delete from, and the Executor's running load with a
- * link to the concurrency setting.
+ * Agents settings group: the main Session, a worker and a discussion's Answerer with the model each inherits and the plugins
+ * each enables, the shared custom plugin catalog a person may add to and delete from, and the worker load with a link to
+ * the concurrency setting.
  */
 import type { AgentPlugin, AgentsConfig, AgentRole, RoleModel } from '../policy.ts'
 import { roleModel } from '../agent-model.ts'
@@ -20,26 +20,26 @@ import { useState } from 'react'
 type RoleCatalog = SettingsView['agents']['roles'][number]
 type RoleConfig = AgentsConfig[AgentRole]
 // Kept local so the client bundle never imports `policy.ts`, whose runtime graph reaches Node-only modules.
-const ALL_ROLES: readonly AgentRole[] = ['main', 'aligner', 'executor']
+const ALL_ROLES: readonly AgentRole[] = ['main', 'worker', 'answerer']
 /** One role's override, with its model cleared so `roleModel` answers what a blank field would inherit. */
 function withoutOverride(agents: AgentsConfig, role: AgentRole): AgentsConfig {
   switch (role) {
     case 'main': return { ...agents, main: { ...agents.main, model: null } }
-    case 'aligner': return { ...agents, aligner: { ...agents.aligner, model: null } }
-    case 'executor': return { ...agents, executor: { ...agents.executor, model: null } }
+    case 'worker': return { ...agents, worker: { ...agents.worker, model: null } }
+    case 'answerer': return { ...agents, answerer: { ...agents.answerer, model: null } }
   }
 }
 /** Replace one role's override, keeping the other two as they are. */
 function withRole(agents: AgentsConfig, role: AgentRole, next: RoleConfig): AgentsConfig {
   switch (role) {
     case 'main': return { ...agents, main: next }
-    case 'aligner': return { ...agents, aligner: next }
-    case 'executor': return { ...agents, executor: next }
+    case 'worker': return { ...agents, worker: next }
+    case 'answerer': return { ...agents, answerer: next }
   }
 }
 /** Replace every role's config in one edit, for a change that removes a plugin from the whole block. */
 function withRoles(agents: AgentsConfig, edit: (role: AgentRole, config: RoleConfig) => RoleConfig): AgentsConfig {
-  return { ...agents, main: edit('main', agents.main), aligner: edit('aligner', agents.aligner), executor: edit('executor', agents.executor) }
+  return { ...agents, main: edit('main', agents.main), worker: edit('worker', agents.worker), answerer: edit('answerer', agents.answerer) }
 }
 /** A role's model as the panel shows it: `provider / model · effort`, or the DSH default inheriting copy. */
 function modelText(t: T, model: RoleModel | null): string {
@@ -249,7 +249,7 @@ export function AgentsSettings() {
                 </div>
               })}
             </Section>
-            {role === 'executor' && state && <Section title={t('agentConcurrency')} hint={t('agentConcurrencyHint')}>
+            {role === 'worker' && state && <Section title={t('agentConcurrency')} hint={t('agentConcurrencyHint')}>
               <p className="dt-flow">
                 <LabelValue label={t('executingLabel')} value={`${state.load.running} / ${state.load.maxWorkers}`} />
                 <Button variant="ghost" size="sm"

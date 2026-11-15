@@ -1,5 +1,5 @@
 /** Evals: the Thread-level assessments of queued Triggers, and the Decisions they end with. */
-import { key, planTicketId } from './ids.ts'
+import { alignTicketId, key, planTicketId } from './ids.ts'
 import { UserError } from './errors.ts'
 import { DEFAULT_EXECUTION_STRATEGY, liveTicket, threadKey } from './model.ts'
 import type { ActorRef, Decision, DecisionKind, Evaluation, ExecutionStrategy, Mandate, MandateBasis, PlanSlice, Strength, Thread, Ticket,
@@ -14,6 +14,12 @@ function sliceName(slice: PlanSlice): string {
   // The first word must be letters only, so an id such as `C1` cannot lead; `slice` stands in for one.
   const words = slice.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(word => /^[a-z][a-z0-9]*$/.test(word))
   return [words[0] ?? 'slice', ...words.slice(1, 3)].join('-').slice(0, 32).replace(/-+$/, '')
+}
+
+/** A short English ticket name for an alignment, from its requirement title, as the worktree naming rules require. */
+function alignName(title: string): string {
+  const words = title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(word => /^[a-z][a-z0-9]*$/.test(word))
+  return [words[0] ?? 'align', ...words.slice(1, 3)].join('-').slice(0, 32).replace(/-+$/, '') || 'align'
 }
 
 /** An outcome for the Eval that holds a Trigger; `evalId` names the Eval it was judged for, so a later Eval refuses it. */
@@ -310,17 +316,21 @@ export class Evals extends EnginePart {
     }
     return this.accept(thread, evaluation, outcome)
   }
-  /** Record an accept with the Mandate the Eval gives, and have Tickets create its ticket. */
+  /**
+   * Record an accept with the Mandate the Eval gives, and have Tickets create its ticket. A local requirement either opens a
+   * discussion about itself, which creates no ticket and which a person later hands to an Aligner, or aligns before the panel
+   * dispatches its slices.
+   */
   private accept(thread: Thread, evaluation: Evaluation, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Decision {
     const at = this.now()
     const basis = { ...evaluation.basis, ...(outcome.rules ? { rules: outcome.rules } : {}) }
     const { strength, policyVersion, actor } = evaluation
+    const audit = outcome.audit ? { audit: outcome.audit } : {}
+    const local = evaluation.actor.source === 'local'
+    if (local && outcome.mode === 'discuss') return this.finish(thread, evaluation, { kind: 'discuss', reason: reasonOf(outcome.reason), ...audit })
     const mandate: Mandate = { strength, policyVersion, basis, actor, scope: outcome.scope }
     const ticketId = key('ticket', evaluation.id)
-    const audit = outcome.audit ? { audit: outcome.audit } : {}
-    // A local requirement aligns before the panel dispatches its slices; a local discussion never reaches Eval.
-    const accepted: Extract<AssessmentOutcome, { kind: 'accept' }> = evaluation.actor.source === 'local'
-      ? { ...outcome, mode: 'align' } : outcome
+    const accepted: Extract<AssessmentOutcome, { kind: 'accept' }> = local ? { ...outcome, mode: 'align' } : outcome
     const decision = this.finish(thread, evaluation, { kind: 'accept', reason: reasonOf(outcome.reason), ...audit, mandate, ticketId })
     this.tickets.create(ticketId, decision.id, mandate, evaluation, accepted, at)
     return decision
@@ -359,6 +369,33 @@ export class Evals extends EnginePart {
       if (created) tickets.push(created)
     }
     return tickets
+  }
+  /**
+   * Create the Ticket that aligns one local requirement, keyed by the requirement, so a person's handoff from a discussion
+   * starts one Aligner and a repeated handoff returns the same Ticket. The trigger ids are the requirement's human messages,
+   * which give the ticket its channels and its thread subscription, where the Aligner reads the requirement; `note` carries
+   * the discussion's conclusion into its briefing.
+   */
+  acceptAlignment(thread: Thread, input: { issueId: string; title: string; triggerIds: string[]; actor: ActorRef; scope?: string;
+    name?: string; note?: string; at?: string }): Ticket {
+    if (!input.triggerIds.length) throw new UserError('planNeedsTriggers')
+    const ticketId = alignTicketId(input.issueId)
+    const existing = this.repo.tickets.get(ticketId)
+    if (existing && liveTicket(existing)) return existing
+    const at = input.at ?? this.now()
+    const policyVersion = this.policy().version
+    const evaluation: Evaluation = { id: key('evaluation', 'align', input.issueId), threadKey: thread.key,
+      triggerIds: input.triggerIds, primary: input.triggerIds[0], strength: 'explicit', actor: input.actor,
+      basis: { via: 'addressed', addressed: 'direct', source: input.actor.source }, policyVersion, startedAt: at, deadline: at }
+    const mandate: Mandate = { strength: 'explicit', policyVersion, basis: evaluation.basis, actor: input.actor,
+      scope: input.scope ?? input.title }
+    const decision = this.record(thread, evaluation, { kind: 'accept', reason: [{ code: 'explicitRouted' }], mandate, ticketId })
+    this.tickets.create(ticketId, decision.id, mandate, evaluation, { kind: 'accept', title: input.title, scope: mandate.scope,
+      reason: { code: 'explicitRouted' }, mode: 'align', name: input.name ?? alignName(input.title),
+      ...(input.note ? { note: input.note } : {}) }, at)
+    const created = this.repo.tickets.get(ticketId)
+    if (!created) throw new Error('The aligner ticket was not created')
+    return created
   }
   /** Record an Eval's Decision; the Thread's own Eval ends with it, while a gate-only one leaves the Thread's Eval going. */
   private finish(thread: Thread, evaluation: Evaluation, outcome: Finished): Decision {

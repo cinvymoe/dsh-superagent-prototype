@@ -11,9 +11,9 @@ type SourceSettings = SettingsVersion['settings']['sources'][string]
 export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction' | 'ruleEnabled' | 'ruleDisabled' | 'ruleRemoved'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'maxWorkers' | 'paused' | 'resumed' | 'executionDirectory' | 'prepareCommand'
-  | 'blockedCommands' | 'agentMainModel' | 'agentAlignerModel' | 'agentExecutorModel' | 'agentMainPluginEnabled'
-  | 'agentAlignerPluginEnabled' | 'agentExecutorPluginEnabled' | 'agentMainPluginDisabled' | 'agentAlignerPluginDisabled'
-  | 'agentExecutorPluginDisabled' | 'agentPluginAdded' | 'agentPluginRemoved'
+  | 'blockedCommands' | 'agentMainModel' | 'agentWorkerModel' | 'agentAnswererModel' | 'agentMainPluginEnabled'
+  | 'agentWorkerPluginEnabled' | 'agentAnswererPluginEnabled' | 'agentMainPluginDisabled' | 'agentWorkerPluginDisabled'
+  | 'agentAnswererPluginDisabled' | 'agentPluginAdded' | 'agentPluginRemoved'
 /** A single settings diff entry rendered by the panel using `change.<code>` and field labels from the Source listing. */
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
@@ -23,8 +23,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** Each Agent role's model and plugin enable/disable change codes. */
 const AGENT_CHANGES: Readonly<Record<AgentRole, { model: SettingsChangeCode; enabled: SettingsChangeCode; disabled: SettingsChangeCode }>> = {
   main: { model: 'agentMainModel', enabled: 'agentMainPluginEnabled', disabled: 'agentMainPluginDisabled' },
-  aligner: { model: 'agentAlignerModel', enabled: 'agentAlignerPluginEnabled', disabled: 'agentAlignerPluginDisabled' },
-  executor: { model: 'agentExecutorModel', enabled: 'agentExecutorPluginEnabled', disabled: 'agentExecutorPluginDisabled' },
+  worker: { model: 'agentWorkerModel', enabled: 'agentWorkerPluginEnabled', disabled: 'agentWorkerPluginDisabled' },
+  answerer: { model: 'agentAnswererModel', enabled: 'agentAnswererPluginEnabled', disabled: 'agentAnswererPluginDisabled' },
 }
 /** A snapshot's Agent overrides; revisions saved before the block existed carry none. */
 const agentsOf = (settings: SettingsVersion['settings']) => (settings.agents as AgentsConfig | undefined) ?? AgentsConfigSchema.parse({})

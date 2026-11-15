@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="agent-capabilities-title agent-capabilities-desc" id="agent-capabilities-root">
+        <title id="agent-capabilities-title">Agent 工具集的分层拼装与三个角色</title>
+        <desc id="agent-capabilities-desc">分层图：一个 Session 的允许工具由必需核心工具、内置插件组、运行期挂载能力、存储插件和 slice 固定执行策略五层拼装；右侧列出 main、worker、answerer 三个角色各自的默认组合与模型继承。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #agent-capabilities-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #agent-capabilities-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #agent-capabilities-root .container { max-width: 1360px; margin: 0 auto; }
+      #agent-capabilities-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #agent-capabilities-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #agent-capabilities-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #agent-capabilities-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #agent-capabilities-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #agent-capabilities-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #agent-capabilities-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #agent-capabilities-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #agent-capabilities-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #agent-capabilities-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #agent-capabilities-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #agent-capabilities-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #agent-capabilities-root .card-dot.coral { background: var(--color-accent); }
+      #agent-capabilities-root .card-dot.muted { background: var(--color-muted); }
+      #agent-capabilities-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#agent-capabilities-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="agent-capabilities-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="agent-capabilities-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="agent-capabilities-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ layer stack ============ -->
+        <rect x="64" y="136" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="208" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="280" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,3" stroke-opacity="0.12"/>
+        <rect x="64" y="352" width="720" height="72" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <rect x="64" y="424" width="720" height="72" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <rect x="64" y="136" width="720" height="360" fill="none" stroke="#2d3142" stroke-width="1"/>
+
+        <!-- direction indicator -->
+        <text x="64" y="122" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">ALLOW LIST ↓</text>
+        <line x1="44" y1="160" x2="44" y2="472" stroke="#5a6580" stroke-width="1" marker-end="url(#agent-capabilities-arrow)"/>
+
+        <!-- layer 1 -->
+        <text x="80" y="176" class="d-arrow" fill="#5a6580">L1</text>
+        <text x="124" y="170" class="d-name" fill="#2d3142">必需核心工具</text>
+        <text x="124" y="190" class="d-sub" fill="#4f5d75">角色要能工作就必须有的那几个，关不掉</text>
+        <text x="768" y="176" class="d-mono" fill="#5a6580" text-anchor="end">required core</text>
+
+        <!-- layer 2 -->
+        <text x="80" y="248" class="d-arrow" fill="#5a6580">L2</text>
+        <text x="124" y="242" class="d-name" fill="#2d3142">内置插件组</text>
+        <text x="124" y="262" class="d-sub" fill="#4f5d75">image · web · skills · todo · subagents</text>
+        <text x="768" y="248" class="d-mono" fill="#5a6580" text-anchor="end">built-in groups</text>
+
+        <!-- layer 3 -->
+        <text x="80" y="320" class="d-arrow" fill="#5a6580">L3</text>
+        <text x="124" y="314" class="d-name" fill="#2d3142">运行期挂载能力</text>
+        <text x="124" y="334" class="d-sub" fill="#4f5d75">ask-user · present · web-fetch · fork-subagent</text>
+        <text x="768" y="320" class="d-mono" fill="#5a6580" text-anchor="end">mounted at runtime</text>
+
+        <!-- layer 4 (focal) -->
+        <text x="80" y="392" class="d-arrow" fill="#bf4520">L4</text>
+        <text x="124" y="386" class="d-name" fill="#2d3142">存储插件</text>
+        <text x="124" y="406" class="d-sub" fill="#2d3142">billion-context（6 个压缩工具）· 自定义插件（MCP 分组）</text>
+        <text x="768" y="392" class="d-mono" fill="#bf4520" text-anchor="end">stored, editable</text>
+
+        <!-- layer 5 -->
+        <text x="80" y="464" class="d-arrow" fill="#5a6580">L5</text>
+        <text x="124" y="458" class="d-name" fill="#2d3142">slice 固定执行策略</text>
+        <text x="124" y="478" class="d-sub" fill="#4f5d75">feature-exec：feature_exec_* + run 前 guard；native：不加</text>
+        <text x="768" y="464" class="d-mono" fill="#5a6580" text-anchor="end">pinned on plan</text>
+
+        <!-- ============ role column ============ -->
+        <text x="824" y="122" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">THREE ROLES</text>
+
+        <rect x="824" y="136" width="416" height="96" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="136" width="416" height="96" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="146" width="64" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="864" y="155" class="d-tag" fill="#5a6580" text-anchor="middle">MAIN</text>
+        <text x="840" y="176" class="d-name" fill="#2d3142">主 Session</text>
+        <text x="840" y="198" class="d-sub" fill="#4f5d75">只读核心 · 5 秒等待上限</text>
+        <text x="840" y="218" class="d-mono" fill="#5a6580">image + billion-context + 7 built-ins</text>
+
+        <rect x="824" y="248" width="416" height="144" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="248" width="416" height="144" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="258" width="64" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="864" y="267" class="d-tag" fill="#5a6580" text-anchor="middle">WORKER</text>
+        <text x="840" y="288" class="d-name" fill="#2d3142">worker-&lt;ticketId&gt;</text>
+        <text x="840" y="310" class="d-sub" fill="#4f5d75">工作核心 + image / web / skills / todo / subagents</text>
+        <text x="840" y="330" class="d-sub" fill="#4f5d75">billion-context：长对话自己折叠</text>
+        <text x="840" y="350" class="d-sub" fill="#5a6580">subagent 继承同一套插件与权限</text>
+        <text x="840" y="372" class="d-mono" fill="#5a6580">align ticket 与 slice ticket 同一个角色</text>
+
+        <rect x="824" y="408" width="416" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="408" width="416" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="418" width="72" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="868" y="427" class="d-tag" fill="#5a6580" text-anchor="middle">ANSWERER</text>
+        <text x="840" y="448" class="d-name" fill="#2d3142">answerer-&lt;discussion&gt;</text>
+        <text x="840" y="470" class="d-sub" fill="#4f5d75">只读工具；没有 orchestrator_align</text>
+        <text x="840" y="488" class="d-mono" fill="#5a6580">cannot align, dispatch or create a requirement</text>
+
+        <!-- model chain -->
+        <text x="824" y="528" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">MODEL INHERITANCE</text>
+        <text x="824" y="552" class="d-sub" fill="#4f5d75">main ← eval.model　worker ← executor.model</text>
+        <text x="824" y="574" class="d-sub" fill="#4f5d75">answerer ← worker 的生效模型</text>
+
+        <!-- annotation -->
+        <text x="64" y="528" class="d-annot" fill="#bf4520">保存 agents 后，运行中的 Session 在下一个 step 重装 allow list。</text>
+        <text x="64" y="552" class="d-annot" fill="#5a6580">宿主没注册的工具被过滤；进行中的 step 保持它开始时的工具。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <rect x="112" y="658" width="20" height="12" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="140" y="668" class="d-sub" fill="#4f5d75">拼装层</text>
+        <rect x="228" y="658" width="20" height="12" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,3" stroke-opacity="0.30"/>
+        <text x="256" y="668" class="d-sub" fill="#4f5d75">只在开关打开时存在</text>
+        <rect x="428" y="658" width="20" height="12" rx="2" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <text x="456" y="668" class="d-sub" fill="#4f5d75">本轮新增的能力层</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/003-execution.md · 005-panel.md</text>
+      </svg>

@@ -65,7 +65,7 @@
 
     .cards {
       display: grid;
-      grid-template-columns: 1.05fr 1fr 1fr 0.9fr;
+      grid-template-columns: 1.05fr 1fr 1fr 1fr 0.9fr;
       gap: 1rem;
       margin-top: 1.5rem;
     }
@@ -181,13 +181,13 @@
     <header class="header">
       <p class="header-eyebrow">DSH Superagent · Current Architecture</p>
       <h1>本地讨论，Router 决策，slice 执行</h1>
-      <p class="subtitle">Discuss 面板提交需求 → Aligner 出提案 → 人确认 → Engine 按 slice 派 Ticket → Worker 在 feature-exec 的 execute flow 中实现并开 PR。<br>Engine 是唯一状态写入者；Router、Aligner、Worker 之间不直接对话。</p>
+      <p class="subtitle">Discuss 面板提交需求 → Router 选对齐或先讨论 → 讨论结论由人交给 Aligner 出提案 → 人确认 → Engine 按 slice 派 Ticket → Worker 在 feature-exec 的 execute flow 中实现并开 PR。<br>Engine 是唯一状态写入者；Router、Answerer、Aligner、Worker 之间不直接对话。</p>
     </header>
 
     <div class="diagram-container">
       <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="current-architecture-title current-architecture-desc">
         <title id="current-architecture-title">当前架构与角色：本地讨论、Router、Aligner、Worker</title>
-        <desc id="current-architecture-desc">人通过 Discuss 面板提交需求，local Source 把 Trigger 交给 Engine；Engine 让 Router 决策，Router 以 align 模式接单；Engine 创建 align Ticket，由 Aligner 产出 slices 提案；人确认后 Engine 按 slice 派 work Ticket，Worker 在 execute flow 中实现并向 GitHub 开 PR。</desc>
+        <desc id="current-architecture-desc">人通过 Discuss 面板提交需求，local Source 把 Trigger 交给 Engine；Engine 让 Router 决策：Router 以 align 模式接单，或以 discuss 模式先开讨论、只留 Decision 不建 Ticket；讨论由只读 Answerer 回答，人在面板把结论交给 Aligner；Engine 用 acceptAlignment 建需求的唯一 align Ticket，由 Aligner 产出 slices 提案；人确认后 Engine 按 slice 派 work Ticket，Worker 在 execute flow 中实现并向 GitHub 开 PR。</desc>
         <defs>
           <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
@@ -212,6 +212,8 @@
         <line x1="616" y1="460" x2="656" y2="460" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
         <line x1="936" y1="496" x2="968" y2="496" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
         <line x1="656" y1="548" x2="616" y2="548" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="176" y1="360" x2="176" y2="392" stroke="#5a6580" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <line x1="296" y1="440" x2="344" y2="440" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
 
         <!-- Arrow labels: opaque paper masks, 6px above the stroke -->
         <rect x="144" y="204" width="28" height="16" rx="2" fill="#f5f5f5"/>
@@ -241,13 +243,19 @@
         <rect x="618" y="526" width="36" height="16" rx="2" fill="#f5f5f5"/>
         <text x="636" y="538" class="d-label" fill="#4f5d75" text-anchor="middle">回报</text>
 
+        <rect x="184" y="364" width="44" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="206" y="376" class="d-label" fill="#5a6580" text-anchor="middle">提问</text>
+
+        <rect x="300" y="418" width="40" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="320" y="430" class="d-label" fill="#4f5d75" text-anchor="middle">结论</text>
+
         <!-- Node: Human -->
         <rect x="56" y="120" width="240" height="72" rx="6" fill="#f5f5f5"/>
         <rect x="56" y="120" width="240" height="72" rx="6" fill="rgba(79,93,117,0.10)" stroke="#4f5d75" stroke-width="1"/>
         <rect x="64" y="130" width="40" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.22)" stroke-width="0.8"/>
         <text x="84" y="139" class="d-tag" fill="#5a6580" text-anchor="middle">HUMAN</text>
         <text x="176" y="158" class="d-name" fill="#2d3142" text-anchor="middle">人 / 产品</text>
-        <text x="176" y="178" class="d-sub" fill="#4f5d75" text-anchor="middle">提交 · 审阅 · 确认或打回</text>
+        <text x="176" y="178" class="d-sub" fill="#4f5d75" text-anchor="middle">提交 · 审阅 · 确认/打回 · 交结论</text>
 
         <!-- Node: Discuss board / local source -->
         <rect x="56" y="232" width="240" height="128" rx="6" fill="#f5f5f5"/>
@@ -259,6 +267,16 @@
         <text x="176" y="308" class="d-sub" fill="#4f5d75" text-anchor="middle">对齐提案：slices + 验收标准</text>
         <text x="176" y="326" class="d-mono" fill="#5a6580" text-anchor="middle">local:q-…</text>
         <text x="176" y="346" class="d-sub" fill="#2d3142" text-anchor="middle">Confirm → 派发 slice Ticket</text>
+
+        <!-- Node: Answerer (read-only discussion, opened by the Router) -->
+        <rect x="56" y="392" width="240" height="104" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="392" width="240" height="104" rx="6" fill="rgba(79,93,117,0.06)" stroke="#4f5d75" stroke-width="1"/>
+        <rect x="64" y="402" width="64" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="96" y="411" class="d-tag" fill="#5a6580" text-anchor="middle">ANSWERER</text>
+        <text x="176" y="430" class="d-name" fill="#2d3142" text-anchor="middle">Answerer · 只读讨论</text>
+        <text x="176" y="450" class="d-sub" fill="#4f5d75" text-anchor="middle">prompts/discuss.md · 不成 Ticket</text>
+        <text x="176" y="470" class="d-mono" fill="#5a6580" text-anchor="middle">answerer-&lt;d-…&gt;</text>
+        <text x="176" y="486" class="d-sub" fill="#4f5d75" text-anchor="middle">结论由人在面板交给 Aligner</text>
 
         <!-- Node: Engine -->
         <rect x="344" y="120" width="272" height="480" rx="6" fill="#f5f5f5"/>
@@ -307,7 +325,7 @@
         <text x="696" y="139" class="d-tag" fill="#bf4520" text-anchor="middle">ROUTER</text>
         <text x="796" y="160" class="d-name" fill="#2d3142" text-anchor="middle">Router · 主 Session</text>
         <text x="796" y="180" class="d-sub" fill="#4f5d75" text-anchor="middle">orchestrator · settings.eval.model</text>
-        <text x="796" y="200" class="d-sub" fill="#4f5d75" text-anchor="middle">研判 · 路由 · 对外沟通</text>
+        <text x="796" y="200" class="d-sub" fill="#4f5d75" text-anchor="middle">研判 · 路由（align / discuss）</text>
         <text x="796" y="220" class="d-mono" fill="#5a6580" text-anchor="middle">14 tools · 5s · 不写代码</text>
 
         <!-- Node: Aligner -->
@@ -318,7 +336,7 @@
         <text x="796" y="302" class="d-name" fill="#2d3142" text-anchor="middle">Aligner · align Ticket</text>
         <text x="796" y="322" class="d-sub" fill="#4f5d75" text-anchor="middle">每需求一个 Session · 不实现</text>
         <text x="796" y="342" class="d-mono" fill="#5a6580" text-anchor="middle">orchestrator_align</text>
-        <text x="796" y="358" class="d-sub" fill="#4f5d75" text-anchor="middle">summary + slices + dependsOn</text>
+        <text x="796" y="358" class="d-sub" fill="#4f5d75" text-anchor="middle">routing note 引讨论结论 · slices</text>
 
         <!-- Node: Workers -->
         <rect x="656" y="424" width="280" height="152" rx="6" fill="#f5f5f5"/>
@@ -365,7 +383,7 @@
         <p>常驻的研判与路由 Agent，不拥有代码。</p>
         <ul>
           <li>读 candidate 卡，决定 accept / attach / stop / ignore</li>
-          <li>本地需求用 <code>mode='align'</code> 接单，不直接开 worker</li>
+          <li>本地需求：<code>mode=align</code> 交给 Aligner，形态未定则 <code>mode=discuss</code> 只开讨论、不成 Ticket</li>
           <li>把 Worker 的回报、提问转成对外的回复</li>
           <li>不拆 slice、不写实现计划、不调 feature-exec</li>
         </ul>
@@ -398,12 +416,25 @@
       </article>
 
       <article class="card">
+        <p class="eyebrow">Discussion</p>
+        <div class="card-header"><span class="card-dot muted"></span><h3>Answerer · 只读讨论</h3></div>
+        <p>每个讨论一个 Session，只回答，不改代码、不成 Ticket。</p>
+        <ul>
+          <li>需求先谈清楚时由 Router 的 <code>mode=discuss</code> 开讨论，只留 Decision</li>
+          <li>只有 <code>read</code> / <code>read_image</code> / <code>glob</code> / <code>grep</code> 与 <code>prompts/discuss.md</code></li>
+          <li>结论由人在面板「交给对齐」，写成 <code>handoff</code></li>
+          <li>不占 worker slot，讨论保持 open 可继续追问</li>
+        </ul>
+      </article>
+
+      <article class="card">
         <p class="eyebrow">State &amp; transport</p>
         <div class="card-header"><span class="card-dot ink"></span><h3>Engine · 唯一写入者</h3></div>
         <p>所有角色都通过 Engine 的领域命令交互。</p>
         <ul>
           <li>Intake / Eval / Ticket / Assignment / Effects / Outbox</li>
           <li><code>acceptPlan</code>：确认后按 slice 原子建 Ticket</li>
+          <li><code>acceptAlignment</code>：讨论结论交来后建需求的唯一 align Ticket</li>
           <li><code>Ticket.plan</code> 存 issue/slice/acceptance</li>
           <li><code>Ticket.dependsOn</code> 是派发顺序的唯一依据</li>
           <li>SQLite 持久化；重启后 trigger / ticket / effect 可恢复</li>
@@ -427,8 +458,14 @@
           <tr>
             <td><strong>Router</strong></td>
             <td><span>主 Session · <code>orchestrator</code></span></td>
-            <td><span>研判 candidate、以 <code>mode=align</code> 接单、对外沟通、管理 Ticket</span></td>
-            <td><span>不写代码、不拆 slice、不直接调用 feature-exec；shell/job 等待上限 5 秒</span></td>
+            <td><span>研判 candidate、以 <code>mode=align</code> 或 <code>mode=discuss</code> 接单、对外沟通、管理 Ticket</span></td>
+            <td><span>不写代码、不拆 slice、不直接调用 feature-exec；本地需求永不用 <code>mode=work</code>；shell/job 等待上限 5 秒</span></td>
+          </tr>
+          <tr>
+            <td><strong>Answerer</strong></td>
+            <td><span>讨论 Session · 每讨论一个</span></td>
+            <td><span>只读仓库，回答讨论里的每个问题，交出一份可被采用或质疑的结论</span></td>
+            <td><span>不写文件、不跑命令、不建需求、不成 Ticket、不占 worker slot；交结论是人的动作</span></td>
           </tr>
           <tr>
             <td><strong>Aligner</strong></td>
@@ -477,8 +514,8 @@
     </section>
 
     <footer class="footer">
-      <span>dsh-superagent · current architecture · 2026-11-11</span>
-      <span>roles: Human / Router / Aligner / Worker / Engine</span>
+      <span>dsh-superagent · current architecture · 2026-11-15</span>
+      <span>roles: Human / Router / Answerer / Aligner / Worker / Engine</span>
     </footer>
   </div>
 </body>

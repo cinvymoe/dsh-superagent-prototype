@@ -59,6 +59,8 @@ export interface HttpHost {
   /** Whether that checkout can take a local merge, and the one merge at a time it runs through the service script. */
   readonly prepare: Pick<Prepare, 'status' | 'merge'>
   dispatchPlan(issueId: string): Ticket[]
+  /** Hand a discussion's conclusion to the requirement's Aligner, returning the alignment ticket it started or reused. */
+  handOffDiscussion(discussionId: string): Ticket
   /** Resolves once startup finishes or setup determines what is still missing. */
   readonly ready: Promise<void>
   /** Resolved deployment; throws if read while waiting for setup (`!configured()`). */
@@ -265,6 +267,11 @@ function routes(runtime: HttpHost): Routes {
       const answer = runtime.answers.retry(params.id, params.answerId)
       if (!answer) throw new RouteError(404, 'Local answer not found')
       return { discussion: runtime.discussions.get(params.id) }
+    },
+    // The person read the discussion's answer and hands that conclusion to the Aligner; the discussion stays open.
+    'POST local/discussions/:id/handoff': ({ params }) => {
+      const ticket = runtime.handOffDiscussion(params.id)
+      return { ticket: { id: ticket.id, title: ticket.title, mode: ticket.mode }, discussion: runtime.discussions.get(params.id) }
     },
     'POST local/discussions/:id/close': ({ params }) => {
       const discussion = runtime.discussions.close(params.id)

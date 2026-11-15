@@ -40,9 +40,13 @@ export interface Candidate {
 export type AssessmentOutcome =
   | { kind: 'ignore'; reason: string | Reason; audit?: Record<string, unknown> }
   | { kind: 'unavailable'; reason: string | Reason; audit?: Record<string, unknown> }
-  /** An accept: `rules` the assessment matched, `name` the ticket's requested short name, and `note` a routing note for its worker. */
+  /**
+   * An accept: `rules` the assessment matched, `name` the ticket's requested short name, and `note` a routing note for its
+   * worker. `mode` is what a local requirement becomes: `discuss` opens a discussion about it and creates no ticket, and
+   * `align` (the default for a local requirement) hands it to an Aligner.
+   */
   | { kind: 'accept'; title: string; scope: string; reason: string | Reason; acknowledgement?: string; rules?: string[]; audit?: Record<string, unknown>;
-    name?: string; note?: string; mode?: 'work' | 'align'; dependsOn?: string[];
+    name?: string; note?: string; mode?: 'work' | 'align' | 'discuss'; dependsOn?: string[];
     plan?: { issueId: string; sliceId: string; acceptance?: string[]; execution?: ExecutionStrategy } }
   | { kind: 'stop'; ticketId: string; reason: string | Reason; audit?: Record<string, unknown> }
 

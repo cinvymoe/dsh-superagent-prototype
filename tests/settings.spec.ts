@@ -112,7 +112,7 @@ it('records nothing for a pause that changes nothing, refuses a sync while setup
 it('refuses an agents save outside the panel, saves a changed one once and records no second revision for the same value', async () => {
   h = await startRuntime()
   const { settings, store } = h.runtime
-  const value = store.settings().agents, moved = { ...value, executor: { ...value.executor, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] } }
+  const value = store.settings().agents, moved = { ...value, worker: { ...value.worker, enabledPlugins: ['image', 'skills', 'todo', 'subagents'] } }
   await expect(settings.save('agents', moved, store.blockRevision('agents'), 'tool')).rejects.toThrow(new UserError('panelOnlyAgents'))
   expect(store.settings().agents).toEqual(value)
   expect(store.blockRevision('agents')).toBe(0)
@@ -120,14 +120,14 @@ it('refuses an agents save outside the panel, saves a changed one once and recor
   expect(store.settings().agents).toEqual(moved)
   expect(store.blockRevision('agents')).toBe(1)
   // A stored plugin saves as its own revision; one that enables a plugin outside its role is refused first.
-  const failed = { ...moved, executor: { ...moved.executor, enabledPlugins: ['billion-context'] } }
+  const failed = { ...moved, answerer: { ...moved.answerer, enabledPlugins: ['billion-context'] } }
   await expect(settings.save('agents', failed, store.blockRevision('agents'), 'panel'))
     .rejects.toMatchObject({ code: 'agentsPluginRole' })
   const added = { ...moved, plugins: [{ id: 'extra', name: 'Extra tools', tools: ['plugin_lint'] }],
-    executor: { ...moved.executor, enabledPlugins: [...moved.executor.enabledPlugins, 'extra'] } }
+    worker: { ...moved.worker, enabledPlugins: [...moved.worker.enabledPlugins, 'extra'] } }
   await settings.save('agents', added, store.blockRevision('agents'), 'panel')
   expect(store.settings().agents.plugins.map(plugin => plugin.id)).toEqual(['extra', 'billion-context'])
-  expect(store.settings().agents.executor.enabledPlugins).toContain('extra')
+  expect(store.settings().agents.worker.enabledPlugins).toContain('extra')
   expect(store.blockRevision('agents')).toBe(2)
   // The same value again is a no-op save: no new block revision and no new settings revision.
   const revision = store.settingsHistory(1)[0]!.revision

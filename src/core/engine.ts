@@ -103,6 +103,20 @@ export class Engine {
     })
   }
   /**
+   * Hand a local requirement to its Aligner: create the requirement's alignment ticket, keyed by the issue, and start it. The
+   * trigger ids are the requirement's human messages, which the ticket subscribes to, and `note` is what its worker reads first,
+   * such as the conclusion a person confirmed in a discussion. A requirement aligns once, so a repeated handoff returns the
+   * ticket it started.
+   */
+  acceptAlignment(thread: ThreadRef, input: { issueId: string; title: string; triggerIds: string[]; actor: ActorRef; scope?: string;
+    name?: string; note?: string }): Ticket {
+    return this.repo.atomic(() => {
+      const stored = this.repo.threads.get(threadKey(thread))
+      if (!stored) throw new UserError('unknownTrigger')
+      return this.evals.acceptAlignment(stored, input)
+    })
+  }
+  /**
    * Decide a Trigger: the Eval that holds it, or a direct Eval of it alone when none does, such as a person's explicit
    * request the main Session routes. A proactive candidate is accepted only in `auto` mode with enabled rules its assessment
    * matched, and a Trigger that already started a ticket returns that ticket's Decision. An invalid stop is recorded as

@@ -4,6 +4,8 @@ Authorization determines who may start work and what that work may include. This
 
 The host enforces allowed lists, rules and Mandates. Messages, comments and quoted documents are inputs to a decision; they cannot change those permissions.
 
+The figure [`diagrams/authorization-flow.html`](../diagrams/authorization-flow.html) draws the two paths and the three strengths in one frame.
+
 ## Two paths for a Trigger
 
 ### Eval: deciding whether to start work

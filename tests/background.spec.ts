@@ -75,3 +75,20 @@ it('gives up a release of subagents that does not end within 10 seconds, and can
   } finally { vi.useRealTimers() }
   expect(agent.cancel).toHaveBeenCalledWith({ kind: 'user' }, { keepInbox: false })
 })
+
+it('interrupts each live subagent on a host without drainChildren, whose settlement ends it and keeps the Session open', async () => {
+  const agent = { id: 'worker-t1', status: 'idle', whenIdle: async () => {}, inbox: { nextTurn: [], nextStep: [] }, cancel: vi.fn() } as unknown as
+    Agent & { status: string; cancel: ReturnType<typeof vi.fn> }
+  const child = { id: 'child-1', status: 'running', whenIdle: vi.fn(async () => {}), cancel: vi.fn() }
+  const subagents = { listDescendants: vi.fn(async () => [{ id: 'child-1' }]), interrupt: vi.fn() }
+  const ctx = {
+    get: (name: string) => name === 'subagents' ? subagents : undefined,
+    agents: { get: (id: string) => id === 'worker-t1' ? agent : id === 'child-1' ? child : undefined },
+  } as unknown as Context
+  await stopSubagents(ctx, agent)
+  // The child's end is the settlement of its activation, so the Session still admits the subagents of a later Assignment.
+  expect(subagents.interrupt).toHaveBeenCalledWith('child-1', { kind: 'ancestor', agent })
+  expect(child.whenIdle).toHaveBeenCalled()
+  expect(agent.cancel).toHaveBeenCalledWith({ kind: 'user' }, { keepInbox: false })
+  expect(agent.cancel.mock.invocationCallOrder[0]).toBeGreaterThan(subagents.interrupt.mock.invocationCallOrder[0]!)
+})

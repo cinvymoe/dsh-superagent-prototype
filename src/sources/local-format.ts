@@ -147,8 +147,23 @@ export interface LocalAnswer {
 }
 
 /**
- * A discussion held on its own Thread before any requirement exists. Its thread key is `local:<id>`, and the `d-` id
- * prefix keeps it apart from a requirement's `q-` id, so the two record kinds never share a Thread.
+ * The conclusion a person handed to the Aligner, and the alignment ticket it started: the answered message that says what the
+ * requirement should become. The discussion stays open, so a person may keep asking after the handoff.
+ */
+export interface LocalHandoff {
+  /** The answered message whose text was handed over. */
+  answerId: string
+  /** That answer's text, kept so the panel shows what was handed over without reading the Answerer's record. */
+  text: string
+  /** The alignment ticket the handoff started. */
+  ticketId: string
+  at: string
+}
+
+/**
+ * A discussion held on its own Thread. Its thread key is `local:<id>`, and the `d-` id prefix keeps it apart from a
+ * requirement's `q-` id, so the two record kinds never share a Thread. The Router opens one about a requirement when the
+ * requirement needs talking through before it can be aligned, and a person may also open one on its own.
  */
 export interface LocalDiscussion {
   id: string
@@ -157,13 +172,18 @@ export interface LocalDiscussion {
   author: string
   /** Project the discussion belongs to; every discussion names one, and a later requirement keeps it. */
   project: string
-  /** The requirement a person made from this discussion; absent until then, and a discussion has at most one. */
+  /**
+   * The requirement this discussion is about: the one it created, or the one the Router opened it about. A discussion has at
+   * most one, and the requirement names it back.
+   */
   issueId?: string
   createdAt: string
   updatedAt: string
   state: 'open' | 'closed'
   /** Its messages and the Answerer's answers, oldest first; the Thread Trigger of each message keeps the timeline. */
   answers?: LocalAnswer[]
+  /** Set once a person hands its conclusion to the Aligner; absent while the discussion is only being answered. */
+  handoff?: LocalHandoff
 }
 
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */
@@ -174,7 +194,10 @@ export interface LocalIssue {
   author: string
   /** Project that binds this requirement to one execution repository. */
   project?: string
-  /** The discussion this requirement was made from; absent when a person submitted it directly. */
+  /**
+   * The discussion about this requirement: the one it was made from, or the one the Router opened about it. Absent when the
+   * requirement was submitted directly and has not needed a discussion since.
+   */
   discussionId?: string
   /** Images attached when the requirement was submitted; absent when there are none. */
   images?: LocalImage[]

@@ -4,6 +4,8 @@ This document names the concepts of dsh-superagent and the rules each one keeps.
 
 ## Flow
 
+The figure [`diagrams/domain-model.html`](../diagrams/domain-model.html) draws these concepts, their cardinalities and the one edge that creates authority.
+
 Work moves from Trigger to Eval to execution. A Source produces Triggers. A Trigger fans out as context to the Tickets subscribed to its Threads. A person's message that reached a Ticket this way stays with that Ticket; every other Trigger enters Eval, which decides whether it asks for new work. When Eval accepts, it creates a Ticket with a Mandate. An Assignment hands the Ticket to an Executor, and results go back to the Source through a Channel.
 
 ```mermaid
@@ -38,7 +40,7 @@ Source, Thread, Eval, Mandate and Subscription form the core domain; the rest su
 
 A person is not a domain concept. A Trigger carries its actor's identifier as the Source gives it. An allowed list is a Source's part of the Policy, in that Source's identities. That one person has accounts on several Sources is prompt text that the agents read when they need it.
 
-A local project's panel keeps two kinds of work record, each on its own Thread. A requirement (`q-…`) is a submitted piece of work; a discussion (`d-…`) is a conversation before any work is authorized. A discussion is not a requirement record: it keeps only its own text and messages, and it creates at most one requirement, which a person does explicitly and which links the two records. A discussion's message is an ordinary human Trigger, kept for its Thread's timeline, and Eval never evaluates that Thread: the discussion's own read-only Answerer Session answers it, and no Ticket, Assignment or Mandate comes from it. A requirement's message does enter Eval, whose accept gives its Ticket `mode: 'align'`.
+A local project's panel keeps two kinds of work record, each on its own Thread. A requirement (`q-…`) is a submitted piece of work; a discussion (`d-…`) is a conversation before its work is decided. A discussion is not a requirement record: it keeps only its own text and messages, and it is about at most one requirement, which the two records link: a person makes the requirement from it, or the Router opens it about an existing requirement whose work is not decided yet, recording a `discuss` Decision and no Ticket; either direction links the two records and keeps the discussion about one requirement. A discussion's message is an ordinary human Trigger, kept for its Thread's timeline, and Eval never evaluates that Thread: the discussion's own read-only Answerer Session answers it, and no Ticket, Assignment or Mandate comes from it. A person hands the discussion's latest answer to the alignment worker in the panel, which starts the requirement's single alignment Ticket (`mode: 'align'`), carrying the conclusion as its routing note; the discussion stays open. A requirement's own message does enter Eval, whose accept gives its Ticket `mode: 'align'`, or `discuss` when the Router decides its work needs talking through first.
 
 The Executor, with its Sessions and directories, is outside the domain and connects through Assignments.
 
@@ -94,7 +96,7 @@ A reference list of the terms this and the later documents use, with their Chine
 | Decision | 决定 | The result of Eval |
 | Mandate | 授权 | What an accept grants: strength, scope and the Policy version it relied on |
 | Ticket | 工单 | A unit of authorized work |
-| Discussion | 讨论 | A local project's conversation on its own Thread, before any requirement exists; it creates at most one requirement, by an explicit action |
+| Discussion | 讨论 | A local project's conversation on its own Thread, before its work is decided; it is about at most one requirement, and a person hands its conclusion to the alignment worker |
 | Assignment | 派工 | The binding of a Ticket to one Executor instance |
 | Subscription | 订阅 | The relation between a Ticket and a Thread |
 | Fan-out | 扇出 | Delivering Triggers of a subscribed Thread to a Ticket as context |
@@ -109,7 +111,7 @@ A reference list of the terms this and the later documents use, with their Chine
 
 | Group | Values |
 | --- | --- |
-| Decision | accept 接单 · stop 停止 · ignore 忽略 · unavailable 未完成 |
+| Decision | accept 接单 · discuss 先讨论 · stop 停止 · ignore 忽略 · unavailable 未完成 |
 | Strength | explicit 明确 · inferred 推断 |
 | Assignment | pending 待启动 · running 执行中 · ended 已结束 |
 | Report | progress 进展 · waiting 等待 · ready 就绪 · blocked 受阻 · failed 失败 · dropped 无需处理 |

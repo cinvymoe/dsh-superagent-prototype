@@ -206,7 +206,7 @@ export interface ThreadFact { label?: Text; value: Text; problem?: true }
 /** A thread's facts by id, ordered for display; each writer owns its fact ids. */
 export type ThreadFacts = Record<string, ThreadFact>
 
-export type DecisionKind = 'ignore' | 'accept' | 'reopen' | 'stop' | 'unavailable'
+export type DecisionKind = 'ignore' | 'accept' | 'reopen' | 'stop' | 'unavailable' | 'discuss'
 /** Outcome of one eval, recorded on the thread. */
 export interface Decision {
   id: string
@@ -326,7 +326,8 @@ export interface Ticket {
   delivery?: { error: string; at: string }
   /**
    * How its worker works: the default implementation, or the requirement alignment that must be confirmed before delivery.
-   * A local discussion never becomes a Ticket, so it has no mode of its own.
+   * A local discussion never becomes a Ticket, so it has no mode of its own: the Router either aligns a local requirement or
+   * opens a discussion about it, and the person hands that discussion to an Aligner from the panel.
    */
   mode?: 'work' | 'align'
   /** Tickets that must have ended before this one launches, by ticket id. */

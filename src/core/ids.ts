@@ -11,3 +11,11 @@ export function key(...values: string[]): string {
 export function planTicketId(issueId: string, sliceId: string): string {
   return key('ticket', 'plan', issueId, sliceId)
 }
+
+/**
+ * The stable id of the Ticket that aligns one local requirement: the discussion's Aligner. A requirement aligns once, so a
+ * repeated handoff from the panel returns the same Ticket instead of starting a second Aligner.
+ */
+export function alignTicketId(issueId: string): string {
+  return key('ticket', 'align', issueId)
+}

@@ -27,15 +27,15 @@ it('mounts what a role enables, keeps it mounted across refreshes, and unmounts 
   const loader = recordingLoader()
   const warn = vi.fn()
   const capabilities = new Capabilities(ctx, { load: loader.load, warn })
-  const enabled = withPlugins('executor', 'ask-user', 'web-fetch')
-  capabilities.sync('executor', enabled)
+  const enabled = withPlugins('worker', 'ask-user', 'web-fetch')
+  capabilities.sync('worker', enabled)
   // A second refresh with the same block mounts nothing again: a save that changes something else is not a remount.
-  capabilities.sync('executor', enabled)
+  capabilities.sync('worker', enabled)
   await capabilities.settle()
   expect(loader.loaded).toEqual(['@deepseek-ai/dsh-tool-ask-user', '@deepseek-ai/dsh-tool-web'])
   expect(loader.load.mock.calls[1]).toEqual(['@deepseek-ai/dsh-tool-web', { search: false, fetch: true }])
   // Switching one off unmounts only that one; the other keeps the instance it already had.
-  capabilities.sync('executor', withPlugins('executor', 'ask-user'))
+  capabilities.sync('worker', withPlugins('worker', 'ask-user'))
   await capabilities.settle()
   expect(loader.disposed).toEqual(['@deepseek-ai/dsh-tool-web'])
   expect(loader.load).toHaveBeenCalledTimes(2)
@@ -62,11 +62,11 @@ it('reports a module that fails once and does not retry it on every refresh', as
     return { dispose: vi.fn() }
   })
   const capabilities = new Capabilities(ctx, { load, warn })
-  capabilities.sync('executor', withPlugins('executor', 'present'))
+  capabilities.sync('worker', withPlugins('worker', 'present'))
   await capabilities.settle()
   // A module this host cannot load is reported once, with the capability it belonged to, and is not retried on a refresh.
   expect(warn).toHaveBeenCalledWith(expect.stringContaining('present capability (@deepseek-ai/dsh-tool-present)'))
-  capabilities.sync('executor', withPlugins('executor', 'present'))
+  capabilities.sync('worker', withPlugins('worker', 'present'))
   await capabilities.settle()
   expect(load).toHaveBeenCalledTimes(1)
 })
@@ -75,11 +75,11 @@ it('disposes a module that finishes loading after the capability was switched of
   let finish: ((instance: CapabilityInstance) => void) | undefined
   const load = vi.fn(async (): Promise<CapabilityInstance> => new Promise(resolve => { finish = resolve }))
   const capabilities = new Capabilities(ctx, { load, warn: vi.fn() })
-  const enabled = withPlugins('executor', 'fork-subagent')
-  capabilities.sync('executor', enabled)
+  const enabled = withPlugins('worker', 'fork-subagent')
+  capabilities.sync('worker', enabled)
   await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
   // The person switches the capability off while its module is still loading: the late instance must not stay live.
-  capabilities.sync('executor', withPlugins('executor'))
+  capabilities.sync('worker', withPlugins('worker'))
   const instance = { dispose: vi.fn() }
   finish!(instance)
   await capabilities.settle()

@@ -13,14 +13,22 @@ interface Jobs {
   kill(id: string, caller: string, reason?: string): unknown
   readonly events: { subscribe(filter: { owner: string }, listener: (event: { type: string }) => void): () => void }
 }
-/** What the Executor uses of DSH's subagents: joining a worker's subagents that work, its subagents, and releasing them. */
+/** What the Executor uses of DSH's subagents: joining a worker's subagents that work, listing them, and releasing them. */
 interface Subagents {
   /** DSH 0.2.2+ name of the join. */
   waitForTreeWork?(parent: Agent): Promise<boolean>
   /** DSH 0.2.1 name of the join, kept for hosts that still expose it. */
   waitForChildren?(parent: Agent): Promise<boolean>
-  listChildren(parentSessionId: string): Promise<readonly { id: string }[]>
-  drainChildren(parent: Agent, childIds: readonly string[]): Promise<void>
+  /** DSH 0.2.2+ name of the listing: every reachable descendant of the Session. */
+  listDescendants?(rootSessionId: string, signal?: AbortSignal): Promise<readonly { id: string }[]>
+  /** DSH 0.2.1 name of the listing, kept for hosts that still expose it. */
+  listChildren?(parentSessionId: string): Promise<readonly { id: string }[]>
+  /** DSH 0.2.2+ name of the release: every subagent under each of `parents`. */
+  drainDescendants?(parents: readonly Agent[]): Promise<void>
+  /** DSH 0.2.2+ name of the release of one subagent: stopping its work lets its activation settle and end. */
+  interrupt?(childId: string, authority: { kind: 'ancestor'; agent: Agent }): void
+  /** DSH 0.2.1 name of the release, kept for hosts that still expose it. */
+  drainChildren?(parent: Agent, childIds: readonly string[]): Promise<void>
 }
 /** How long a stop waits for a killed job to end, collecting its end so the worker is not woken to hear of it. */
 const KILL_WAIT_MS = 10_000
@@ -148,9 +156,26 @@ export async function stopSubagents(ctx: Context, agent: Agent, keepInbox = fals
   const subagents = subagentsOf(ctx)
   if (!subagents) return
   // The catalog lists every subagent the Session had; one that ended has no agent.
-  const live = (await subagents.listChildren(agent.id)).map(child => child.id).filter(id => ctx.agents.get(id as SessionId))
+  const list = subagents.listDescendants ?? subagents.listChildren
+  if (!list) return
+  const live = (await list.call(subagents, agent.id)).map(child => child.id).filter(id => ctx.agents.get(id as SessionId))
   if (!live.length) return
-  try { await until(subagents.drainChildren(agent, live), undefined, DRAIN_LIMIT_MS) }
+  // Each release ends the child and keeps the Session open for the subagents of a later Assignment, which DSH 0.2.2's
+  // drain of descendants would close until the worker's agent is disposed. 0.2.1 released the ids it had listed; 0.2.2
+  // interrupts each child, whose settlement disposes it, and the whole-tree drain is left for a host reporting neither.
+  try {
+    if (subagents.drainChildren) await until(subagents.drainChildren.call(subagents, agent, live), undefined, DRAIN_LIMIT_MS)
+    else if (subagents.interrupt) {
+      const failures: unknown[] = []
+      for (const id of live) {
+        try { subagents.interrupt.call(subagents, id, { kind: 'ancestor', agent }) } catch (error) { failures.push(error) }
+      }
+      if (failures.length) throw new AggregateError(failures, `Interrupting the subagents of ${agent.id} failed`)
+      const settled = Promise.all(live.map(id => ctx.agents.get(id as SessionId)?.whenIdle() ?? Promise.resolve()))
+      await until(settled, undefined, DRAIN_LIMIT_MS)
+    }
+    else if (subagents.drainDescendants) await until(subagents.drainDescendants.call(subagents, [agent]), undefined, DRAIN_LIMIT_MS)
+  }
   finally {
     if (agent.status !== 'idle') cancelled.add(agent)
     agent.cancel({ kind: 'user' }, { keepInbox })

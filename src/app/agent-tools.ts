@@ -11,10 +11,12 @@ export { COMPRESSION_TOOLS }
 /** The agent presets Executor Sessions and the main Session are created with, which the bundle's patch defines. */
 export const WORKER_PRESET = 'dsh-superagent-worker', ROUTER_PRESET = 'dsh-superagent-router'
 /**
- * The DSH tools an Executor Session works with, in catalog order: files, search, the shell and its jobs, the web, skills, its
+ * The DSH tools a worker Session works with, in catalog order: files, search, the shell and its jobs, the web, skills, its
  * todo list and subagents. It gets no other tool the profile has, whenever it was registered: none that asks or shows a person
  * something, changes the profile, schedules work or starts goals outside the worker slots, the pause and a person's hold,
- * starts or messages other Sessions, or edits documents.
+ * starts or messages other Sessions, or edits documents. A plugin tool outside this order — billion-context's compression
+ * tools, which the worker enables so a long-running Executor can fold its own history — is appended after it by
+ * `roleTools`, in the catalog order of the plugin that declares it.
  */
 export const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill', 'web_search',
   'web_fetch', 'skill', 'todo_write', 'subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent']
@@ -23,12 +25,13 @@ export const MAIN_TOOLS = ['skill', 'bash', 'read', 'read_image', 'job_output', 
 /**
  * The tools a role cannot turn off: they are not part of any plugin, appear in its read-only required row, and stay in the
  * allow list whenever the host provides them. `skill` is required on the main Session but comes from the `skills` plugin on a
- * worker, and both platform shells are required on a worker while a host registers only its own.
+ * worker, and both platform shells are required on a worker while a host registers only its own. The Answerer keeps the
+ * same row because it runs the standard worker preset; its runtime whitelist narrows the allow list to reading tools.
  */
 export const REQUIRED_TOOLS: Readonly<Record<AgentRole, readonly string[]>> = {
   main: ['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'],
-  aligner: ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'],
-  executor: ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'],
+  worker: ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'],
+  answerer: ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'],
 }
 /**
  * A plugin a Session mounts into its own scope when the role enables it: the module the profile resolves, and the config
@@ -58,12 +61,12 @@ export interface BuiltinPlugin extends AgentPlugin {
 export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
   { id: 'image', name: 'Image', description: 'Read an image file from the workspace.', tools: ['read_image'], roles: [...AGENT_ROLES],
     providedBy: 'preset' },
-  { id: 'web', name: 'Web', description: 'Search the web and fetch a page.', tools: ['web_search', 'web_fetch'], roles: ['aligner', 'executor'],
+  { id: 'web', name: 'Web', description: 'Search the web and fetch a page.', tools: ['web_search', 'web_fetch'], roles: ['worker', 'answerer'],
     providedBy: 'preset' },
-  { id: 'skills', name: 'Skills', description: 'Load a skill by name.', tools: ['skill'], roles: ['aligner', 'executor'], providedBy: 'preset' },
-  { id: 'todo', name: 'Todo', description: 'Keep a todo list across the turn.', tools: ['todo_write'], roles: ['aligner', 'executor'],
+  { id: 'skills', name: 'Skills', description: 'Load a skill by name.', tools: ['skill'], roles: ['worker', 'answerer'], providedBy: 'preset' },
+  { id: 'todo', name: 'Todo', description: 'Keep a todo list across the turn.', tools: ['todo_write'], roles: ['worker', 'answerer'],
     providedBy: 'preset' },
-  { id: 'subagents', name: 'Subagents', description: 'Start and message other agents.', roles: ['aligner', 'executor'],
+  { id: 'subagents', name: 'Subagents', description: 'Start and message other agents.', roles: ['worker', 'answerer'],
     tools: ['subagent', 'list_subagent_models', 'send_message', 'list_agents', 'interrupt_agent'], providedBy: 'preset' },
   // Standard-mode plugins no superagent preset registers: a role enables one and its Session mounts it, so an unenabled
   // capability has no tool and no prompt section at all. `ask-user` blocks on the main Session because a person is waiting
@@ -129,8 +132,8 @@ export const forbiddenAddedTool = (name: string): boolean => FORBIDDEN_ADDED_TOO
 /** Each role's preset; the built-in plugin definitions above hold the tools, so a role only keeps its preset and required tools. */
 export const AGENT_TOOLS: Readonly<Record<AgentRole, AgentTools>> = {
   main: { preset: ROUTER_PRESET, required: REQUIRED_TOOLS.main },
-  aligner: { preset: WORKER_PRESET, required: REQUIRED_TOOLS.aligner },
-  executor: { preset: WORKER_PRESET, required: REQUIRED_TOOLS.executor },
+  worker: { preset: WORKER_PRESET, required: REQUIRED_TOOLS.worker },
+  answerer: { preset: WORKER_PRESET, required: REQUIRED_TOOLS.answerer },
 }
 /** Whether a plugin's definition applies to `role`; an absent `roles` means every role. */
 export function pluginApplies(plugin: Pick<AgentPlugin, 'roles'>, role: AgentRole): boolean {
@@ -191,12 +194,15 @@ export function closeAgentPlugins(role: AgentRole, agents: AgentsConfig): string
   for (const id of agents[role].enabledPlugins) if (!out.includes(id)) out.push(id)
   return out
 }
-/** The saved block with every role's `requires` closed over, so enabling one capability also enables what it depends on. */
+/**
+ * The saved block with every role's `requires` closed over, so enabling one capability also enables what it depends on.
+ * The Answerer starts from a worker's defaults, so closing a block never turns a worker plugin on for it.
+ */
 export function closeAgentsPlugins(agents: AgentsConfig): AgentsConfig {
   return { ...agents,
     main: { ...agents.main, enabledPlugins: closeAgentPlugins('main', agents) },
-    aligner: { ...agents.aligner, enabledPlugins: closeAgentPlugins('aligner', agents) },
-    executor: { ...agents.executor, enabledPlugins: closeAgentPlugins('executor', agents) } }
+    worker: { ...agents.worker, enabledPlugins: closeAgentPlugins('worker', agents) },
+    answerer: { ...agents.answerer, enabledPlugins: closeAgentPlugins('answerer', agents) } }
 }
 /** A role's catalog order: the main Session's built-ins, else the work tools, which keeps a Session's allow list stable. */
 export function orderedTools(role: AgentRole): readonly string[] {

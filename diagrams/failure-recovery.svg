@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="failure-recovery-title failure-recovery-desc" id="failure-recovery-root">
+        <title id="failure-recovery-title">失败与恢复：自动重试、挂起、恢复与横切规则</title>
+        <desc id="failure-recovery-desc">流程图：一次失败先判断是否为过路性故障，是则自动重试三次，否则 Ticket 挂起；挂起由人的消息、Retry 或新的非失败报告恢复。下方列出重启、先落库、暂停与观察四条横切规则。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #failure-recovery-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #failure-recovery-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #failure-recovery-root .container { max-width: 1360px; margin: 0 auto; }
+      #failure-recovery-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #failure-recovery-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 80ch; }
+      #failure-recovery-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #failure-recovery-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #failure-recovery-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #failure-recovery-root .d-sub { font-family: var(--font-sans); font-size: 12px; }
+      #failure-recovery-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.04em; }
+      #failure-recovery-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #failure-recovery-root .d-label { font-family: var(--font-sans); font-size: 12px; font-weight: 500; }
+      #failure-recovery-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 14px; }
+      #failure-recovery-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #failure-recovery-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #failure-recovery-root .card-dot.coral { background: var(--color-accent); }
+      #failure-recovery-root .card-dot.muted { background: var(--color-muted); }
+      #failure-recovery-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#failure-recovery-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="failure-recovery-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="failure-recovery-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+          <marker id="failure-recovery-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <!-- ============ zone (drawn before arrows and nodes) ============ -->
+        <rect x="40" y="356" width="1200" height="140" rx="8" fill="#2d3142" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,4" fill-opacity="0.02" stroke-opacity="0.20"/>
+
+        <!-- ============ connectors ============ -->
+        <line x1="264" y1="200" x2="272" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#failure-recovery-arrow)"/>
+        <line x1="408" y1="200" x2="456" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#failure-recovery-arrow)"/>
+        <line x1="680" y1="200" x2="744" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#failure-recovery-arrow)"/>
+        <line x1="964" y1="200" x2="1008" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#failure-recovery-arrow)"/>
+        <path d="M 344,248 V 276 Q 344,284 352,284 H 846 Q 854,284 854,276 V 252"
+              fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#failure-recovery-arrow)"/>
+
+        <!-- ============ arrow labels ============ -->
+        <rect x="416" y="174" width="24" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="428" y="186" class="d-label" fill="#4f5d75" text-anchor="middle">是</text>
+
+        <rect x="352" y="252" width="24" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="364" y="264" class="d-label" fill="#4f5d75" text-anchor="middle">否</text>
+
+        <!-- ============ zone label ============ -->
+        <rect x="56" y="350" width="168" height="16" rx="2" fill="#f5f5f5"/>
+        <text x="64" y="362" class="d-label" fill="#5a6580">横切：故障时仍然成立</text>
+
+        <!-- ============ nodes ============ -->
+
+        <!-- failure -->
+        <rect x="56" y="156" width="208" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="156" width="208" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="64" y="166" width="56" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="92" y="175" class="d-tag" fill="#5a6580" text-anchor="middle">FAILURE</text>
+        <text x="72" y="200" class="d-name" fill="#2d3142">一次失败</text>
+        <text x="72" y="226" class="d-mono" fill="#4f5d75">launch · turn · effect · reply</text>
+        <text x="72" y="242" class="d-sub" fill="#5a6580">Source 读取 / 消息发送</text>
+
+        <!-- transient? -->
+        <polygon points="272,200 344,152 416,200 344,248" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="344" y="196" class="d-name" fill="#2d3142" text-anchor="middle">过路性？</text>
+        <text x="344" y="214" class="d-mono" fill="#5a6580" text-anchor="middle">408 / 429 / 5xx</text>
+
+        <!-- auto retry -->
+        <rect x="456" y="148" width="224" height="104" rx="6" fill="#f5f5f5"/>
+        <rect x="456" y="148" width="224" height="104" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="464" y="158" width="64" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
+        <text x="496" y="167" class="d-tag" fill="#5a6580" text-anchor="middle">AUTO RETRY</text>
+        <text x="472" y="192" class="d-name" fill="#2d3142">自动重试 ×3</text>
+        <text x="472" y="214" class="d-sub" fill="#4f5d75">重跑 launch · 让 turn 继续</text>
+        <text x="472" y="232" class="d-sub" fill="#4f5d75">prepare 失败不重试</text>
+        <text x="472" y="248" class="d-mono" fill="#5a6580">3 次仍失败 → 挂起</text>
+
+        <!-- held -->
+        <rect x="744" y="148" width="220" height="104" rx="6" fill="#f5f5f5"/>
+        <rect x="744" y="148" width="220" height="104" rx="6" fill="#2d3142" stroke="#2d3142" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <rect x="752" y="158" width="40" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.22"/>
+        <text x="772" y="167" class="d-tag" fill="#5a6580" text-anchor="middle">HELD</text>
+        <text x="760" y="192" class="d-name" fill="#2d3142">挂起</text>
+        <text x="760" y="214" class="d-sub" fill="#4f5d75">不再自动投递 Input</text>
+        <text x="760" y="232" class="d-sub" fill="#4f5d75">CI / bot 消息只记录</text>
+        <text x="760" y="248" class="d-sub" fill="#5a6580">工具仍在，人可以继续</text>
+
+        <!-- recover (focal) -->
+        <rect x="1008" y="148" width="216" height="104" rx="6" fill="#f5f5f5"/>
+        <rect x="1008" y="148" width="216" height="104" rx="6" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <rect x="1016" y="158" width="60" height="12" rx="2" fill="none" stroke="#bf4520" stroke-width="0.8" stroke-opacity="0.50"/>
+        <text x="1046" y="167" class="d-tag" fill="#bf4520" text-anchor="middle">RECOVER</text>
+        <text x="1024" y="192" class="d-name" fill="#2d3142">恢复</text>
+        <text x="1024" y="214" class="d-sub" fill="#4f5d75">人的消息 · Retry</text>
+        <text x="1024" y="232" class="d-sub" fill="#4f5d75">新的非失败 Report</text>
+        <text x="1024" y="248" class="d-mono" fill="#4f5d75">→ 新 Assignment</text>
+
+        <!-- ============ cross-cutting cards ============ -->
+        <text x="64" y="402" class="d-tag" fill="#5a6580" letter-spacing="0.1em">RESTART</text>
+        <text x="64" y="426" class="d-name" fill="#2d3142">重启</text>
+        <text x="64" y="448" class="d-sub" fill="#4f5d75">running → ended：host restarted</text>
+        <text x="64" y="468" class="d-sub" fill="#4f5d75">新 Assignment 带恢复提示，最旧优先</text>
+
+        <text x="380" y="402" class="d-tag" fill="#5a6580" letter-spacing="0.1em">STORED WORK</text>
+        <text x="380" y="426" class="d-name" fill="#2d3142">先落库，再执行</text>
+        <text x="380" y="448" class="d-sub" fill="#4f5d75">effect 退避 2s → 60s；消息 5s → 300s</text>
+        <text x="380" y="468" class="d-sub" fill="#4f5d75">同一会话内保序；三次连续失败才升级</text>
+
+        <text x="696" y="402" class="d-tag" fill="#5a6580" letter-spacing="0.1em">PAUSE</text>
+        <text x="696" y="426" class="d-name" fill="#2d3142">暂停处理</text>
+        <text x="696" y="448" class="d-sub" fill="#4f5d75">停派发 · Eval · 投递 · 回复</text>
+        <text x="696" y="468" class="d-sub" fill="#4f5d75">不打断 turn；Eval 截止随之后移</text>
+
+        <text x="1012" y="402" class="d-tag" fill="#5a6580" letter-spacing="0.1em">OBSERVE</text>
+        <text x="1012" y="426" class="d-name" fill="#2d3142">观察</text>
+        <text x="1012" y="448" class="d-sub" fill="#4f5d75">同一类连续 3 次</text>
+        <text x="1012" y="468" class="d-sub" fill="#4f5d75">才成为系统问题</text>
+
+        <text x="640" y="556" class="d-annot" fill="#bf4520" text-anchor="middle">挂起只停自动输入，不停工具；恢复总要付出一个新的 Assignment。</text>
+
+        <!-- ============ legend strip ============ -->
+        <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>
+        <text x="40" y="668" class="d-tag" fill="#4f5d75" letter-spacing="0.14em">LEGEND</text>
+        <polygon points="96,664 116,656 136,664 116,672" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="144" y="668" class="d-sub" fill="#4f5d75">判定</text>
+        <line x1="216" y1="664" x2="244" y2="664" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#failure-recovery-arrow)"/>
+        <text x="252" y="668" class="d-sub" fill="#4f5d75">处理路径</text>
+        <rect x="372" y="658" width="20" height="12" rx="3" fill="#bf4520" stroke="#bf4520" stroke-width="1.2" fill-opacity="0.08"/>
+        <text x="400" y="668" class="d-sub" fill="#4f5d75">唯一能放开挂起的地方</text>
+        <line x1="608" y1="664" x2="636" y2="664" stroke="#2d3142" stroke-width="0.8" stroke-dasharray="4,4" stroke-opacity="0.20"/>
+        <text x="644" y="668" class="d-sub" fill="#4f5d75">横切规则（不随路径变化）</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/003-execution.md</text>
+      </svg>

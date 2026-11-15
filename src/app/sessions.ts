@@ -16,7 +16,7 @@ import type { Effects } from './effects.ts'
 import { resolveExecutionStrategy, type ExecutionServices } from './execution-strategy.ts'
 import type { Variable } from './execution-environment.ts'
 import { RetryHealth } from './retry-health.ts'
-import { initializeRoleModel, roleModel, workerRole } from './role-models.ts'
+import { initializeRoleModel, roleModel } from './role-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { LocalDiscussion } from '../sources/local-format.ts'
@@ -161,7 +161,7 @@ export class Sessions {
     if ('error' in result) throw result.error
     const settings = this.host.store.settings()
     await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? roleModel(settings, 'main')
-      : roleModel(settings, answerer ? 'aligner' : workerRole(this.ticketFor(id))))
+      : roleModel(settings, answerer ? 'answerer' : 'worker'))
     await this.decorate(result.agent)
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })
@@ -173,7 +173,7 @@ export class Sessions {
   }
   /**
    * Decorates a Session forked from a Ticket's worker Session so it answers one question about that Ticket: the answer
-   * prompt in place of the worker preset's, exactly `read`, `read_image`, `glob` and `grep`, the executor role's model, and
+   * prompt in place of the worker preset's, exactly `read`, `read_image`, `glob` and `grep`, the worker role's model, and
    * `danger-full-access` so those reading tools reach the Ticket directory. The whitelist is the read-only boundary; the
    * question port archives the Session after the answer, and `agent/disposed` releases these registrations.
    */
@@ -186,7 +186,7 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     const missing = ANSWER_TOOLS.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the Q&A Session's tools ${missing.join(', ')}, which this host does not provide`)
-    await initializeRoleModel(ctx, agent, roleModel(this.host.store.settings(), 'executor'))
+    await initializeRoleModel(ctx, agent, roleModel(this.host.store.settings(), 'worker'))
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-answer', order: 9999, complete: true, text: () => {
@@ -437,13 +437,13 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     const current = () => store.tickets.get(ticket.id) ?? ticket
     const strategyOf = (now: Ticket) => now.plan ? resolveExecutionStrategy(now.plan, this.executionServices()) : undefined
-    // The role follows the Ticket: an aligner Session uses the aligner's plugins, every other one the executor's.
+    // Every Ticket Session is a worker's, alignment and execution alike.
     // Execution tools a slice's strategy adds never come from a plugin, so no `agents` save can turn them off.
     const allow = () => {
       const now = current()
       const agents = store.settings().agents
-      binding.capabilities?.sync(workerRole(now), agents)
-      const tools = [...roleTools(workerRole(now), agents), ...strategyOf(now)?.tools ?? []]
+      binding.capabilities?.sync('worker', agents)
+      const tools = [...roleTools('worker', agents), ...strategyOf(now)?.tools ?? []]
       return [...new Set(tools)].filter(name => agent.ctx.tools.get(name, parent))
     }
     const strategy = strategyOf(current())
@@ -466,8 +466,8 @@ export class Sessions {
   /** Restricts an Answerer Session to the read-only tools, failing when this host does not provide them. */
   private answerOnly(agent: Agent): (() => void)[] {
     const parent = scopeParentOf(agent)
-    // The aligner's own plugin switches narrow the read-only whitelist; a switch it disables removes its tool, not `read`.
-    const enabled = new Set(roleTools('aligner', this.host.store.settings().agents))
+    // The Answerer's own plugin switches narrow the read-only whitelist; a switch it disables removes its tool, not `read`.
+    const enabled = new Set(roleTools('answerer', this.host.store.settings().agents))
     const allow = ANSWER_TOOLS.filter(name => enabled.has(name) && agent.ctx.tools.get(name, parent))
     if (!allow.includes('read')) throw new Error('dsh-superagent needs the discussion Answerer\'s read tool, which this host does not provide')
     return [agent.ctx.tools.restrict({ allow })]

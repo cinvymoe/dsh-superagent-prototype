@@ -1,8 +1,8 @@
-/** Read/write operations for discussions held on their own Threads, before any requirement exists for them. */
+/** Read/write operations for discussions held on their own Threads, apart from the requirements they talk through. */
 import { key, UserError, type ReceiveResult, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, type LocalDiscussion } from '../sources/local-format.ts'
+import { LOCAL_ACTOR, type LocalDiscussion, type LocalHandoff } from '../sources/local-format.ts'
 import { requirementTitle } from './local.ts'
 import type { Store } from './store.ts'
 
@@ -18,12 +18,21 @@ export interface DiscussionsHost {
   now?(): string
 }
 
-export interface DiscussionInput { body?: string; project: string; author?: string }
+export interface DiscussionInput {
+  body?: string
+  project: string
+  author?: string
+  /** The requirement the Router opened it about, if any. */
+  issueId?: string
+  /** Its title, when the record it talks about already has one; otherwise the body's first line names it. */
+  title?: string
+}
 
 /**
  * Owns the local discussion records, which live in their own KV family and never in a requirement's own record family.
  * Every discussion gets its own Thread (`local:d-…`); a comment still enters the Engine through a normal human Trigger.
- * A discussion may create at most one requirement, which `LocalIssues` records here through `link`.
+ * A discussion names at most one requirement: the one it created, which `LocalIssues` records here through `link`, or the one
+ * the Router opened it about. It never becomes a Ticket itself.
  */
 export class Discussions {
   constructor(private readonly host: DiscussionsHost) {}
@@ -48,17 +57,18 @@ export class Discussions {
 
   /**
    * Create a discussion from its text and submit that text as the first human Trigger of its own Thread. The project is
-   * checked before anything is written, so a refused create leaves no record and no Thread behind.
+   * checked before anything is written, so a refused create leaves no record and no Thread behind. `input.issueId` names the
+   * requirement the Router opened it about, and the discussion is stored with that link from the start.
    */
   create(input: DiscussionInput): LocalDiscussion {
     if (!this.host.store.get(KV.local.project(input.project))) throw new UserError('unknownProject')
     const body = (input.body ?? '').trim()
-    const title = requirementTitle(body)
+    const title = input.title?.trim() || requirementTitle(body)
     if (!title) throw new UserError('discussionEmpty')
     const at = this.clock()
     const id = `d-${key('local-discussion', at, title, String(this.list().length)).slice(0, 8)}`
     const discussion: LocalDiscussion = { id, title, body, author: input.author?.trim() || LOCAL_ACTOR, project: input.project,
-      createdAt: at, updatedAt: at, state: 'open' }
+      ...(input.issueId ? { issueId: input.issueId } : {}), createdAt: at, updatedAt: at, state: 'open' }
     this.host.store.set(KV.local.discussion(id), discussion)
     const triggerId = key('local-trigger', id, at)
     try { this.host.receive(localTrigger({ discussion, text: body, at, id: triggerId })) }
@@ -96,6 +106,18 @@ export class Discussions {
     const triggerId = key('local-trigger', id, at, text)
     this.host.receive(localTrigger({ discussion: updated, text: text.trim(), at, id: triggerId }))
     this.host.answer?.(updated, text.trim(), triggerId)
+    return updated
+  }
+
+  /**
+   * Record the conclusion a person handed to the Aligner, with the alignment ticket it started. The record keeps its state and
+   * its messages, so the discussion may keep answering questions after the handoff.
+   */
+  handoff(id: string, handoff: LocalHandoff): LocalDiscussion | undefined {
+    const discussion = this.get(id)
+    if (!discussion) return undefined
+    const updated: LocalDiscussion = { ...discussion, handoff, updatedAt: handoff.at }
+    this.host.store.set(KV.local.discussion(id), updated)
     return updated
   }
 

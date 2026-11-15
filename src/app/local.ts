@@ -273,6 +273,13 @@ export class LocalIssues {
   }
 
   /** The submitted text plus one absolute path per image, so a worker can read the image the person attached. */
+  /** The text a discussion about this requirement starts with: its description, with the images it names. */
+  discussionBody(id: string): string {
+    const issue = this.get(id)
+    if (!issue) return ''
+    return this.requirementText(issue, issue.body)
+  }
+
   private requirementText(issue: LocalIssue, text: string): string {
     const images = issue.images ?? []
     const lines = images.map(image => `- ${requirementImagePath(this.host.stateDir, issue.id, image)} (${image.mediaType}, ${image.bytes} bytes)`)
@@ -336,16 +343,38 @@ export class LocalIssues {
     return updated
   }
 
+  /**
+   * The requirement's human messages on its Thread, newest last. Every ticket made for the requirement starts from them: they
+   * give it its channels and its thread subscription.
+   */
+  humanTriggers(id: string): string[] {
+    const thread = this.host.store.threads.get(this.thread(id))
+    if (!thread) return []
+    return this.host.store.read.threadTriggers(thread.key, 200)
+      .filter(trigger => trigger.source === LOCAL_SOURCE && trigger.human).map(trigger => trigger.id)
+  }
+
   /** The inputs a confirmed plan dispatches with: the issue thread, its human triggers, the author and its execution strategy. */
   planInput(id: string): { thread: Thread; triggerIds: string[]; actor: ActorRef; execution: ExecutionStrategy } | undefined {
     const issue = this.get(id)
     if (!issue || currentAlignment(issue)?.status !== 'confirmed') return undefined
     const thread = this.host.store.threads.get(this.thread(id))
     if (!thread) return undefined
-    const triggerIds = this.host.store.read.threadTriggers(thread.key, 200)
-      .filter(trigger => trigger.source === LOCAL_SOURCE && trigger.human).map(trigger => trigger.id)
+    const triggerIds = this.humanTriggers(id)
     if (!triggerIds.length) return undefined
     return { thread, triggerIds, actor: { source: LOCAL_SOURCE, id: issue.author || LOCAL_ACTOR }, execution: this.executionStrategy(issue) }
+  }
+
+  /**
+   * Record on the requirement the discussion the Router opened about it, so both records name each other. A requirement that
+   * already names a discussion keeps it: a discussion talks a requirement through once.
+   */
+  linkDiscussion(id: string, discussionId: string): LocalIssue | undefined {
+    const issue = this.get(id)
+    if (!issue || issue.discussionId !== undefined) return issue
+    const updated: LocalIssue = { ...issue, discussionId, updatedAt: this.clock() }
+    this.host.store.set(KV.local.issue(id), updated)
+    return updated
   }
 
   /** Attach the Aligner's proposal as a new round; the person later confirms or rejects the latest one in the panel. */

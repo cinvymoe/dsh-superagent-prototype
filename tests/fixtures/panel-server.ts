@@ -582,6 +582,16 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
     return { discussion: next }
   } },
+  'POST local/discussions/:id/handoff': { answer: ({ params }) => {
+    const discussion = server.localDiscussions.find(item => item.id === params.id)
+    if (!discussion) return refuse(404, 'Local discussion not found')
+    const answered = [...discussion.answers ?? []].reverse().find(answer => answer.state === 'answered' && answer.answer)
+    if (!answered) return refuse(409, 'Discussion has no answered message to hand over', { code: 'discussionUnanswered' })
+    const ticket = { id: `t-align-${params.id}`, title: discussion.title, mode: 'align' as const }
+    const next = { ...discussion, handoff: { answerId: answered.id, text: answered.answer!, ticketId: ticket.id, at: '2026-09-24T00:00:00Z' } }
+    server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
+    return { ticket, discussion: next }
+  } },
   'POST local/discussions/:id/close': { answer: ({ params }) => {
     const discussion = server.localDiscussions.find(item => item.id === params.id)
     if (!discussion) return refuse(404, 'Local discussion not found')

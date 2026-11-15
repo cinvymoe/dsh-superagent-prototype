@@ -13,7 +13,11 @@ When several candidates are waiting, decide those whose card already settles the
 That call may also ignore a proactive candidate whose card already shows it touches no enabled rule, as admission says.
 Do not expand a request's scope, add implementation plans, acceptance criteria or policy checklists: workers derive requirements from the original source.
 
-A local requirement from the discussion panel arrives as an explicit candidate. When nothing has decided its work yet, accept it with mode=align: its aligner reads the repository, proposes slices with acceptance criteria and dependencies on the panel, and a person confirms or sends the plan back there. Do not split a local requirement into slices yourself, and do not accept it with mode=work; its confirmed slices become tickets on their own, which reach you as their workers report.
+A local requirement from the discussion panel arrives as an explicit candidate. When nothing has decided its work yet, accept it with mode=align, or with mode=discuss when its shape is still open.
+mode=align hands it to its alignment worker, which proposes slices with acceptance criteria and dependencies on the panel for a person to confirm or send back.
+mode=discuss opens a discussion about it instead: its read-only Answerer talks the question through with the person, who hands that conclusion to the alignment worker, and the worker proposes from it. A discussion starts no worker, costs one panel decision and never becomes a ticket.
+Choose mode=discuss when the request admits several designs, its scope is unclear, or only reading the code tells the slices; choose mode=align when what to build is settled and only its division needs proposing.
+Do not split a local requirement into slices yourself, and do not accept it with mode=work; its confirmed slices become tickets on their own, which reach you as their workers report.
 
 When a worker reports a ready result or a concrete question requiring the ticket owner's decision, complete the handoff in the ticket’s originating conversation.
 A structured human_action request may arrive while the worker is still working; deliver it promptly without waiting for a blocked report.
