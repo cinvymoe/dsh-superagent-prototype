@@ -35,10 +35,13 @@ export async function settle() {
   })
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
 }
-export async function mount(dictionary: Record<string, string> = zh) {
+export async function mount(dictionary: Record<string, string> = zh, { url }: { url?: string } = {}) {
   // A test that mounts twice, such as one re-reading the server after a save, must not leave the earlier app polling in
   // the same document: its stale draft revision or duplicated controls would shadow the app under test.
   unmount()
+  // The address bar is part of the panel's state: start each mount from a known URL, either the one under test or a bare
+  // page, so a permalink written by an earlier mount cannot decide where this one lands.
+  window.history.replaceState(null, '', url ?? '/')
   container = document.createElement('div'); document.body.append(container)
   root = createRoot(container)
   await act(async () => { root!.render(<Panel t={translator(dictionary)} />) })

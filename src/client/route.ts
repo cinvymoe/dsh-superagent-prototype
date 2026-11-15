@@ -72,11 +72,72 @@ export function parseRoute(value: unknown): Route | undefined {
   }
 }
 
+/** Query parameter that marks a URL as this panel's permalink and the value it must carry. */
+export const PANEL_PARAM = 'panel'
+export const PANEL_VALUE = 'dsh-superagent'
+/** The browser's current URL search, empty outside a browser. */
+export const currentSearch = (): string => typeof location === 'undefined' ? '' : location.search
+/** Whether the address bar names this panel, either as a permalink or because the panel wrote it while mounted. */
+export const panelRequested = (search: string): boolean => new URLSearchParams(search).get(PANEL_PARAM) === PANEL_VALUE
+/**
+ * Encode one route and the current project into the permalink parameters. Page names, record ids, filters, the
+ * settings group and the project stay readable in the address bar; the project is only written when one is current.
+ */
+export function routeToSearch(route: Route, project?: string | undefined): URLSearchParams {
+  const search = new URLSearchParams({ [PANEL_PARAM]: PANEL_VALUE, page: route.page })
+  const id = 'id' in route ? route.id : undefined
+  if (id) search.set('id', id)
+  if ('create' in route && route.create === true) search.set('create', '1')
+  const edit = 'edit' in route ? route.edit : undefined
+  if (edit) search.set('edit', edit)
+  const query = ('query' in route ? route.query : undefined) as Record<string, unknown> | undefined
+  for (const name of ['filter', 'group', 'source', 'version', 'window', 'trigger'] as const) {
+    const value = query?.[name]
+    if (typeof value === 'string' && value) search.set(name, value)
+  }
+  if (project) search.set('project', project)
+  return search
+}
+/**
+ * Read a permalink back into a route and its project, or `undefined` when the URL does not name this panel or names no
+ * route this panel can show. The decoded value goes through `parseRoute`, so a hand-edited URL cannot introduce a page,
+ * a record type or a filter the panel does not have.
+ */
+export function routeFromSearch(search: string): { route: Route; project?: string } | undefined {
+  const params = new URLSearchParams(search)
+  if (params.get(PANEL_PARAM) !== PANEL_VALUE) return undefined
+  const page = params.get('page')
+  if (!page) return undefined
+  const raw: Record<string, unknown> = { page }
+  const id = params.get('id'); if (id) raw.id = id
+  if (params.get('create') === '1') raw.create = true
+  const edit = params.get('edit'); if (edit) raw.edit = edit
+  const query: Record<string, string> = {}
+  for (const name of ['filter', 'group', 'source', 'version', 'window', 'trigger']) {
+    const value = params.get(name); if (value !== null) query[name] = value
+  }
+  if (Object.keys(query).length) raw.query = query
+  const route = parseRoute(raw)
+  if (!route) return undefined
+  const project = params.get('project') ?? undefined
+  return { route, ...(project ? { project } : {}) }
+}
+/**
+ * The absolute permalink of a route: the page path with only this panel's parameters, so a launch token that happened
+ * to be in the address bar is never carried into a link or a copied URL.
+ */
+export function permalink(route: Route, project?: string | undefined): string {
+  if (typeof location === 'undefined') return `?${routeToSearch(route, project).toString()}`
+  return `${location.origin}${location.pathname}?${routeToSearch(route, project).toString()}`
+}
 const ROUTE_KEY = 'dsh-superagent/route'
 export interface Location { route: Route; stack: Route[]; group?: SettingsGroup | undefined; project?: string | undefined }
 export const lastSettingsGroup = ({ route, group }: Location): SettingsGroup => route.page === 'settings' ? route.query.group
   : group ?? 'source'
+/** The location to open with: a permalink in the address bar wins, then the session's remembered route, then HOME. */
 export function initialLocation(): Location {
+  const fromUrl = routeFromSearch(currentSearch())
+  if (fromUrl) return { route: fromUrl.route, stack: [], ...(fromUrl.project ? { project: fromUrl.project } : {}) }
   try {
     const stored = JSON.parse(sessionStorage.getItem(ROUTE_KEY) ?? 'null') as { route?: unknown; stack?: unknown; group?: unknown;
       project?: unknown } | null
@@ -93,4 +154,16 @@ export function initialLocation(): Location {
 }
 export function remember(location: Location): void {
   try { sessionStorage.setItem(ROUTE_KEY, JSON.stringify(location)) } catch (failure) { void failure /* Route memory is a convenience. */ }
+}
+/**
+ * Point the address bar at the current page, or clear this panel's parameters when the panel stops showing, so a plain
+ * refresh away from the panel keeps the pre-permalink behaviour. The search is replaced, never pushed: the panel's own
+ * back stack stays the only history.
+ */
+export function reflect(shown: Location | undefined): void {
+  if (typeof location === 'undefined' || typeof history === 'undefined' || typeof history.replaceState !== 'function') return
+  const target = shown === undefined ? '' : `?${routeToSearch(shown.route, shown.project).toString()}`
+  const url = `${location.pathname}${target}`
+  if (`${location.pathname}${location.search}` === url) return
+  history.replaceState(history.state, '', url)
 }

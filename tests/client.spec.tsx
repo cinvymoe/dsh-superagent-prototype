@@ -21,6 +21,7 @@ function fixture(listed: string[]) {
     effect: (effect: () => unknown) => { effect() },
     sessions: { list: { getSnapshot: () => ({ phase: 'ready', byId: Object.fromEntries(listed.map(id => [id, {}])) }) }, refresh: vi.fn(async () => {}) },
     uiWorkspace: { openSession: vi.fn() },
+    layout: { selectPanel: vi.fn(), panelInfo: { getSnapshot: () => ({ activePanelId: null }), subscribe: () => () => {} } },
     // Omit config form service so Deployment renders read-only.
     get: () => undefined,
   }
@@ -47,7 +48,7 @@ const serve = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     setup: { machine: { stateDir: '/srv/state', worktreeRoot: '/srv/state/worktrees', blockedCommands: [], promptMaxChars: 100000, admissionContextMaxPages: 10, admissionContextTimeoutMs: 15000 }, problem: null, feishuProblem: null, accounts: null } })
   return Response.json({ error: 'unavailable' }, { status: 503 })
 }))
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 it('registers a localized main panel, sidebar entry and Plugin Manager row page, and no settings section', () => {
   const { entries, dictionaries, main, nav } = fixture([])
@@ -57,6 +58,18 @@ it('registers a localized main panel, sidebar entry and Plugin Manager row page,
   expect(main.options).toMatchObject({ key: 'dsh-superagent', locale: 'dshSuperagent' })
   expect(nav.options).toMatchObject({ id: 'dsh-superagent', order: 10, locale: 'dshSuperagent' })
   expect(nav.options.label?.()).toBe('Superagent')
+})
+
+it('selects this panel once when the address bar is one of its permalinks', () => {
+  window.history.replaceState(null, '', '/?panel=dsh-superagent&page=requirements&id=q-1')
+  const { ctx } = fixture([])
+  expect(ctx.layout.selectPanel).toHaveBeenCalledExactlyOnceWith('dsh-superagent')
+})
+
+it('leaves the shell\'s panel alone when the address bar is not a permalink', () => {
+  window.history.replaceState(null, '', '/?page=requirements&id=q-1')
+  const { ctx } = fixture([])
+  expect(ctx.layout.selectPanel).not.toHaveBeenCalled()
 })
 
 it('opens a listed Session through the workspace from the main panel', async () => {
