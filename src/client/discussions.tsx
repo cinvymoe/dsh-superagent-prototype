@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Receipt } from '../app/store.ts'
 import { projectRepositories, type LocalAnswer, type LocalDiscussion } from '../sources/local-format.ts'
 import { usePoll } from './api.ts'
-import { Button, Icon, Tag } from './controls.tsx'
+import { Button, Icon, Modal, Tag } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { errorText, type T } from './text.ts'
 import { MarkdownLite, PageHead, Section, When } from './widgets.tsx'
@@ -98,6 +98,7 @@ export function DiscussionDetail({ id }: { id: string }) {
   const { data, error, reload } = usePoll(() => call('GET local/discussions/:id', { id }), [id])
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const discussion = data?.discussion
   const act = async (work: () => Promise<unknown>) => {
     if (busy) return
@@ -113,6 +114,13 @@ export function DiscussionDetail({ id }: { id: string }) {
   const retry = (answerId: string) => act(async () => {
     await call('POST local/discussions/:id/answers/:answerId/retry', { id, answerId })
   })
+  // A deleted discussion has no page left; the list is where a person lands, and the row is gone by then.
+  const remove = async () => {
+    if (busy) return
+    setBusy(true)
+    try { await call('DELETE local/discussions/:id', { id }); setConfirming(false); navigate({ page: 'discussions' }, true) }
+    catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
+  }
   if (error) return <p className="dt-error" role="alert">{error.message}</p>
   if (!discussion) return <p className="dt-hint">{t('loading')}</p>
   const shown = exchange(discussion, data.replies, data.thread?.timeline ?? [])
@@ -190,8 +198,17 @@ export function DiscussionDetail({ id }: { id: string }) {
           {t('discussion.createIssue')}</Button>}
         {discussion.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
           onClick={() => { void act(() => call('POST local/discussions/:id/close', { id })) }}>{t('discussion.close')}</Button>}
+        {/* A discussion that created a requirement is refused, so it never offers Delete. */}
+        {discussion.issueId === undefined && <Button variant="ghost" size="sm" disabled={busy}
+          icon={<Icon name="trash" size={14} />} onClick={() => setConfirming(true)}>{t('discussion.delete')}</Button>}
       </div>
     </div>
+    <Modal open={confirming} onClose={() => setConfirming(false)} title={t('discussion.delete')} closeLabel={t('close')}
+      description={t('discussion.deleteConfirm', { title: discussion.title })}
+      footer={<>
+        <Button variant="ghost" onClick={() => setConfirming(false)}>{t('cancel')}</Button>
+        <Button variant="primary" disabled={busy} onClick={() => { void remove() }}>{t('confirm')}</Button>
+      </>} />
   </>
 }
 

@@ -76,6 +76,7 @@ export const USER_ERRORS = {
   unknownDiscussion: ['missing', 'Unknown local discussion'],
   discussionLinked: ['refused', 'Discussion {discussion} already created requirement {issue}'],
   discussionProject: ['refused', 'A requirement made from a discussion must stay in the discussion\'s project {project}'],
+  discussionRequirement: ['refused', 'Discussion {discussion} created requirement {issue}; keep it or remove that requirement first'],
   issueImageCount: ['refused', 'A requirement accepts at most {max} images'],
   issueImageName: ['refused', 'A requirement image needs its original file name'],
   issueImageType: ['refused', 'Image {name} must be a PNG, JPEG, WebP or GIF image'],

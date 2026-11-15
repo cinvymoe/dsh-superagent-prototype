@@ -1,4 +1,6 @@
 /** Read/write operations for discussions held on their own Threads, before any requirement exists for them. */
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
 import { key, UserError, type ReceiveResult, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
@@ -7,7 +9,9 @@ import { requirementTitle } from './local.ts'
 import type { Store } from './store.ts'
 
 export interface DiscussionsHost {
-  readonly store: Pick<Store, 'get' | 'set' | 'delete' | 'keys'>
+  readonly store: Pick<Store, 'get' | 'set' | 'delete' | 'keys' | 'threads'>
+  /** Directory under which the discussions' own workspaces live, in `discussions/<discussion id>`. */
+  readonly stateDir?: string
   /** Delivers a Trigger to the Engine, exactly as a requirement's own messages are delivered. */
   receive(trigger: Trigger): ReceiveResult
   /**
@@ -15,6 +19,10 @@ export interface DiscussionsHost {
    * makes the discussion answer; `triggerId` is the Thread Trigger the message was stored as.
    */
   answer?(discussion: LocalDiscussion, text: string, triggerId: string): void
+  /** Archives the discussion's Answerer Session, stopping anything it still runs; an absent Session is not an error. */
+  archive?(sessionId: string): Promise<void> | void
+  /** Reports a failed archive, which is logged rather than raised so it cannot keep a deleted discussion behind. */
+  warn?(message: string): void
   now?(): string
 }
 
@@ -106,5 +114,25 @@ export class Discussions {
     const updated: LocalDiscussion = { ...discussion, state: 'closed' as const, updatedAt: this.clock() }
     this.host.store.set(KV.local.discussion(id), updated)
     return updated
+  }
+
+  /**
+   * Delete a discussion that created no requirement: archive its Answerer Session, drop the record, the Thread with the
+   * Triggers that belong only to it, and the fallback workspace under the state directory. A discussion that already
+   * created a requirement is refused, because that requirement still names it as its source.
+   */
+  async delete(id: string): Promise<LocalDiscussion | undefined> {
+    const discussion = this.get(id)
+    if (!discussion) return undefined
+    if (discussion.issueId !== undefined) {
+      throw new UserError('discussionRequirement', { discussion: discussion.id, issue: discussion.issueId })
+    }
+    try { await this.host.archive?.(`answerer-${id}`) }
+    catch (error) { this.host.warn?.(`dsh-superagent could not archive the Answerer Session of discussion ${id}: ${error instanceof Error ? error.message : String(error)}`) }
+    this.host.store.delete(KV.local.discussion(id))
+    this.host.store.threads.remove(this.thread(id))
+    // Only the state-directory fallback belongs to the discussion; a configured project root is shared and stays.
+    if (this.host.stateDir) rmSync(join(this.host.stateDir, 'discussions', id), { recursive: true, force: true })
+    return discussion
   }
 }
