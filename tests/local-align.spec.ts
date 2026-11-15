@@ -8,6 +8,8 @@ import { KV } from '../src/kv.ts'
 import { EXECUTION_STRATEGY_REVISION, type ExecutionMode, type Ticket } from '../src/core/index.ts'
 import { requirementExecutionMode, type LocalAlignment, type LocalIssue } from '../src/sources/local-format.ts'
 import { REQUIREMENT_BODY_BYTES } from '../src/limits.ts'
+import { roleModel } from '../src/agent-model.ts'
+import { settingsFor } from '../src/policy.ts'
 
 /** The id of the first human message on a local issue's thread. */
 const firstTrigger = (h: Host, issueId: string) => h.runtime.store.read.threadTriggers(`local:${issueId}`, 1)[0]!.id
@@ -83,6 +85,25 @@ it('dispatches the confirmed slices as tickets, one per slice, and only after th
   const again = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
   expect(again.status).toBe(200)
   expect(h.runtime.store.tickets.list().filter(ticket => ticket.plan?.issueId === issue.id)).toHaveLength(2)
+})
+
+it("pins the project on a requirement's tickets, which then read that project's executor model", async () => {
+  const settings = h.runtime.store.settings()
+  const model = { provider: 'demo', model: 'demo-project-model' }
+  h.runtime.store.saveSettings({ ...settings, projects: { [project.id]: { executor: { model } } } })
+  const issue = h.runtime.local.create({ title: 'Add a local board', project: project.id })
+  const { ticket, sessionId } = await acceptForAlignment(issue.id)
+  // The acceptance pins the project, so later reads need no Trigger to find it.
+  expect(h.runtime.store.tickets.get(ticket.ticket_id)!.project).toBe(project.id)
+  // A worker Session of that Ticket resolves its model from the project's settings, not the global executor model.
+  expect(roleModel(settingsFor(h.runtime.store.settings(), project.id), 'worker')).toEqual(model)
+  expect(roleModel(h.runtime.store.settings(), 'worker')).not.toEqual(model)
+  await h.runTool(sessionId, 'orchestrator_align', { summary: 'Two slices.', slices, acceptance: [] })
+  const confirmed = await h.api('POST', `local/issues/${issue.id}/alignment/decision`, { decision: 'confirm' })
+  expect(confirmed.status).toBe(200)
+  const dispatched = h.runtime.store.tickets.list().filter(item => item.plan?.issueId === issue.id)
+  expect(dispatched).toHaveLength(2)
+  expect(dispatched.map(item => item.project)).toEqual([project.id, project.id])
 })
 
 /** Accept a requirement for alignment and return its Aligner Ticket and worker Session id. */

@@ -39,9 +39,9 @@
 [![两个圈：进程里只有一份的东西，和一个项目自己的东西](./project-isolation.png)](./project-isolation.html)
 
 - 单文件 HTML：[`project-isolation.html`](./project-isolation.html)（内联 SVG + 三张说明卡）。
-- 外层圈是「全局 · 一个进程 · 一个 SQLite」：Engine 与数据库、Router 主会话、设置 / 策略 / 提示词、并发槽位——每个项目共用一份。
-- 内层圈是两个项目各自的所有物：仓库链 · worktreeRoot · prepare · blockedCommands，以及它自己的需求、讨论与工单。
-- coral 只标缺口：设置与槽位仍没有项目维度（`SettingsSchema` 只有六个全局块），所以「一个项目一套图里的配置」目前只做到执行面。
+- 外层圈是「全局 · 一个进程 · 一个 SQLite」：Engine 与数据库、Router 主会话、策略 / eval / agents / 提示词、并发槽位——每个项目共用一份。
+- 内层圈是两个项目各自的所有物：仓库链 · worktreeRoot · prepare · blockedCommands，`projects[<id>]` 对 executor model 与 paused 的覆盖，以及它自己的需求、讨论与工单；工单接受时钉住 `Ticket.project`。
+- coral 只标缺口：`policy` / `eval` / `agents`、槽位与 Router 会话仍没有项目维度，所以「一个项目一套图里的配置」目前只做到执行面（2026-11-15 起执行器模型与暂停已可按项目覆盖，读取统一走 `settingsFor(project)`；目录与 prepare 本来就是项目自己的字段）。
 - 画布：`doc-wide` 1280×720；判据写在图底——一个项目的配置改动会不会改变另一个项目的行为。
 
 ## 图 0：编辑版总览（2026-11-10 重设计）

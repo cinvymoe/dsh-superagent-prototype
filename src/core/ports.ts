@@ -47,6 +47,8 @@ export type AssessmentOutcome =
    */
   | { kind: 'accept'; title: string; scope: string; reason: string | Reason; acknowledgement?: string; rules?: string[]; audit?: Record<string, unknown>;
     name?: string; note?: string; mode?: 'work' | 'align' | 'discuss'; dependsOn?: string[];
+    /** The local project the ticket belongs to; the Engine pins it on the ticket, and the executor reads that project's settings. */
+    project?: string;
     plan?: { issueId: string; sliceId: string; acceptance?: string[]; execution?: ExecutionStrategy } }
   | { kind: 'stop'; ticketId: string; reason: string | Reason; audit?: Record<string, unknown> }
 

@@ -95,7 +95,7 @@ export class Engine {
    * before it launches.
    */
   acceptPlan(thread: ThreadRef, input: { issueId: string; triggerIds: string[]; actor: ActorRef; slices: PlanSlice[];
-    execution?: ExecutionStrategy }): Ticket[] {
+    execution?: ExecutionStrategy; project?: string }): Ticket[] {
     return this.repo.atomic(() => {
       const stored = this.repo.threads.get(threadKey(thread))
       if (!stored) throw new UserError('unknownTrigger')
@@ -109,7 +109,7 @@ export class Engine {
    * ticket it started.
    */
   acceptAlignment(thread: ThreadRef, input: { issueId: string; title: string; triggerIds: string[]; actor: ActorRef; scope?: string;
-    name?: string; note?: string }): Ticket {
+    name?: string; note?: string; project?: string }): Ticket {
     return this.repo.atomic(() => {
       const stored = this.repo.threads.get(threadKey(thread))
       if (!stored) throw new UserError('unknownTrigger')

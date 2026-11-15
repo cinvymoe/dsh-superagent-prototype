@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SettingsSchema, assessmentOutcome, policyEffects, settingsPolicy, policyVersion, allowedSender, anyoneAllowed, type Settings } from '../src/policy.ts'
+import { SettingsSchema, assessmentOutcome, policyEffects, settingsFor, settingsPolicy, policyVersion, allowedSender, anyoneAllowed, type Settings } from '../src/policy.ts'
 import type { MandateBasis } from '../src/core/index.ts'
 import { migrateSettings } from '../src/app/migration.ts'
 import { SourceRegistry } from '../src/sources/registry.ts'
@@ -255,6 +255,7 @@ describe('settings migration', () => {
       policy: { rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
       eval: { mode: 'auto', timeoutSeconds: 90, model: { provider: 'p', model: 'm' } },
       executor: { model: null, maxWorkers: 5, directory: '', prepare: '', blockedCommands: [] },
+      projects: {},
       agents: { plugins: [{ id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
         tools: ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image'], roles: ['main', 'worker'] }],
         main: { model: null, enabledPlugins: ['image', 'billion-context'] },
@@ -524,5 +525,39 @@ describe('agent settings', () => {
     expect(migrated.agents.worker.enabledPlugins).toEqual(['image', 'skills', 'todo', 'subagents', 'billion-context'])
     expect(migrated.agents).not.toHaveProperty('disabledTools')
     expect(migrated.agents.main).not.toHaveProperty('addedTools')
+  })
+})
+
+describe('settingsFor', () => {
+  it('reads the stored settings unchanged without a project, or with one that has no entry', () => {
+    const settings = SettingsSchema.parse({ executor: { prepare: 'pnpm install' } })
+    expect(settingsFor(settings, undefined)).toBe(settings)
+    expect(settingsFor(settings, 'unconfigured')).toBe(settings)
+  })
+  it("applies a project's executor model override and keeps the rest of the block", () => {
+    const settings = SettingsSchema.parse({ executor: { model: { provider: 'deepseek', model: 'deepseek-v4' }, maxWorkers: 5 },
+      projects: { demo: { executor: { model: { provider: 'local', model: 'local-v1' } } }, bare: {} } })
+    expect(settingsFor(settings, 'demo').executor).toEqual({ model: { provider: 'local', model: 'local-v1' }, maxWorkers: 5,
+      directory: '', prepare: '', blockedCommands: [] })
+    // A project without an override keeps the global model, and reading one project never mutates the stored settings.
+    expect(settingsFor(settings, 'bare').executor.model).toEqual({ provider: 'deepseek', model: 'deepseek-v4' })
+    expect(settings.executor.model).toEqual({ provider: 'deepseek', model: 'deepseek-v4' })
+  })
+  it('clears the executor model for one project with an explicit null, leaving the others on the global one', () => {
+    const settings = SettingsSchema.parse({ executor: { model: { provider: 'deepseek', model: 'deepseek-v4' } },
+      projects: { demo: { executor: { model: null } } } })
+    expect(settingsFor(settings, 'demo').executor.model).toBeNull()
+    expect(settingsFor(settings, 'other').executor.model).toEqual({ provider: 'deepseek', model: 'deepseek-v4' })
+  })
+  it('pauses one project without pausing the others, and never overrides authorization', () => {
+    const settings = SettingsSchema.parse({ projects: { demo: { paused: true } } })
+    expect(settingsFor(settings, 'demo').paused).toBe(true)
+    expect(settingsFor(settings, 'other').paused).toBe(false)
+    // One Policy and one policy version judge every Trigger, whichever project it starts in.
+    expect(settingsFor(settings, 'demo').policy).toBe(settings.policy)
+  })
+  it('refuses a project override of a block a project may not change', () => {
+    expect(() => SettingsSchema.parse({ projects: { demo: { policy: { rules: [] } } } })).toThrow()
+    expect(() => SettingsSchema.parse({ projects: { demo: { eval: { mode: 'auto' } } } })).toThrow()
   })
 })

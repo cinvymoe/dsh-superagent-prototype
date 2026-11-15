@@ -54,13 +54,13 @@
     <header class="header">
       <p class="header-eyebrow">DSH Superagent · 项目隔离审计 · global vs project scope</p>
       <h1>两个圈：进程里只有一份的东西，和一个项目自己的东西</h1>
-      <p class="subtitle">现在能按项目分开的，只有「这个项目在哪个仓库、哪个目录、用哪条 prepare、禁哪些命令」以及它自己的需求、讨论与工单。Engine/SQLite、Router 主会话、设置与提示词、并发槽位仍然是进程内单例，所有项目共享——所以「一个项目一套配置」只做到了执行面。</p>
+      <p class="subtitle">现在能按项目分开的，是「这个项目在哪个仓库、哪个目录、用哪条 prepare、禁哪些命令」，加上 2026-11-15 落地的 <code>projects[&lt;id&gt;]</code> 覆盖层（executor model · paused）：工单在接受时钉住 project，执行时读该项目的设置。Engine/SQLite、Router 主会话、策略与提示词、并发槽位仍是进程内单例。</p>
     </header>
 
     <div class="diagram-container">
       <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="project-isolation-title project-isolation-desc">
         <title id="project-isolation-title">项目隔离的边界：哪些配置在进程里只有一份</title>
-        <desc id="project-isolation-desc">嵌套图：外层是全局作用域，含唯一的 Engine 与 SQLite、单个 Router 主会话、单份设置与提示词、全局并发槽位；内层是两个项目各自的作用域，只有仓库链与目录命令、以及需求讨论工单数据按项目分开，设置与槽位尚未下沉。</desc>
+        <desc id="project-isolation-desc">嵌套图：外层是全局作用域，含唯一的 Engine 与 SQLite、单个 Router 主会话、策略与提示词的唯一副本、全局并发槽位；内层是两个项目各自的作用域，仓库链、目录命令、executor 覆盖项与需求讨论工单数据都按项目分开，策略、槽位与 Router 尚未下沉。</desc>
         <defs>
           <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
@@ -102,10 +102,10 @@
         <rect x="656" y="130" width="52" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.60)" stroke-width="0.8"/>
         <text x="682" y="139" class="d-tag" fill="#bf4520" text-anchor="middle">CONFIG</text>
         <text x="664" y="164" class="d-name" fill="#2d3142">设置 · 策略 · 提示词</text>
-        <text x="664" y="186" class="d-sub" fill="#5a6580">单份 revision，没有项目维度</text>
+        <text x="664" y="186" class="d-sub" fill="#5a6580">单份 revision；executor 已可被项目覆盖</text>
         <text x="664" y="206" class="d-mono" fill="#5a6580">settings: policy / eval / executor</text>
         <text x="664" y="226" class="d-mono" fill="#5a6580">agents · prompts · paused</text>
-        <text x="664" y="250" class="d-mono" fill="#bf4520">缺 projects[&lt;id&gt;] 覆盖层</text>
+        <text x="664" y="250" class="d-mono" fill="#bf4520">policy / eval / agents 仍无项目维度</text>
 
         <!-- node: pool -->
         <rect x="940" y="120" width="268" height="148" rx="6" fill="#f5f5f5"/>
@@ -130,8 +130,8 @@
 
         <rect x="88" y="412" width="512" height="84" rx="6" fill="rgba(45,49,66,0.04)" stroke="rgba(45,49,66,0.20)" stroke-width="0.8"/>
         <text x="104" y="434" class="d-name" fill="#2d3142">执行配置</text>
-        <text x="104" y="454" class="d-sub" fill="#5a6580">仓库链 · worktreeRoot · prepare · 额外 blockedCommands</text>
-        <text x="104" y="474" class="d-mono" fill="#5a6580">project.chain / worktreeRoot / prepare / blockedCommands</text>
+        <text x="104" y="454" class="d-sub" fill="#5a6580">仓库链 · worktreeRoot · 可覆盖 executor model 与 paused</text>
+        <text x="104" y="474" class="d-mono" fill="#5a6580">project.chain / worktreeRoot / projects[id].executor</text>
 
         <rect x="88" y="504" width="512" height="76" rx="6" fill="rgba(45,49,66,0.04)" stroke="rgba(45,49,66,0.20)" stroke-width="0.8"/>
         <text x="104" y="526" class="d-name" fill="#2d3142">项目数据</text>
@@ -145,8 +145,8 @@
 
         <rect x="680" y="412" width="512" height="84" rx="6" fill="rgba(45,49,66,0.04)" stroke="rgba(45,49,66,0.20)" stroke-width="0.8"/>
         <text x="696" y="434" class="d-name" fill="#2d3142">执行配置</text>
-        <text x="696" y="454" class="d-sub" fill="#5a6580">同上的四个字段，各项目互不影响</text>
-        <text x="696" y="474" class="d-mono" fill="#5a6580">chain · worktreeRoot · prepare · blockedCommands</text>
+        <text x="696" y="454" class="d-sub" fill="#5a6580">未设置的字段沿用全局，改一个不影响另一个</text>
+        <text x="696" y="474" class="d-mono" fill="#5a6580">projects[id].executor.model · paused</text>
 
         <rect x="680" y="504" width="512" height="76" rx="6" fill="rgba(45,49,66,0.04)" stroke="rgba(45,49,66,0.20)" stroke-width="0.8"/>
         <text x="696" y="526" class="d-name" fill="#2d3142">项目数据</text>
@@ -154,8 +154,8 @@
         <text x="696" y="566" class="d-mono" fill="#5a6580">同一套表，不同 project 值</text>
 
         <!-- ============ the gap, said once ============ -->
-        <text x="64" y="660" class="d-annot" fill="#bf4520">缺口：设置、槽位与 Router 会话都只有一份——目标是把它们挪进每个项目的圈里。</text>
-        <text x="64" y="686" class="d-mono" fill="#5a6580">判据：一个项目的配置改动，是否可能改变另一个项目的行为？现在会；这就是还没隔离的部分。</text>
+        <text x="64" y="660" class="d-annot" fill="#bf4520">缺口：policy / eval / agents、槽位与 Router 会话仍只有一份——目标是把它们也挪进每个项目的圈里。</text>
+        <text x="64" y="686" class="d-mono" fill="#5a6580">判据：一个项目的配置改动，是否可能改变另一个项目的行为？执行项已不会；策略、槽位、Router 仍会。</text>
       </svg>
     </div>
 
@@ -166,6 +166,8 @@
         <ul>
           <li>仓库链（intake / code / bot / CLI）每项目一条，<code>project.chain</code> 决定工单在哪个仓库执行</li>
           <li>worktreeRoot 与 prepare 项目可覆盖；额外 blockedCommands 只作用于本项目 Session</li>
+          <li><code>projects[&lt;id&gt;]</code> 覆盖 executor model 与 paused，<code>settingsFor</code> 是唯一读取点</li>
+          <li>工单接受时钉住 <code>Ticket.project</code>，不再从 trigger 推导</li>
           <li>需求、讨论、工单都带 project，面板按当前项目过滤</li>
         </ul>
       </article>
@@ -173,17 +175,17 @@
         <p class="eyebrow">Still global</p>
         <div class="card-header"><span class="card-dot coral"></span><h3>配置面还是单例</h3></div>
         <ul>
-          <li><code>SettingsSchema</code> 只有 paused / sources / policy / eval / executor / agents 六个全局块</li>
+          <li><code>SettingsSchema</code> 的 policy / eval / agents 仍只有一份全局块，项目覆盖层只开了 executor 与 paused</li>
           <li>Router 是一个主会话（<code>runtime.master-id</code>），所有项目共用上下文</li>
-          <li>并发 <code>maxWorkers 3</code> 与 answerer 2 槽是全局池；暂停也是全局</li>
+          <li>并发 <code>maxWorkers 3</code> 与 answerer 2 槽是全局池；暂停已可按项目</li>
         </ul>
       </article>
       <article class="card">
         <p class="eyebrow">Plan B</p>
         <div class="card-header"><span class="card-dot muted"></span><h3>三步把圈收小</h3></div>
         <ul>
-          <li>① 工单存 <code>projectId</code>：不再从 trigger 推导，GitHub/Feishu 工单也有归属</li>
-          <li>② 设置分层：<code>projects[&lt;id&gt;]</code> 覆盖 agents / eval / executor，读取统一走 <code>settingsFor(project)</code></li>
+          <li>① 已完成：工单存 <code>project</code>，接受时钉住，不再从 trigger 推导</li>
+          <li>② 已完成：<code>projects[&lt;id&gt;]</code> 覆盖 executor model 与 paused，读取统一走 <code>settingsFor(project)</code>；下一步把 agents / eval 也放进去</li>
           <li>③ 运行面：每项目一个 Router 会话与配额，Answerer 槽按项目切分</li>
         </ul>
       </article>
