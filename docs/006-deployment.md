@@ -16,6 +16,8 @@ Plugin configuration holds the state directory and machine limits. Use the panel
 
 The figure [`diagrams/trust-boundaries.html`](../diagrams/trust-boundaries.html) draws the one permitted path from a request to an action, and the bypasses that are refused.
 
+The figure [`diagrams/project-isolation.html`](../diagrams/project-isolation.html) draws what one process shares with every project — the Engine and its database, the Router Session, the settings and prompts, the worker and answerer slots — beside what a project owns: its repository chain, worktree root, prepare and blocked commands, and its own requirements, discussions and Tickets.
+
 The bundle defines `dsh-superagent-worker` for Executors and `dsh-superagent-router` for the main Session. They appear in the DeepSeek Harness preset list but are intended only for dsh-superagent. Do not select them for personal Sessions or disable their configuration rows. The application needs them to create and resume its Sessions.
 
 Opening a blank managed Session in the Web UI can select the profile's default preset. dsh-superagent restores its role-specific preset before the first turn.
