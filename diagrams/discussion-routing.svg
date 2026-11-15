@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="discussion-routing-title discussion-routing-desc" id="discussion-routing-root">
         <title id="discussion-routing-title">讨论成为一条可选的路：从 Router 的 discuss 决策到交付对齐</title>
-        <desc id="discussion-routing-desc">流程图：面板的讨论消息进入主 Session 研判，选 mode=discuss 后交给只读 Answerer 逐条回答，结论显示在结果面板，人点交给对齐后由 Engine 建唯一的 align 工单并让 Aligner 提案 slices；编号标出本次改动的三处：discuss 决策、跟随会话输出的等待、结论交接。</desc>
+        <desc id="discussion-routing-desc">流程图：面板的讨论消息进入主 Session 研判，选 mode=discuss 后交给只读 Answerer 逐条回答，结论显示在结果面板，人点交给对齐后由 Engine 建唯一的 align 工单并让 Aligner 提案 slices；编号标出本次改动的三处：discuss 决策、跟随会话输出的等待、结论交接；Answerer 还可经 discussion_ask 留一张问题卡，人的答复作为一条讨论消息返回。</desc>
         <defs>
       <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
       #discussion-routing-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
@@ -106,7 +106,7 @@
         <rect x="704" y="138" width="58" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
         <text x="733" y="147" class="d-tag" fill="#5a6580" text-anchor="middle">ANSWERER</text>
         <text x="712" y="172" class="d-name" fill="#2d3142">开讨论 · 只读回答</text>
-        <text x="712" y="192" class="d-sub" fill="#5a6580">不建 Ticket · 不占 worker 槽</text>
+        <text x="712" y="192" class="d-sub" fill="#5a6580">只读 · 可提 1–3 问的一张卡</text>
         <text x="712" y="210" class="d-mono" fill="#5a6580">effect discussion · answerer-&lt;d-…&gt;</text>
         <circle cx="944" cy="144" r="9" fill="#f5f5f5" stroke="#bf4520" stroke-width="1"/>
         <text x="944" y="148" class="d-badge" fill="#bf4520" text-anchor="middle">②</text>
@@ -117,7 +117,7 @@
         <rect x="704" y="322" width="58" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
         <text x="733" y="331" class="d-tag" fill="#5a6580" text-anchor="middle">结果面板</text>
         <text x="712" y="356" class="d-name" fill="#2d3142">最新一条答复</text>
-        <text x="712" y="376" class="d-sub" fill="#5a6580">右栏固定，与时间线分开</text>
+        <text x="712" y="376" class="d-sub" fill="#5a6580">右栏结论；提问卡在消息区</text>
         <text x="712" y="394" class="d-mono" fill="#5a6580">答案状态：queued → answered</text>
 
         <!-- ============ node 5: the person's handoff (coral, change 3) ============ -->
@@ -158,6 +158,5 @@
         <text x="280" y="668" class="d-sub" fill="#4f5d75">本次改动</text>
         <line x1="392" y1="664" x2="420" y2="664" stroke="#4f5d75" stroke-width="1.2"/>
         <text x="428" y="668" class="d-sub" fill="#4f5d75">主流程</text>
-        <text x="536" y="668" class="d-sub" fill="#5a6580">① Router 可选 discuss　② 等待跟随会话输出　③ 结论由人交接</text>
-        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">docs/005-panel.md § Discussions · docs/007-architecture.md</text>
+        <text x="536" y="668" class="d-sub" fill="#5a6580">① Router 可选 discuss　② 等待跟随会话输出 · 可提一张卡　③ 结论由人交接</text>
       </svg>

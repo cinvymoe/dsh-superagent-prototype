@@ -20,6 +20,8 @@ import { initializeRoleModel, roleModel } from './role-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { LocalDiscussion } from '../sources/local-format.ts'
+import { discussionTools } from './tools/discussion.ts'
+import type { Discussions } from './discussions.ts'
 import type { Store } from './store.ts'
 import { KV } from '../kv.ts'
 import type { RegisterTool, Tool } from './tools/tool.ts'
@@ -40,6 +42,11 @@ export interface SessionsHost {
   environment(ticket: Ticket): Variable[]
   /** Tools to register on the main Session (`ticket === undefined`) or on `ticket`'s worker Session. */
   tools(agent: Agent, ticket?: Ticket): Tool[]
+  /**
+   * The discussions a discussion Answerer Session may ask on, read lazily because `Sessions` is built before the
+   * discussion records it answers: `undefined` on a host without discussions, which then offers no asking tool.
+   */
+  discussions?(): Pick<Discussions, 'get' | 'ask'>
 }
 
 /**
@@ -65,6 +72,12 @@ const PRE_RUN_TOOLS = new Set(['bash', 'read', 'read_image', 'write', 'edit', 'g
  * nothing that writes, runs or messages. The whitelist, not the permission, is what keeps the answer read-only.
  */
 const ANSWER_TOOLS = ['read', 'read_image', 'glob', 'grep']
+/**
+ * The tools a discussion's Answerer keeps, in this order: reading the workspace, then asking the person questions the
+ * repository cannot answer. Asking writes the discussion's own record and ends the turn, so it starts no Ticket and holds
+ * no answering slot.
+ */
+const DISCUSSION_TOOLS = [...ANSWER_TOOLS, 'discussion_ask']
 /** What the main Session is told when it would wait: what it waits for comes to it, and a waiting step holds back the next. */
 const NO_WAIT = 'Reports, follow_up notices, new candidates and a background job\'s end with its output arrive by themselves as messages; '
   + 'end the turn instead of waiting for them.'
@@ -321,7 +334,11 @@ export class Sessions {
     if (master) {
       binding.disposers.push(...this.mainTools(agent, binding), agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
     } else if (discussion) {
-      // The discussion Answerer reads the workspace and nothing else; the whitelist, not the permission, is the boundary.
+      // The discussion Answerer reads the workspace, and may put its open questions to the person; the whitelist, not the
+      // permission, is the boundary.
+      const askable = this.host.discussions?.()
+      if (askable) for (const item of discussionTools({ discussionId: discussion.id, discussion: () => askable.get(discussion.id),
+        ask: questions => askable.ask(discussion.id, { questions }) })) register(item.name, item.description, item.schema, item.execute)
       binding.disposers.push(...this.answerOnly(agent))
     } else {
       // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
@@ -468,7 +485,7 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     // The Answerer's own plugin switches narrow the read-only whitelist; a switch it disables removes its tool, not `read`.
     const enabled = new Set(roleTools('answerer', this.host.store.settings().agents))
-    const allow = ANSWER_TOOLS.filter(name => enabled.has(name) && agent.ctx.tools.get(name, parent))
+    const allow = DISCUSSION_TOOLS.filter(name => (name === 'discussion_ask' || enabled.has(name)) && agent.ctx.tools.get(name, parent))
     if (!allow.includes('read')) throw new Error('dsh-superagent needs the discussion Answerer\'s read tool, which this host does not provide')
     return [agent.ctx.tools.restrict({ allow })]
   }

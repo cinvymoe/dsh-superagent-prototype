@@ -129,6 +129,7 @@ export function DiscussionDetail({ id }: { id: string }) {
   const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
   const discussion = data?.discussion
   const act = async (work: () => Promise<unknown>) => {
     if (busy) return
@@ -141,6 +142,14 @@ export function DiscussionDetail({ id }: { id: string }) {
     if (!text || busy) return
     await act(async () => { await call('POST local/discussions/:id/comments', { id, body: { text } }); setComment('') })
   }
+  // The Answerer's open questions: one card, answered in place, sent back as a single message of this discussion.
+  const ask = (discussion?.asks ?? []).find(item => item.state === 'open')
+  const replies = (open: typeof ask, values: Record<string, string>) => (open?.questions ?? []).map(question =>
+    ({ questionId: question.id, text: (values[question.id] ?? '').trim() }))
+  const sendAsk = (open: NonNullable<typeof ask>) => act(async () => {
+    await call('POST local/discussions/:id/asks/:askId/reply', { id, askId: open.id, body: { answers: replies(open, answers) } })
+    setAnswers({})
+  })
   const retry = (answerId: string) => act(async () => {
     await call('POST local/discussions/:id/answers/:answerId/retry', { id, answerId })
   })
@@ -171,6 +180,30 @@ export function DiscussionDetail({ id }: { id: string }) {
         </section>
 
         <Section title={t('discussion.messages')} count={shown.length}>
+          {ask && <section className="dt-card dt-ask-card">
+            <div className="dt-card-head"><span className="dt-card-title">{t('discussion.ask')}</span>
+              <Tag tone="neutral">{t('discussion.askOpen')}</Tag></div>
+            <p className="dt-hint">{t('discussion.askHint')}</p>
+            <ol className="dt-ask-list">
+              {ask.questions.map(question => <li key={question.id} className="dt-ask-item">
+                <p className="dt-ask-question">{question.question}</p>
+                {question.options?.length ? <div className="dt-actions">
+                  {question.options.map(option => <Button key={option} size="sm"
+                    variant={answers[question.id] === option ? 'primary' : 'outline'}
+                    onClick={() => setAnswers(current => ({ ...current, [question.id]: option }))}>{option}</Button>)}
+                </div> : null}
+                <input className="dt-text-input" value={answers[question.id] ?? ''} maxLength={2000}
+                  placeholder={question.options?.length ? t('discussion.askOther') : t('discussion.askOption')}
+                  aria-label={question.question}
+                  onChange={event => setAnswers(current => ({ ...current, [question.id]: event.target.value }))} />
+              </li>)}
+            </ol>
+            <div className="dt-actions">
+              <Button variant="primary" size="sm" icon={<Icon name="message" size={14} />}
+                disabled={busy || !ask.questions.every(question => (answers[question.id] ?? '').trim())}
+                onClick={() => { void sendAsk(ask) }}>{t('discussion.askSend')}</Button>
+            </div>
+          </section>}
           {/* The box sits above the list, so a submitted message appears first, directly under it. */}
           <form className="dt-form dt-timeline-form" onSubmit={event => { void submit(event) }}>
             <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}

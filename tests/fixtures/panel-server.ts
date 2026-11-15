@@ -25,7 +25,7 @@ import { feishuKind } from '../../src/sources/feishu.ts'
 import { githubKind } from '../../src/sources/github.ts'
 import type { Health } from '../../src/sources/host.ts'
 import type { SourceKind } from '../../src/sources/kind.ts'
-import type { LocalAnswer, LocalDiscussion, LocalIssue } from '../../src/sources/local-format.ts'
+import type { LocalAnswer, LocalAsk, LocalDiscussion, LocalIssue } from '../../src/sources/local-format.ts'
 import { testDeployment } from './deployment.ts'
 
 export const MEMBER = 'ou_alice'
@@ -86,6 +86,11 @@ export const localDiscussion = (title: string, body = '', project = 'p-fixture',
 export const localDiscussionAnswer = (discussion: LocalDiscussion, text: string, at: string,
   extra: Partial<LocalAnswer> = {}): LocalAnswer => ({ id: `an-${at}`, discussionId: discussion.id, triggerId: `t-${at}`, text, at,
   state: 'answered', sessionId: `answerer-${discussion.id}`, answer: `Answer to ${text}`, answeredAt: at, ...extra })
+/** The question card an Answerer asked in the panel, open until a person answers it. */
+export const localAsk = (id = 'ask-fixture', extra: Partial<LocalAsk> = {}): LocalAsk => ({
+  id, at: '2026-09-23T01:00:00Z', state: 'open',
+  questions: [{ id: 'q1', question: 'Which layout should the panel keep?', options: ['Two columns', 'Single column'] },
+    { id: 'q2', question: 'May the delete button stay?' }], ...extra })
 /** A human message on a discussion's own thread. */
 export const localDiscussionComment = (discussion: LocalDiscussion, text: string, at: string): TriggerRow => ({
   ...localTrigger(discussion), id: `local-discussion-comment-${at}`, at, text, preview: text })
@@ -591,6 +596,18 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     const next = { ...discussion, handoff: { answerId: answered.id, text: answered.answer!, ticketId: ticket.id, at: '2026-09-24T00:00:00Z' } }
     server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
     return { ticket, discussion: next }
+  } },
+  // The person answered the Answerer's question card; the answers become one message of the discussion.
+  'POST local/discussions/:id/asks/:askId/reply': { body: true, answer: ({ params, body }) => {
+    const discussion = server.localDiscussions.find(item => item.id === params.id)
+    if (!discussion) return refuse(404, 'Local discussion not found')
+    const input = body as unknown as { answers: { questionId: string; text: string }[] }
+    const asks = (discussion.asks ?? []).map(item => item.id === params.askId
+      ? { ...item, state: 'answered' as const, answeredAt: '2026-09-24T00:00:00Z', replies: input.answers } : item)
+    if (!asks.some(item => item.id === params.askId)) return refuse(404, 'Local ask not found')
+    const next = { ...discussion, asks, updatedAt: '2026-09-24T00:00:00Z' }
+    server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
+    return { discussion: next }
   } },
   'POST local/discussions/:id/close': { answer: ({ params }) => {
     const discussion = server.localDiscussions.find(item => item.id === params.id)

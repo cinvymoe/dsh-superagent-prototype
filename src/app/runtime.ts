@@ -40,7 +40,7 @@ import { Answerer, discussionWorkspace } from './answerer.ts'
 import { LocalQuestions } from './local-questions.ts'
 import { Questions } from './questions.ts'
 import { Projects } from './projects.ts'
-import { currentAlignment, type LocalProject } from '../sources/local-format.ts'
+import { currentAlignment, type LocalDiscussion, type LocalProject } from '../sources/local-format.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
@@ -147,7 +147,9 @@ export class Runtime extends Service implements SourceHost {
       const sessions = this.sessions = new Sessions({ context: ctx, store, prompts, effects, health: board.claim('models'), masterId,
         lifetime: this.lifetime,
         closing: () => this.closing(), environment,
-        tools: (agent, ticket) => ticket ? executorTools(this.toolHost, ticket) : mainTools(this.toolHost, agent) })
+        tools: (agent, ticket) => ticket ? executorTools(this.toolHost, ticket) : mainTools(this.toolHost, agent),
+        // Read lazily: this is built before the discussion records it hands the Answerer's asking tool.
+        discussions: () => this.discussions })
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() },
@@ -344,6 +346,18 @@ export class Runtime extends Service implements SourceHost {
     this.discussions.handoff(id, { answerId: answered.id, text: answered.answer, ticketId: ticket.id, at: now() })
     return ticket
   }
+  /**
+   * Record a person's answers to the questions a discussion's Answerer asked, and post them into the discussion as one
+   * message, so the Answerer's next turn reads question and answer together. An ask that is already answered is not posted
+   * twice; an unknown discussion or ask is refused.
+   */
+  answerDiscussionAsk(id: string, askId: string, replies: { questionId: string; text: string }[]): LocalDiscussion {
+    const result = this.discussions.answer(id, askId, replies)
+    if (!result) throw new UserError('unknownDiscussion', { discussion: id })
+    // Only a fresh answer becomes a message; submitting the same card twice must not ask the Answerer twice.
+    if (result.recorded) this.discussions.comment(id, result.text)
+    return result.discussion
+  }
   /** Dispatch the confirmed slices of a local requirement as execution tickets; repeated calls reuse their tickets. */
   dispatchPlan(issueId: string): Ticket[] {
     const input = this.local.planInput(issueId)
@@ -388,6 +402,7 @@ export class Runtime extends Service implements SourceHost {
     const { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, setup, passes } = this
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
       discussions: this.discussions, answers: this.answers, localQuestions: this.localQuestions, projects: this.projects,
+      answerDiscussionAsk: (id, askId, replies) => runtime.answerDiscussionAsk(id, askId, replies),
       checkout: this.checkout, prepare: this.prepare,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),

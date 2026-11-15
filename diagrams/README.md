@@ -31,7 +31,7 @@
 [![讨论有一条可选的先谈之路](./discussion-routing.png)](./discussion-routing.html)
 
 - 单文件 HTML：[`discussion-routing.html`](./discussion-routing.html)（内联 SVG + 三张说明卡）。
-- 讲三处改动：① Router 可以在本地需求上选 `mode=discuss`，只开讨论、不建 Ticket；② Answerer 的等待跟随会话输出（2 分钟静默 / 30 分钟上限，此前是 120 秒总预算）；③ 人点 **Give to alignment** 才建该需求唯一的 align 工单，结论作为 routing note 交给 Aligner。
+- 讲三处改动：① Router 可以在本地需求上选 `mode=discuss`，只开讨论、不建 Ticket；② Answerer 的等待跟随会话输出（2 分钟静默 / 30 分钟上限，此前是 120 秒总预算），需要人拍板时还可以用 `discussion_ask` 留一张 1–3 问的卡，人答完作为一条讨论消息回来；③ 人点 **Give to alignment** 才建该需求唯一的 align 工单，结论作为 routing note 交给 Aligner。
 - 画布：`doc-wide` 1280×720；coral 只标本次改动的三处，其余是既有环节。
 
 ## 图 0e：项目隔离的边界（2026-11-15）
