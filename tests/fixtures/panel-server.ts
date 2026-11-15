@@ -589,6 +589,19 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     server.localDiscussions = server.localDiscussions.map(item => item.id === params.id ? next : item)
     return { discussion: next }
   } },
+  'DELETE local/discussions/:id': { answer: ({ params }) => {
+    const discussion = server.localDiscussions.find(item => item.id === params.id)
+    if (!discussion) return refuse(404, 'Local discussion not found')
+    // A discussion that created a requirement keeps its record and its Thread, as the host refuses it.
+    if (discussion.issueId !== undefined) {
+      return refuse(400, `Discussion ${discussion.id} created requirement ${discussion.issueId}; keep it or remove that requirement first`,
+        { code: 'discussionRequirement', values: { discussion: discussion.id, issue: discussion.issueId } })
+    }
+    server.localDiscussions = server.localDiscussions.filter(item => item.id !== params.id)
+    delete server.localDiscussionComments[params.id]
+    delete server.localDiscussionReplies[params.id]
+    return { deleted: true }
+  } },
   // Every route that returns a requirement answers with the view, never the stored record.
   'GET local/issues': { query: ['project'], answer: ({ query }) =>
     ({ issues: server.localIssues.filter(issue => !query.project || issue.project === query.project).map(issueView) }) },

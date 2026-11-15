@@ -21,14 +21,17 @@ describe('the discussion records', () => {
     directories.push(directory)
     const store = new Store(join(directory, 'orchestrator.sqlite'))
     const triggers: Trigger[] = []
-    const receive = (trigger: Trigger) => { triggers.push(trigger); return { kind: 'stored' } as never }
+    const archived: string[] = []
+    // The real host stores each Trigger and indexes its Thread; the port test keeps that index without an Engine.
+    const receive = (trigger: Trigger) => { triggers.push(trigger); store.triggers.save(trigger); return { kind: 'stored' } as never }
     let tick = 0
-    const discussions = new Discussions({ store, receive,
+    const discussions = new Discussions({ store, stateDir: directory, receive,
+      archive: sessionId => { archived.push(sessionId) },
       // Each create moves the clock a second so the newest-first list order is unambiguous.
       now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)).toISOString() })
     const local = new LocalIssues({ store, stateDir: directory, discussions, receive })
     const project = local.createProject({ name: 'Demo', repository: 'acme/widgets' })
-    return { discussions, local, triggers, project, store }
+    return { discussions, local, triggers, archived, project, store, directory }
   }
 
   it('creates a discussion on its own thread and lists it by project, newest first', () => {
@@ -130,6 +133,43 @@ describe('the discussion records', () => {
     const discussion = discussions.create({ body: 'Readable discussion', project: project.id })
     expect(discussions.get(discussion.id)).toEqual(discussion)
     expect(discussions.thread(discussion.id)).toBe(`local:${discussion.id}`)
+  })
+
+  it('deletes a discussion with its Thread, its own Triggers, its Answerer Session and its workspace', async () => {
+    const { discussions, triggers, archived, project, store, directory } = setup()
+    const discussion = discussions.create({ body: 'Delete this', project: project.id })
+    discussions.comment(discussion.id, 'And this message')
+    const workspace = join(directory, 'discussions', discussion.id)
+    mkdirSync(workspace, { recursive: true })
+    writeFileSync(join(workspace, 'note.txt'), 'kept')
+    expect(store.read.threadTriggers(`local:${discussion.id}`, 10)).toHaveLength(2)
+
+    await expect(discussions.delete(discussion.id)).resolves.toMatchObject({ id: discussion.id, title: 'Delete this' })
+
+    expect(discussions.list()).toEqual([])
+    expect(discussions.get(discussion.id)).toBeUndefined()
+    expect(store.read.threadTriggers(`local:${discussion.id}`, 10)).toEqual([])
+    expect(triggers.map(trigger => store.triggers.get(trigger.id))).toEqual([undefined, undefined])
+    expect(archived).toEqual([`answerer-${discussion.id}`])
+    expect(existsSync(workspace)).toBe(false)
+    expect(await discussions.delete(discussion.id)).toBeUndefined()
+  })
+
+  it('refuses to delete a discussion that created a requirement and keeps its record and Thread', async () => {
+    const { discussions, local, triggers, project, store } = setup()
+    const discussion = discussions.create({ body: 'Linked discussion', project: project.id })
+    const issue = local.create({ body: 'Its requirement', project: project.id, discussion: discussion.id })
+    const stored = discussions.get(discussion.id)
+    const thread = store.threads.get(`local:${discussion.id}`)
+    const messages = store.read.threadTriggers(`local:${discussion.id}`, 10)
+
+    await expect(discussions.delete(discussion.id)).rejects.toThrow('keep it or remove that requirement first')
+
+    expect(discussions.get(discussion.id)).toEqual(stored)
+    expect(discussions.get(discussion.id)?.issueId).toBe(issue.id)
+    expect(store.threads.get(`local:${discussion.id}`)).toEqual(thread)
+    expect(store.read.threadTriggers(`local:${discussion.id}`, 10)).toEqual(messages)
+    expect(triggers).toHaveLength(2)
   })
 })
 
@@ -364,11 +404,58 @@ describe('the discussion HTTP API', () => {
     expect((await h.api('GET', 'local/discussions/d-00000000')).status).toBe(404)
     expect((await h.api('POST', 'local/discussions/d-00000000/comments', { text: 'text' })).status).toBe(404)
     expect((await h.api('POST', 'local/discussions/d-00000000/close')).status).toBe(404)
+    expect((await h.api('DELETE', 'local/discussions/d-00000000')).status).toBe(404)
     const empty = await h.api('POST', 'local/discussions', { body: '   ', project: project.id })
     expect(empty.status).toBe(400)
     expect(empty.body.code).toBe('discussionEmpty')
     const unknownProject = await h.api('POST', 'local/discussions', { body: 'A discussion', project: 'p-missing' })
     expect(unknownProject.status).toBe(404)
     expect((await h.api('GET', `local/discussions?project=${project.id}`)).body.discussions).toEqual([])
+  })
+
+  it('deletes an unlinked discussion over HTTP and takes its Thread, Triggers, Answerer Session and workspace with it', async () => {
+    const created = await h.api('POST', 'local/discussions', { body: 'Delete over HTTP\n\nWith detail', project: project.id })
+    const discussion = created.body.discussion as LocalDiscussion
+    const threadKeyValue = `local:${discussion.id}`
+    const triggerIds = h.runtime.store.read.threadTriggers(threadKeyValue, 10).map(trigger => trigger.id)
+    expect(triggerIds).toHaveLength(1)
+    const workspace = join(h.directory, 'discussions', discussion.id)
+    mkdirSync(workspace, { recursive: true })
+    writeFileSync(join(workspace, 'note.txt'), 'kept')
+
+    const deleted = await h.api('DELETE', `local/discussions/${discussion.id}`)
+    expect(deleted.status).toBe(200)
+    expect(deleted.body).toEqual({ deleted: true })
+
+    expect((await h.api('GET', `local/discussions?project=${project.id}`)).body.discussions).toEqual([])
+    expect((await h.api('GET', `local/discussions/${discussion.id}`)).status).toBe(404)
+    expect(h.runtime.discussions.get(discussion.id)).toBeUndefined()
+    expect(h.runtime.store.threads.get(threadKeyValue)).toBeUndefined()
+    expect(h.runtime.store.read.threadTriggers(threadKeyValue, 10)).toEqual([])
+    triggerIds.forEach(id => expect(h.runtime.store.triggers.get(id)).toBeUndefined())
+    expect(h.archiveSession).toHaveBeenCalledWith(`answerer-${discussion.id}`, { stopActivity: true })
+    expect(existsSync(workspace)).toBe(false)
+  })
+
+  it('refuses to delete a discussion that created a requirement over HTTP and changes nothing', async () => {
+    const created = await h.api('POST', 'local/discussions', { body: 'A linked discussion\n\nDetails', project: project.id })
+    const discussion = created.body.discussion as LocalDiscussion
+    const made = await h.api('POST', 'local/issues', { body: 'The requirement', project: project.id, discussion: discussion.id })
+    const issue = made.body.issue as { id: string }
+    await h.api('POST', `local/discussions/${discussion.id}/comments`, { text: 'A message that stays' })
+    const stored = h.runtime.discussions.get(discussion.id)!
+    const thread = h.runtime.store.threads.get(`local:${discussion.id}`)!
+    const messages = h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 10)
+
+    const refused = await h.api('DELETE', `local/discussions/${discussion.id}`)
+    expect(refused.status).toBe(400)
+    expect(refused.body).toMatchObject({ code: 'discussionRequirement' })
+
+    expect(h.runtime.discussions.get(discussion.id)).toEqual(stored)
+    expect(h.runtime.discussions.get(discussion.id)?.issueId).toBe(issue.id)
+    expect(h.runtime.store.threads.get(`local:${discussion.id}`)).toEqual(thread)
+    expect(h.runtime.store.read.threadTriggers(`local:${discussion.id}`, 10)).toEqual(messages)
+    expect(h.archiveSession).not.toHaveBeenCalled()
+    expect((await h.api('GET', `local/discussions/${discussion.id}`)).status).toBe(200)
   })
 })

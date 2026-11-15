@@ -271,6 +271,11 @@ function routes(runtime: HttpHost): Routes {
       if (!discussion) throw new RouteError(404, 'Local discussion not found')
       return { discussion }
     },
+    'DELETE local/discussions/:id': async ({ params }) => {
+      const discussion = await runtime.discussions.delete(params.id)
+      if (!discussion) throw new RouteError(404, 'Local discussion not found')
+      return { deleted: true as const }
+    },
     // Every local route that returns a requirement returns its view, which adds the derived slicesFinished flag.
     'GET local/issues': ({ query }) => {
       const project = typeof query?.project === 'string' && query.project ? query.project : undefined

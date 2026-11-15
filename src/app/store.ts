@@ -231,6 +231,26 @@ export class Store implements Repositories {
       for (const [name, value] of Object.entries(patch)) { if (value === undefined) delete meta[name]; else meta[name] = value }
       if (JSON.stringify(meta) !== JSON.stringify(thread.meta)) this.threads.save({ ...thread, meta })
     }),
+    /**
+     * Removes a Thread with everything that belongs only to it: its Triggers, their dispositions and its decisions.
+     * A Trigger shared with another Thread is kept and only detached from this one, so nothing another Thread still
+     * shows disappears.
+     */
+    remove: (keyValue: string): void => this.atomic(() => {
+      const ids = this.db.prepare('SELECT id FROM trigger_thread WHERE thread=?').all(keyValue).map(row => String(row.id))
+      for (const id of ids) {
+        const trigger = this.triggers.get(id)
+        if (trigger) {
+          const remaining = trigger.threads.filter(ref => threadKey(ref) !== keyValue)
+          if (remaining.length) { this.triggers.save({ ...trigger, threads: remaining }); continue }
+          this.db.prepare('DELETE FROM disposition WHERE id=?').run(id)
+          this.db.prepare('DELETE FROM trigger WHERE id=?').run(id)
+        }
+        this.db.prepare('DELETE FROM trigger_thread WHERE id=?').run(id)
+      }
+      this.db.prepare('DELETE FROM decision WHERE thread=?').run(keyValue)
+      this.db.prepare('DELETE FROM thread WHERE key=?').run(keyValue)
+    }),
   }
   readonly tickets = {
     get: (id: string): Ticket | undefined => { const row = this.db.prepare('SELECT value FROM ticket WHERE id=?').get(id); return row ? JSON.parse(String(row.value)) as Ticket : undefined },
