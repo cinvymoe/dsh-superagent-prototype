@@ -1,11 +1,31 @@
 /** Runs a discussion's Answerer Session: one read-only Session per discussion, answered turn by turn. */
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { LocalAnswer, LocalDiscussion } from '../sources/local-format.ts'
+import { mkdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import type { LocalAnswer, LocalDiscussion, LocalProject } from '../sources/local-format.ts'
 import type { Sessions } from './sessions.ts'
 
 /** How long one answer may take before it is recorded as failed; a person may retry it. */
 export const ANSWER_TIMEOUT_MS = 120_000
+
+/**
+ * The directory a discussion's Answerer Session runs in: the project's configured worktree root when it is an existing
+ * directory, otherwise `<stateDir>/discussions/<discussion id>`, created before the Session opens. A configured root that
+ * is missing or not a directory falls back instead of failing the answer: an answer only reads the checkout.
+ */
+export function discussionWorkspace(stateDir: string, project: Pick<LocalProject, 'worktreeRoot'> | undefined, discussionId: string): string {
+  const root = project?.worktreeRoot
+  if (root && isDirectory(root)) return root
+  const directory = join(stateDir, 'discussions', discussionId)
+  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  return directory
+}
+
+/** Whether `path` exists and is a directory; any error, such as a missing path, reads as not a directory. */
+function isDirectory(path: string): boolean {
+  try { return statSync(path).isDirectory() } catch { return false }
+}
 
 /** The result of one answer: its text, or why it could not be read. */
 export type AnswerResult = { ok: true; answer: string } | { ok: false; reason: 'no-session' | 'timeout' | 'empty-answer'; message: string }

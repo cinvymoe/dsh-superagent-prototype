@@ -36,7 +36,7 @@ import { Prepare } from './prepare.ts'
 import { LocalIssues } from './local.ts'
 import { Discussions } from './discussions.ts'
 import { Answers } from './answers.ts'
-import { Answerer } from './answerer.ts'
+import { Answerer, discussionWorkspace } from './answerer.ts'
 import { LocalQuestions } from './local-questions.ts'
 import { Questions } from './questions.ts'
 import { Projects } from './projects.ts'
@@ -196,7 +196,7 @@ export class Runtime extends Service implements SourceHost {
       // A discussion answers in its own read-only Session, in the project's own checkout when it names one, never in a worker slot.
       this.answers = new Answers({ discussions: this.discussions, lifetime: this.lifetime,
         answerer: new Answerer({ sessions, workspace: discussion =>
-          store.get(KV.local.project(discussion.project))?.worktreeRoot || join(machine.stateDir, 'discussions', discussion.id),
+          discussionWorkspace(machine.stateDir, store.get(KV.local.project(discussion.project)), discussion.id),
         lifetime: this.lifetime }),
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       this.local = new LocalIssues({ store, stateDir: machine.stateDir, discussions: this.discussions,

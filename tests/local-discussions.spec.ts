@@ -1,8 +1,9 @@
 /** Local discussions: records and Threads of their own, kept apart from requirement records. */
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { discussionWorkspace } from '../src/app/answerer.ts'
 import { Discussions } from '../src/app/discussions.ts'
 import { LocalIssues } from '../src/app/local.ts'
 import { Store } from '../src/app/store.ts'
@@ -132,6 +133,45 @@ describe('the discussion records', () => {
   })
 })
 
+describe('the discussion answer workspace', () => {
+  const stateDirectory = () => {
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-superagent-discussion-workspace-'))
+    directories.push(directory)
+    return directory
+  }
+
+  it('creates the state-directory fallback before the Session opens', () => {
+    const stateDir = stateDirectory()
+    const directory = discussionWorkspace(stateDir, undefined, 'd-12345678')
+    expect(directory).toBe(join(stateDir, 'discussions', 'd-12345678'))
+    expect(statSync(directory).isDirectory()).toBe(true)
+  })
+
+  it('keeps an existing configured worktree root, without creating the fallback', () => {
+    const stateDir = stateDirectory()
+    const root = join(stateDir, 'checkout')
+    mkdirSync(root)
+    expect(discussionWorkspace(stateDir, { worktreeRoot: root }, 'd-12345678')).toBe(root)
+    expect(existsSync(join(stateDir, 'discussions', 'd-12345678'))).toBe(false)
+  })
+
+  it('falls back when the configured worktree root is missing', () => {
+    const stateDir = stateDirectory()
+    const directory = discussionWorkspace(stateDir, { worktreeRoot: join(stateDir, 'missing') }, 'd-12345678')
+    expect(directory).toBe(join(stateDir, 'discussions', 'd-12345678'))
+    expect(statSync(directory).isDirectory()).toBe(true)
+  })
+
+  it('falls back when the configured worktree root is not a directory', () => {
+    const stateDir = stateDirectory()
+    const file = join(stateDir, 'checkout.txt')
+    writeFileSync(file, 'not a checkout')
+    const directory = discussionWorkspace(stateDir, { worktreeRoot: file }, 'd-12345678')
+    expect(directory).toBe(join(stateDir, 'discussions', 'd-12345678'))
+    expect(statSync(directory).isDirectory()).toBe(true)
+  })
+})
+
 describe('the discussion answers', () => {
   let h: Host
   let project: { id: string }
@@ -172,6 +212,42 @@ describe('the discussion answers', () => {
     expect(h.tools.get(`answerer-${discussion.id}`)!.has('orchestrator_align')).toBe(false)
   })
 
+  it('creates the Answerer workspace under the state directory when the project configures no worktree root', async () => {
+    const discussion = h.runtime.discussions.create({ body: 'Where does the Answerer run?', project: project.id })
+    const workspace = join(h.directory, 'discussions', discussion.id)
+    expect(existsSync(workspace)).toBe(false)
+    await settle(discussion.id, 'In the state directory.')
+    expect(existsSync(workspace)).toBe(true)
+    expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'In the state directory.' })
+    expect(h.headers.get(`answerer-${discussion.id}`)?.cwd).toBe(realpathSync(workspace))
+  })
+
+  it('keeps an existing project worktree root as the Answerer workspace', async () => {
+    const root = join(h.directory, 'project-checkout')
+    mkdirSync(root)
+    const rooted = h.runtime.local.createProject({ name: 'Rooted', repository: 'deepseek-ai/dsh-superagent-prototype', worktreeRoot: root })
+    const discussion = h.runtime.discussions.create({ body: 'Where does this one run?', project: rooted.id })
+    await settle(discussion.id, 'In the project checkout.')
+    expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'In the project checkout.' })
+    expect(h.headers.get(`answerer-${discussion.id}`)?.cwd).toBe(realpathSync(root))
+    expect(existsSync(join(h.directory, 'discussions', discussion.id))).toBe(false)
+  })
+
+  it('falls back to the state directory when the project worktree root is missing or not a directory', async () => {
+    const missing = join(h.directory, 'missing-checkout')
+    const file = join(h.directory, 'checkout.txt')
+    writeFileSync(file, 'not a checkout')
+    for (const worktreeRoot of [missing, file]) {
+      const rooted = h.runtime.local.createProject({ name: `Rooted ${worktreeRoot === file}`, repository: 'deepseek-ai/dsh-superagent-prototype', worktreeRoot })
+      const discussion = h.runtime.discussions.create({ body: 'Answer despite the root', project: rooted.id })
+      await settle(discussion.id, 'Answered through the fallback.')
+      expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'Answered through the fallback.' })
+      expect(h.headers.get(`answerer-${discussion.id}`)?.cwd).toBe(realpathSync(join(h.directory, 'discussions', discussion.id)))
+      expect(existsSync(join(h.directory, 'discussions', discussion.id))).toBe(true)
+    }
+    expect(existsSync(missing)).toBe(false)
+  })
+
   it('answers a discussion written before answers were recorded once answers resume', async () => {
     const id = 'd-legacy'
     const at = '2026-11-14T00:00:00.000Z'
@@ -205,6 +281,23 @@ describe('the discussion answers', () => {
     await settle(discussion.id, 'Retried answer')
     expect(h.runtime.discussions.get(discussion.id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'Retried answer' })
     expect(h.runtime.store.tickets.list()).toEqual([])
+  })
+
+  it('answers a failed ENOENT answer once the panel retries it', async () => {
+    const id = 'd-enoent-retry'
+    const at = '2026-11-14T00:00:00.000Z'
+    const workspace = join(h.directory, 'discussions', id)
+    h.runtime.store.set(KV.local.discussion(id), {
+      id, title: 'A question that failed', body: 'A question that failed', author: 'local', project: project.id,
+      createdAt: at, updatedAt: at, state: 'open',
+      answers: [{ id: 'an-enoent', discussionId: id, triggerId: 'trigger-enoent', text: 'A question that failed', at, state: 'failed',
+        failure: { reason: 'no-session', message: `ENOENT: no such file or directory, realpath '${workspace}'` } }],
+    })
+    // The panel's Retry route queues the same answer again.
+    expect((await h.api('POST', `local/discussions/${id}/answers/an-enoent/retry`)).status).toBe(200)
+    await settle(id, 'Answered after the retry')
+    expect(h.runtime.discussions.get(id)!.answers![0]).toMatchObject({ state: 'answered', answer: 'Answered after the retry' })
+    expect(existsSync(workspace)).toBe(true)
   })
 })
 
