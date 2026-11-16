@@ -15,7 +15,7 @@ import type { DroppedReply, HistoryView, Problem, PromptsView, SetupView, Source
   TriggerRow } from '../../src/client/api.ts'
 import { SETUP_FIELDS } from '../../src/deployment.ts'
 import { LIMITS } from '../../src/limits.ts'
-import { AgentsConfigSchema, EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, SettingsSchema } from '../../src/policy.ts'
+import { AgentsConfigSchema, EvalConfigSchema, ExecutorConfigSchema, PolicyConfigSchema, ProjectsSchema, SettingsSchema } from '../../src/policy.ts'
 import { agentCatalog, validateAgentPlugins } from '../../src/app/agent-tools.ts'
 import { UserError } from '../../src/core/index.ts'
 import { SetupError, type SetupCode } from '../../src/setup.ts'
@@ -274,7 +274,8 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
   blocks: { policy: { value: server.settings.policy, revision: server.revisions.policy ?? 0 },
     eval: { value: server.settings.eval, revision: server.revisions.eval ?? 0 },
     executor: { value: server.settings.executor, revision: server.revisions.executor ?? 0 },
-    agents: { value: server.settings.agents, revision: server.revisions.agents ?? 0 } },
+    agents: { value: server.settings.agents, revision: server.revisions.agents ?? 0 },
+    projects: { value: server.settings.projects, revision: server.revisions.projects ?? 0 } },
   // The catalog the Agents page offers, as the host's own catalog defines it.
   agents: agentCatalog(server.settings.agents, server.registeredTools),
   sources: sourceSettings(),
@@ -793,13 +794,14 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   } },
   'PUT settings/:block': { body: true, answer: ({ params: { block }, body }) => {
     const source = block.startsWith('source:') ? KINDS.find(kind => `source:${kind.kind}` === block) : undefined
-    if (!['policy', 'eval', 'executor', 'agents'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
+    if (!['policy', 'eval', 'executor', 'agents', 'projects'].includes(block) && !source) return block.startsWith('source:') ? refuse(404, 'Source not found')
       : refuse(400, 'Invalid settings: block')
     if (body.revision !== (server.revisions[block] ?? 0)) return refuse(409, 'Settings changed. Reload before saving.')
     let restarting = false
     if (block === 'policy') server.settings = { ...server.settings, policy: PolicyConfigSchema.parse(body.value) }
     else if (block === 'executor') server.settings = { ...server.settings, executor: ExecutorConfigSchema.parse(body.value) }
     else if (block === 'eval') server.settings = { ...server.settings, eval: EvalConfigSchema.parse(body.value) }
+    else if (block === 'projects') server.settings = { ...server.settings, projects: ProjectsSchema.parse(body.value) }
     else if (block === 'agents') {
       // Mirror the host: validate the catalog rules and refuse with the same structured user error the panel localizes.
       const agents = AgentsConfigSchema.parse(body.value)
