@@ -258,3 +258,21 @@ it('sends one stop for a double click on Confirm', async () => {
   await act(async () => { confirm.click(); confirm.click() })
   expect(server.requests.filter(request => request.path === 'tickets/t1/stop')).toHaveLength(1)
 })
+
+it('overrides a project\'s pause and executor model on the Execution settings, saving the projects block as one value', async () => {
+  server.localProjects = [{ id: 'p-one', name: '一个项目', chain: 'p-one', createdAt: '2026-09-23T00:00:00Z',
+    updatedAt: '2026-09-23T00:00:00Z' }]
+  at({ page: 'settings', query: { group: 'execution' } })
+  await mount()
+  expect(text()).toContain(zh.projectOverrides)
+  const pause = document.querySelector(`[aria-label="${zh.projectPaused} · 一个项目"]`)!
+  await click(pause as HTMLElement)
+  await click(zh.save)
+  expect(server.settings.projects).toEqual({ 'p-one': { paused: true } })
+  expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/projects'])
+  // Dropping the row restores inheritance instead of copying the global value into it.
+  await remount()
+  await click(zh.projectInherit)
+  await click(zh.save)
+  expect(server.settings.projects).toEqual({})
+})

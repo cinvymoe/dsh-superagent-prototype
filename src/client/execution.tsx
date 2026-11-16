@@ -3,9 +3,9 @@ import { useRef, useState } from 'react'
 import { TICKET_FILTERS, type TicketFilter } from '../app/api.ts'
 import { LIMITS } from '../limits.ts'
 import { usePoll, type SettingsView, type SourceView, type StateView } from './api.ts'
-import { Button, DisclosureRow, Icon, InfoTip, Input, Pill } from './controls.tsx'
+import { Button, DisclosureRow, Icon, InfoTip, Input, Pill, Switch } from './controls.tsx'
 import { SaveBar } from './draft.tsx'
-import { usePanel } from './provider.tsx'
+import { usePanel, usePanelData } from './provider.tsx'
 import { TicketLine } from './rows.tsx'
 import { ConfigHistory, Field, Fields, ModelField, numberOf, useBlockDraft, useSettings } from './settings-kit.tsx'
 import { localized } from './text.ts'
@@ -76,6 +76,48 @@ function EnvironmentVariables({ groups, sources,
     </div>
   </DisclosureRow>
 }
+/**
+ * The `projects` settings block: one row per local project, carrying the only two settings a project may override — its own
+ * pause and its executor model. A project with no entry reads the global Execution settings unchanged, so removing its row's
+ * override restores inheritance rather than copying today's global value.
+ */
+function ProjectOverrides() {
+  const { t } = usePanel()
+  const { projects } = usePanelData()
+  const { blocks } = useSettings().settings
+  const draft = useBlockDraft('projects', blocks.projects.value, blocks.projects.revision)
+  const value = draft.value
+  const override = (id: string) => value[id]
+  const edit = (id: string, next: { paused?: boolean; executor?: { model: NonNullable<SettingsView['blocks']['executor']['value']['model']> | null } }) => {
+    draft.edit({ ...value, [id]: { ...override(id), ...next } })
+  }
+  const reset = (id: string) => {
+    const next = { ...value }
+    delete next[id]
+    draft.edit(next)
+  }
+  return <div className="dt-form dt-block">
+    <h2 className="dt-block-title">{t('projectOverrides')}<InfoTip text={t('projectOverridesHint')} /></h2>
+    {projects.length === 0 ? <p className="dt-hint">{t('projectOverridesEmpty')}</p> : projects.map(project =>
+      <div key={project.id} className="dt-project-override" data-project={project.id}>
+        <div className="dt-switch-row">
+          <div className="dt-field-head">{project.name}</div>
+          <Switch checked={override(project.id)?.paused ?? false} label={`${t('projectPaused')} · ${project.name}`}
+            onChange={paused => edit(project.id, { paused })} />
+        </div>
+        <Section title={t('projectOverrideModel')} hint={t('projectOverridesHint')}>
+          <ModelField id={`dt-project-model-${project.id}`} value={override(project.id)?.executor?.model ?? null}
+            onChange={model => edit(project.id, { executor: { model } })} />
+        </Section>
+        {override(project.id) !== undefined && <div className="dt-actions">
+          <Button type="button" variant="ghost" size="sm" onClick={() => reset(project.id)}>{t('projectInherit')}</Button>
+        </div>}
+      </div>)}
+    {/* Its own save, so the surrounding Executor form's submit does not take the projects block with it. */}
+    <SaveBar {...draft} onDiscard={draft.discard} onSave={() => { void draft.submit() }} />
+  </div>
+}
+
 export function ExecutionSettings() {
   const { t } = usePanel()
   const { blocks, environment, sources } = useSettings().settings
@@ -123,9 +165,10 @@ export function ExecutionSettings() {
               onChange={event => edit({ blockedCommands: event.target.value })} />
           </Field>
         </div>
+        <ProjectOverrides />
       </Fields>
       <SaveBar {...draft} onDiscard={draft.discard} />
     </form>
-    <ConfigHistory blocks={['executor', 'pause']} />
+    <ConfigHistory blocks={['executor', 'projects', 'pause']} />
   </div>
 }

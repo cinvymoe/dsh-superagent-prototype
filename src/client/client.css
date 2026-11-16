@@ -102,6 +102,8 @@
 .dt-detail { margin-top: 2px; color: var(--dsw-alias-label-secondary); }
 .dt-savebar .dt-error { white-space: pre-line; }
 .dt-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; font-size: 13px; }
+.dt-project-override { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 0.5px solid var(--dsw-alias-border-l3); }
+.dt-project-override:first-of-type { border-top: 0; padding-top: 0; }
 .dt-subhead-actions { display: inline-flex; align-items: center; gap: 4px; }
 .dt-btn-busy .dt-btn-icon svg { animation: dt-spin 1s linear infinite; }
 .dt-subhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-secondary); }

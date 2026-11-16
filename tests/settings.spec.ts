@@ -109,6 +109,24 @@ it('records nothing for a pause that changes nothing, refuses a sync while setup
   expect(() => settings.block('source:x')).toThrow(new UserError('unknownBlock', { block: 'source:x' }))
 })
 
+it('saves a per-project pause and executor model as the projects block, refusing it outside the panel and checking its model', async () => {
+  h = await startRuntime()
+  const { settings, store } = h.runtime
+  const llm = (h.ctx as unknown as { llm: { resolveCallConfig: ReturnType<typeof vi.fn> } }).llm
+  const moved = { alpha: { paused: true, executor: { model } } }
+  await expect(settings.save('projects', moved, store.blockRevision('projects'), 'tool'))
+    .rejects.toThrow(new UserError('panelOnlyEnvironment'))
+  expect(store.settings().projects).toEqual({})
+  // A model the deployment cannot resolve refuses the save, naming the project it was set for.
+  llm.resolveCallConfig.mockRejectedValueOnce(new Error('Unknown model'))
+  await expect(settings.save('projects', moved, store.blockRevision('projects'), 'panel'))
+    .rejects.toThrow('The alpha model is not available')
+  expect(store.settings().projects).toEqual({})
+  await settings.save('projects', moved, store.blockRevision('projects'), 'panel')
+  expect(store.settings().projects).toEqual(moved)
+  expect(store.blockRevision('projects')).toBe(1)
+})
+
 it('refuses an agents save outside the panel, saves a changed one once and records no second revision for the same value', async () => {
   h = await startRuntime()
   const { settings, store } = h.runtime

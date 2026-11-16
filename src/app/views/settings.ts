@@ -25,11 +25,11 @@ function policyOf(sources: SourceRegistry, id: string, health: HealthMap) {
 export function settingsView(store: Store, sources: SourceRegistry, health: HealthMap, setup: SetupState, stateDir: string,
   catalog: AgentsCatalog = agentCatalog(store.settings().agents)) {
   const settings = store.settings()
-  const block = <V>(name: 'policy' | 'eval' | 'executor' | 'agents', value: V) => ({ value, revision: store.blockRevision(name) })
+  const block = <V>(name: 'policy' | 'eval' | 'executor' | 'agents' | 'projects', value: V) => ({ value, revision: store.blockRevision(name) })
   return {
     policyVersion: policyVersion(settings),
     blocks: { policy: block('policy', settings.policy), eval: block('eval', settings.eval), executor: block('executor', settings.executor),
-      agents: block('agents', settings.agents) },
+      agents: block('agents', settings.agents), projects: block('projects', settings.projects) },
     // The plugin catalog a save of `blocks.agents` is checked against, which the panel offers role by role.
     agents: catalog,
     sources: sources.instances(settings).map(instance => {

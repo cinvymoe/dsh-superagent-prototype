@@ -190,6 +190,8 @@ export const ProjectOverrideSchema = z.object({
   executor: ProjectExecutorSchema.optional(),
 }).strict()
 export type ProjectOverride = z.infer<typeof ProjectOverrideSchema>
+/** The per-project override map as a settings block saves it: every entry keys a local project id. */
+export const ProjectsSchema = z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), ProjectOverrideSchema)
 export const SettingsSchema = z.object({
   paused: z.boolean().default(false),
   sources: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), SourceInstanceSchema).default({}),
@@ -198,10 +200,10 @@ export const SettingsSchema = z.object({
   executor: ExecutorConfigSchema.default(() => ExecutorConfigSchema.parse({})),
   agents: AgentsConfigSchema.default(() => AgentsConfigSchema.parse({})),
   /** Per-project overrides, keyed by local project id; a project without an entry reads the global settings unchanged. */
-  projects: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), ProjectOverrideSchema).default({}),
+  projects: ProjectsSchema.default({}),
 }).strict()
 export type Settings = z.infer<typeof SettingsSchema>
-export type SettingsBlock = 'policy' | 'eval' | 'executor' | 'agents' | `source:${string}`
+export type SettingsBlock = 'policy' | 'eval' | 'executor' | 'agents' | 'projects' | `source:${string}`
 export type SettingsSave = SettingsBlock | 'pause'
 export type SettingsOrigin = 'panel' | 'tool' | 'sync'
 
