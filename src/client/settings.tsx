@@ -4,6 +4,7 @@ import { AgentsSettings } from './agents.tsx'
 import { DeploymentPage, type DeploymentForm } from './deployment.tsx'
 import { EvalSettings } from './eval.tsx'
 import { ExecutionSettings } from './execution.tsx'
+import { ProjectsSettings } from './project-settings.tsx'
 import { PromptsPage } from './prompts.tsx'
 import { usePanel } from './provider.tsx'
 import { SETTINGS_GROUPS, settingsRoute, type SettingsGroup } from './route.ts'
@@ -11,8 +12,9 @@ import { SettingsProvider } from './settings-kit.tsx'
 import { SourceSettings } from './source.tsx'
 
 const STAGE_GROUPS: readonly SettingsGroup[] = ['source', 'eval', 'execution']
-export function SettingsPage({ group, query, state, deploymentForm }: {
-  group: SettingsGroup; query: { source?: string; version?: string }; state: StateView; deploymentForm: DeploymentForm
+export function SettingsPage({ id, group, query, state, deploymentForm }: {
+  id?: string; group: SettingsGroup; query: { source?: string; version?: string }; state: StateView;
+  deploymentForm: DeploymentForm
 }) {
   const { t, navigate } = usePanel()
   const content = (() => {
@@ -20,6 +22,7 @@ export function SettingsPage({ group, query, state, deploymentForm }: {
       case 'source': return <SettingsProvider><SourceSettings {...query.source ? { focus: query.source } : {}} /></SettingsProvider>
       case 'eval': return <SettingsProvider><EvalSettings version={query.version} /></SettingsProvider>
       case 'execution': return <SettingsProvider><ExecutionSettings /></SettingsProvider>
+      case 'projects': return <SettingsProvider><ProjectsSettings {...id ? { project: id } : {}} /></SettingsProvider>
       case 'agents': return <SettingsProvider><AgentsSettings /></SettingsProvider>
       case 'prompts': return <PromptsPage />
       case 'deployment': return <DeploymentPage setup={state.setup} form={deploymentForm} />

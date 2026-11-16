@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Button, Icon } from './controls.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
-import type { Route } from './route.ts'
-import { projectRepositories } from '../sources/local-format.ts'
+import { settingsRoute, type Route } from './route.ts'
+import { projectRepositories, type LocalProjectView } from '../sources/local-format.ts'
 import { LIMITS } from '../limits.ts'
 import { errorText } from './text.ts'
 import { PageHead } from './widgets.tsx'
@@ -58,9 +58,13 @@ export function ProjectBar({ route }: { route: Route }) {
     // A switch on the discussions or requirement list keeps that tab; every other tab lands on the requirement list.
     // These switches replace the entry so browsing projects does not grow the back stack.
     if (route.page === 'discussions') navigate({ page: 'discussions' }, true)
+    // A project's own settings page follows the selection, so switching projects stays on the page being edited.
+    else if (route.page === 'settings' && route.query.group === 'projects') {
+      navigate(settingsRoute('projects', { project: id }), true)
+    }
     else if (route.page === 'requirements' && route.id === undefined && !route.create) {
-      // The requirement list keeps its processing-status filter across projects; the project form keeps its own landing.
-      const filter = route.edit === undefined ? route.query?.filter ?? 'pending' : 'pending'
+      // The requirement list keeps its processing-status filter across projects.
+      const filter = route.query?.filter ?? 'pending'
       navigate(filter === 'pending' ? { page: 'requirements' } : { page: 'requirements', query: { filter } }, true)
     }
     else navigate({ page: 'requirements' })
@@ -105,107 +109,104 @@ export function ProjectBar({ route }: { route: Route }) {
   </div>
 }
 
+/** The project record as one editable draft, shared by the creation page and the project's own Settings page. */
+export interface ProjectDraft {
+  name: string; intake: string; code: string; root: string; prepare: string; blocked: string; bot: string
+}
+export const emptyProject: ProjectDraft = { name: '', intake: '', code: '', root: '', prepare: '', blocked: '', bot: '' }
+/** The draft of a stored project; a legacy record keeps its single repository in both repository fields. */
+export const projectDraft = (project: LocalProjectView): ProjectDraft => ({ name: project.name,
+  intake: project.intakeRepository ?? project.codeRepository ?? project.repository ?? '',
+  code: project.codeRepository ?? project.repository ?? '', root: project.worktreeRoot ?? '',
+  prepare: project.prepare ?? '', blocked: (project.blockedCommands ?? []).join(' '), bot: project.cli ?? '' })
+/** A filled draft as the routes take it: the stored form of every field, with the empty ones kept empty. */
+export const projectBody = (draft: ProjectDraft) => ({ name: draft.name.trim(),
+  intakeRepository: draft.intake.trim(), codeRepository: draft.code.trim(), worktreeRoot: draft.root.trim(),
+  prepare: draft.prepare.trim(), blockedCommands: draft.blocked.split(/[\s,]+/).filter(Boolean), cli: draft.bot.trim() })
+
 /**
- * Standalone project form shared by creation and editing: the project fields (the three execution-environment fields and,
- * for a project that owns a chain, the bot CLI), the same validation hints, and the same submit path. Creating sends POST;
- * editing sends PUT for the project named by the route and pre-fills its values. The environment fields are the project's
- * own: an empty root or prepare command keeps the Execution setting, while blocking commands adds to the deployment list.
- * A refused save keeps the page and the typed values, so the person can correct one field instead of starting over.
+ * The project fields, rendered by the creation page and by each project's own page under Settings → Projects. They hold no
+ * state of their own, so both pages own their draft and their submit.
  */
-export function ProjectFormPage({ edit }: { edit?: string }) {
+export function ProjectFields({ draft, onChange, editing, showBot }: {
+  draft: ProjectDraft; onChange: (patch: Partial<ProjectDraft>) => void; editing: boolean; showBot: boolean
+}) {
+  const { t } = usePanel()
+  return <>
+    <input className="dt-text-input" value={draft.name} maxLength={80} placeholder={t('discuss.projectName')}
+      aria-label={t('discuss.projectName')} onChange={event => onChange({ name: event.target.value })} />
+    <input className="dt-text-input" value={draft.intake} maxLength={200} placeholder={t('discuss.projectIntakeRepository')}
+      aria-label={t('discuss.projectIntakeRepository')} onChange={event => onChange({ intake: event.target.value })} />
+    <input className="dt-text-input" value={draft.code} maxLength={200} placeholder={t('discuss.projectCodeRepository')}
+      aria-label={t('discuss.projectCodeRepository')} onChange={event => onChange({ code: event.target.value })} />
+    <p className="dt-hint">{t('discuss.projectRepositories')}</p>
+    <input className="dt-text-input dt-mono" value={draft.root} maxLength={4096} placeholder={t('discuss.projectWorktreeRoot')}
+      aria-label={t('discuss.projectWorktreeRoot')} spellCheck={false}
+      onChange={event => onChange({ root: event.target.value })} />
+    <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
+    <textarea className="dt-textarea dt-mono" rows={2} value={draft.prepare} maxLength={LIMITS.prepareCommand} spellCheck={false}
+      placeholder={t('discuss.projectPrepare')} aria-label={t('discuss.projectPrepare')}
+      onChange={event => onChange({ prepare: event.target.value })} />
+    <p className="dt-hint">{t('discuss.projectPrepareHint')}</p>
+    <input className="dt-text-input dt-mono" value={draft.blocked} maxLength={4096} spellCheck={false}
+      placeholder={t('discuss.projectBlockedCommands')} aria-label={t('discuss.projectBlockedCommands')}
+      onChange={event => onChange({ blocked: event.target.value })} />
+    <p className="dt-hint">{t('discuss.projectBlockedCommandsHint')}</p>
+    {/* A project that owns no chain has nowhere to store a bot, so a project without one leaves the field out. */}
+    {showBot && <>
+      <input className="dt-text-input dt-mono" value={draft.bot} maxLength={4096} placeholder={t('discuss.projectBot')}
+        aria-label={t('discuss.projectBot')} spellCheck={false} onChange={event => onChange({ bot: event.target.value })} />
+      <p className="dt-hint">{t('discuss.projectBotHint')}</p>
+    </>}
+  </>
+}
+
+/** Why the project form cannot be submitted yet, empty when every required field is filled. */
+export const projectReady = (draft: ProjectDraft): boolean => !!projectBody(draft).name
+  && !!projectBody(draft).intakeRepository && !!projectBody(draft).codeRepository
+
+/**
+ * The standalone page that creates a local project. Editing a stored project lives in Settings → Projects, where each
+ * project has its own page: its record fields and the Execution settings it may override. A new project opens on that page.
+ */
+export function ProjectFormPage() {
   const { t, call, notify, navigate, setProject } = usePanel()
-  const { projects, reloadProjects } = usePanelData()
-  const editing = edit !== undefined
-  const current = editing ? projects.find(item => item.id === edit) : undefined
-  const [name, setName] = useState('')
-  const [intakeRepository, setIntakeRepository] = useState('')
-  const [codeRepository, setCodeRepository] = useState('')
-  const [worktreeRoot, setWorktreeRoot] = useState('')
-  const [prepare, setPrepare] = useState('')
-  const [blockedCommands, setBlockedCommands] = useState('')
-  const [bot, setBot] = useState('')
-  const [loaded, setLoaded] = useState(!editing)
+  const { reloadProjects } = usePanelData()
+  const [draft, setDraft] = useState(emptyProject)
   const [busy, setBusy] = useState(false)
-  // Pre-fill once the project list arrives; later list polls must not overwrite what the person is typing.
-  useEffect(() => {
-    if (!editing || loaded || !current) return
-    setName(current.name)
-    setIntakeRepository(current.intakeRepository ?? current.codeRepository ?? current.repository ?? '')
-    setCodeRepository(current.codeRepository ?? current.repository ?? '')
-    setWorktreeRoot(current.worktreeRoot ?? '')
-    setPrepare(current.prepare ?? '')
-    setBlockedCommands((current.blockedCommands ?? []).join(' '))
-    setBot(current.cli ?? '')
-    setLoaded(true)
-  }, [editing, loaded, current])
+  const body = projectBody(draft)
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    const cleanName = name.trim(), cleanIntake = intakeRepository.trim(), cleanCode = codeRepository.trim(), root = worktreeRoot.trim()
-    const cleanPrepare = prepare.trim(), blocked = blockedCommands.split(/[\s,]+/).filter(Boolean)
-    const cleanBot = bot.trim()
-    if (busy || !cleanName || !cleanIntake || !cleanCode) return
+    if (busy || !projectReady(draft)) return
     setBusy(true)
     try {
-      // An empty root or prepare command means "keep the Execution setting" when creating and "clear the stored value" when
-      // editing, which the update route expresses by sending the empty value; creation omits the keys instead.
-      const project = editing
-        ? (await call('PUT local/projects/:id', { id: edit, body: { name: cleanName, intakeRepository: cleanIntake,
-          codeRepository: cleanCode, worktreeRoot: root, prepare: cleanPrepare, blockedCommands: blocked, cli: cleanBot } })).project
-        : (await call('POST local/projects', { body: { name: cleanName, intakeRepository: cleanIntake, codeRepository: cleanCode,
-          ...(root ? { worktreeRoot: root } : {}), ...(cleanPrepare ? { prepare: cleanPrepare } : {}),
-          ...(blocked.length ? { blockedCommands: blocked } : {}), ...(cleanBot ? { cli: cleanBot } : {}) } })).project
+      // Creation omits the values whose absence keeps the Execution setting, so an empty field stays unset rather than clear.
+      const created = (await call('POST local/projects', { body: { name: body.name,
+        intakeRepository: body.intakeRepository, codeRepository: body.codeRepository,
+        ...(body.worktreeRoot ? { worktreeRoot: body.worktreeRoot } : {}),
+        ...(body.prepare ? { prepare: body.prepare } : {}),
+        ...(body.blockedCommands.length ? { blockedCommands: body.blockedCommands } : {}),
+        ...(body.cli ? { cli: body.cli } : {}) } })).project
       await reloadProjects()
-      setProject(project.id)
-      // Creation and editing both return to the requirement list, whose head keeps offering the edit entry for the
-      // project just saved.
-      navigate({ page: 'requirements' }, true)
+      setProject(created.id)
+      // The new project opens on its own Settings page, which is where its settings live from now on.
+      navigate(settingsRoute('projects', { project: created.id }), true)
     } catch (failure) {
       notify(errorText(failure))
     } finally {
       setBusy(false)
     }
   }
-  const title = editing ? t('discuss.editProject') : t('discuss.newProject')
-  if (editing && !loaded) return <>
-    <PageHead title={title} />
-    <div className="dt-column"><p className="dt-hint">{t('loading')}</p></div>
-  </>
+  const title = t('discuss.newProject')
   return <>
     <PageHead title={title} back={{ label: t('discuss.requirements'),
       onClick: () => navigate({ page: 'requirements' }, true) }} />
     <div className="dt-column">
-      {editing && current?.missingChain && <p className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',
-        { chain: current.missingChain })}</p>}
       <form className="dt-card dt-form" onSubmit={event => { void submit(event) }}>
         <div className="dt-card-head"><span className="dt-card-title">{title}</span></div>
-        <input className="dt-text-input" value={name} maxLength={80} placeholder={t('discuss.projectName')}
-          aria-label={t('discuss.projectName')} onChange={event => setName(event.target.value)} />
-        <input className="dt-text-input" value={intakeRepository} maxLength={200} placeholder={t('discuss.projectIntakeRepository')}
-          aria-label={t('discuss.projectIntakeRepository')} onChange={event => setIntakeRepository(event.target.value)} />
-        <input className="dt-text-input" value={codeRepository} maxLength={200} placeholder={t('discuss.projectCodeRepository')}
-          aria-label={t('discuss.projectCodeRepository')} onChange={event => setCodeRepository(event.target.value)} />
-        <p className="dt-hint">{t('discuss.projectRepositories')}</p>
-        <input className="dt-text-input dt-mono" value={worktreeRoot} maxLength={4096} placeholder={t('discuss.projectWorktreeRoot')}
-          aria-label={t('discuss.projectWorktreeRoot')} spellCheck={false}
-          onChange={event => setWorktreeRoot(event.target.value)} />
-        <p className="dt-hint">{t('discuss.projectWorktreeRootHint')}</p>
-        <textarea className="dt-textarea dt-mono" rows={2} value={prepare} maxLength={LIMITS.prepareCommand} spellCheck={false}
-          placeholder={t('discuss.projectPrepare')} aria-label={t('discuss.projectPrepare')}
-          onChange={event => setPrepare(event.target.value)} />
-        <p className="dt-hint">{t('discuss.projectPrepareHint')}</p>
-        <input className="dt-text-input dt-mono" value={blockedCommands} maxLength={4096} spellCheck={false}
-          placeholder={t('discuss.projectBlockedCommands')} aria-label={t('discuss.projectBlockedCommands')}
-          onChange={event => setBlockedCommands(event.target.value)} />
-        <p className="dt-hint">{t('discuss.projectBlockedCommandsHint')}</p>
-        {/* A project that owns no chain has nowhere to store a bot, so its edit form leaves the field out. */}
-        {(!editing || !!current?.chain || current?.codeRepository !== undefined) && <>
-          <input className="dt-text-input dt-mono" value={bot} maxLength={4096} placeholder={t('discuss.projectBot')}
-            aria-label={t('discuss.projectBot')} spellCheck={false} onChange={event => setBot(event.target.value)} />
-          <p className="dt-hint">{t('discuss.projectBotHint')}</p>
-        </>}
+        <ProjectFields draft={draft} onChange={patch => setDraft({ ...draft, ...patch })} editing={false} showBot />
         <div className="dt-actions">
-          <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim() || !intakeRepository.trim() || !codeRepository.trim()}>
-            {editing ? t('discuss.saveProject') : t('discuss.createProject')}</Button>
+          <Button type="submit" variant="primary" size="sm" disabled={busy || !projectReady(draft)}>{t('discuss.createProject')}</Button>
           <Button type="button" variant="ghost" size="sm"
             onClick={() => navigate({ page: 'requirements' }, true)}>{t('cancel')}</Button>
         </div>

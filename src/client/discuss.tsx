@@ -7,6 +7,7 @@ import { Button, DisclosureRow, Icon, InfoTip, Pill, Switch, Tag } from './contr
 import { SourceDiscussion } from './discussions.tsx'
 import { PasteImageField, useImagePaste } from './image-paste.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
+import { settingsRoute } from './route.ts'
 import { RequirementDialog } from './requirement-dialog.tsx'
 import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
@@ -184,7 +185,7 @@ export function RequirementList({ filter }: { filter: RequirementFilter }) {
       {!!active?.blockedCommands?.length && <span className="dt-mono">{t('discuss.projectBlockedCommandsValue',
         { commands: active.blockedCommands.join(' ') })}</span>}
       {active && <Button variant="outline" size="sm" className="dt-project-edit" icon={<Icon name="settings" size={14} />}
-        onClick={() => navigate({ page: 'requirements', edit: active.id })}>{t('discuss.editProject')}</Button>}
+        onClick={() => navigate(settingsRoute('projects', { project: active.id }))}>{t('discuss.editProject')}</Button>}
     </PageHead>
     <div className="dt-column">
       {!active && <p className="dt-hint">{t('discuss.noProjects')}</p>}

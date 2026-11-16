@@ -56,9 +56,9 @@ it('reads each page a tab remembered with the parameters it takes, and leaves ou
     .toEqual({ page: 'trigger', id: 'github:1', query: { trigger: 'e1' } })
   expect(parseRoute({ page: 'eval', query: { filter: 'stop', window: '7d' } })).toEqual({ page: 'eval', query: { filter: 'stop' } })
   expect(parseRoute({ page: 'execution', id: 5, query: { filter: 'idle' } })).toEqual({ page: 'execution', query: { filter: 'idle' } })
-  // A saved Discuss route keeps the project edit page: the edit id wins over a create flag, a non-string one is dropped.
-  expect(parseRoute({ page: 'discuss', edit: 'p-1', create: true })).toEqual({ page: 'requirements', edit: 'p-1' })
-  expect(parseRoute({ page: 'discuss', edit: 7 })).toEqual({ page: 'requirements' })
+  // A saved project edit route now opens that project's own page under Settings, past the create flag or a bad id.
+  expect(parseRoute({ page: 'discuss', edit: 'p-1', create: true })).toEqual({ page: 'settings', id: 'p-1', query: { group: 'projects' } })
+  expect(parseRoute({ page: 'discuss', edit: 7 })).toEqual({ page: 'settings', query: { group: 'projects' } })
   expect(parseRoute({ page: 'settings', query: { group: 'policy', source: 'feishu' } }))
     .toEqual({ page: 'settings', query: { group: 'source', source: 'feishu' } })
   expect([parseRoute('overview'), parseRoute(null)]).toEqual([undefined, undefined])
@@ -70,8 +70,8 @@ it('reads the requirement pages and maps the saved requirement-form routes onto 
   expect(parseRoute({ page: 'requirements' })).toEqual({ page: 'requirements' })
   expect(parseRoute({ page: 'requirements', create: true })).toEqual({ page: 'requirements', create: true })
   expect(parseRoute({ page: 'requirements', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
-  expect(parseRoute({ page: 'requirements', edit: 'p-1' })).toEqual({ page: 'requirements', edit: 'p-1' })
-  expect(parseRoute({ page: 'requirements', edit: 'p-1', create: true })).toEqual({ page: 'requirements', edit: 'p-1' })
+  expect(parseRoute({ page: 'requirements', edit: 'p-1' })).toEqual({ page: 'settings', id: 'p-1', query: { group: 'projects' } })
+  expect(parseRoute({ page: 'requirements', edit: 'p-1', create: true })).toEqual({ page: 'settings', id: 'p-1', query: { group: 'projects' } })
   // The list and detail keep a valid processing filter; an unknown one is dropped and pending is canonical (no query).
   expect(parseRoute({ page: 'requirements', query: { filter: 'closed' } })).toEqual({ page: 'requirements', query: { filter: 'closed' } })
   expect(parseRoute({ page: 'requirements', query: { filter: 'nope' } })).toEqual({ page: 'requirements' })
@@ -82,7 +82,7 @@ it('reads the requirement pages and maps the saved requirement-form routes onto 
   expect(parseRoute({ page: 'requirements', id: 'q1', query: { filter: 'nope' } })).toEqual({ page: 'requirements', id: 'q1' })
   // The create and edit pages take no filter.
   expect(parseRoute({ page: 'requirements', create: true, query: { filter: 'closed' } })).toEqual({ page: 'requirements', create: true })
-  expect(parseRoute({ page: 'requirements', edit: 'p-1', query: { filter: 'closed' } })).toEqual({ page: 'requirements', edit: 'p-1' })
+  expect(parseRoute({ page: 'requirements', edit: 'p-1', query: { filter: 'closed' } })).toEqual({ page: 'settings', id: 'p-1', query: { group: 'projects' } })
   // The removed Discuss tab stays readable: detail, create page and list open their matching requirement page.
   expect(parseRoute({ page: 'discuss', id: 'q1' })).toEqual({ page: 'requirements', id: 'q1' })
   expect(parseRoute({ page: 'discuss', create: true })).toEqual({ page: 'requirements', create: true })

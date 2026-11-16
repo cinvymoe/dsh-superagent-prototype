@@ -106,13 +106,13 @@ it('creates a project on its own page with an optional absolute worktree root an
   const projectRequest = server.requests.find(request => request.path === 'local/projects' && request.method === 'POST')!
   expect(projectRequest).toMatchObject({ method: 'POST', body: { name: 'Rooted', intakeRepository: 'acme/intake', codeRepository: 'acme/rooted',
     worktreeRoot: '/srv/worktrees' } })
-  // The new project is the current tab and its requirement list opens.
+  // The new project is current and opens its own page under Settings → Projects.
   expect(document.querySelector('.dt-project-tab[aria-selected="true"]')?.textContent).toBe('Rooted')
-  expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Rooted')
+  expect(document.querySelector('.dt-settings-title')?.textContent).toBe(zh['settingsGroup.projects'])
+  expect(document.querySelector('.dt-card-title')?.textContent).toBe('Rooted')
   expect(text()).toContain('acme/intake → acme/rooted')
-  expect(text()).toContain('/srv/worktrees')
-  expect(tab(zh['tab.requirements']).getAttribute('aria-selected')).toBe('true')
-  expect(server.requests.some(request => request.path === 'local/issues?project=p-fixture')).toBe(true)
+  expect(input(zh['discuss.projectWorktreeRoot']).value).toBe('/srv/worktrees')
+  expect(tab(zh['tab.settings']).getAttribute('aria-selected')).toBe('true')
 })
 
 it('omits the worktree root from the payload when the field is left empty', async () => {

@@ -155,7 +155,6 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
       case 'discussions': return route.id !== undefined ? <DiscussionDetail key={route.id} id={route.id} /> : <DiscussionList />
       case 'requirements': return route.id !== undefined
         ? <RequirementDetail key={route.id} id={route.id} filter={route.query?.filter ?? 'pending'} />
-        : route.edit ? <ProjectFormPage key={route.edit} edit={route.edit} />
         : route.create ? <ProjectFormPage /> : <RequirementList filter={route.query?.filter ?? 'pending'} />
       case 'source': return <SourceStatus />
       case 'trigger': return route.id !== undefined ? <ThreadPage key={route.id} id={route.id} target={route.query?.trigger} />
@@ -164,7 +163,8 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
         paused={!!state?.paused} />
       case 'execution': return route.id !== undefined ? <TicketPage key={route.id} id={route.id} />
         : state ? <ExecutionStatus filter={route.query?.filter ?? 'open'} state={state} reload={reload} /> : waiting
-      case 'settings': return state ? <SettingsPage key={state.masterId} group={route.query.group} query={route.query} state={state}
+      case 'settings': return state ? <SettingsPage key={state.masterId} {...route.id ? { id: route.id } : {}} group={route.query.group}
+        query={route.query} state={state}
         deploymentForm={deploymentForm} /> : waiting
     }
   })()

@@ -259,14 +259,15 @@ it('sends one stop for a double click on Confirm', async () => {
   expect(server.requests.filter(request => request.path === 'tickets/t1/stop')).toHaveLength(1)
 })
 
-it('overrides a project\'s pause and executor model on the Execution settings, saving the projects block as one value', async () => {
+it('overrides a project\'s pause and its executor model on the project\'s own settings page, as the projects block', async () => {
   server.localProjects = [{ id: 'p-one', name: '一个项目', chain: 'p-one', createdAt: '2026-09-23T00:00:00Z',
     updatedAt: '2026-09-23T00:00:00Z' }]
-  at({ page: 'settings', query: { group: 'execution' } })
+  at({ page: 'settings', id: 'p-one', query: { group: 'projects' } })
   await mount()
-  expect(text()).toContain(zh.projectOverrides)
-  const pause = document.querySelector(`[aria-label="${zh.projectPaused} · 一个项目"]`)!
-  await click(pause as HTMLElement)
+  // The override sits under the project record it belongs to, not on the Execution group.
+  expect(document.querySelector('[data-project-override="p-one"]')).not.toBeNull()
+  const pause = document.querySelector<HTMLElement>(`[aria-label="${zh.projectPaused} · 一个项目"]`)!
+  await click(pause)
   await click(zh.save)
   expect(server.settings.projects).toEqual({ 'p-one': { paused: true } })
   expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/projects'])

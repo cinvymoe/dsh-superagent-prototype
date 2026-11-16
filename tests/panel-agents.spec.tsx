@@ -42,8 +42,8 @@ const pluginIds = (role: string) => all(`[data-agent-role="${role}"] [data-agent
 it('adds Agents between Execution and Prompts and keeps the group when the panel remounts', async () => {
   await mount()
   await click(tab(zh['tab.settings']))
-  expect(all('.dt-settings-link').map(link => link.textContent)).toEqual(['来源', '评估', '执行', '智能体', '提示词', '部署'])
-  expect(all('.dt-settings-link')[3]!.textContent).toBe(zh['settingsGroup.agents'])
+  expect(all('.dt-settings-link').map(link => link.textContent)).toEqual(['来源', '评估', '执行', '项目', '智能体', '提示词', '部署'])
+  expect(all('.dt-settings-link')[4]!.textContent).toBe(zh['settingsGroup.agents'])
   await click(zh['settingsGroup.agents'])
   expect(current()).toBe(zh['settingsGroup.agents'])
   // Leaving the Settings tab keeps the group it last opened.

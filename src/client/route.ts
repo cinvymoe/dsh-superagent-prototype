@@ -8,29 +8,32 @@ export const TABS = ['overview', 'discussions', 'requirements', 'source', 'trigg
 export type Tab = typeof TABS[number]
 export const REQUIREMENT_FILTERS = ['pending', 'confirmed', 'closed', 'all'] as const
 export type RequirementFilter = typeof REQUIREMENT_FILTERS[number]
-export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'agents', 'prompts', 'deployment'] as const
+export const SETTINGS_GROUPS = ['source', 'eval', 'execution', 'projects', 'agents', 'prompts', 'deployment'] as const
 export type SettingsGroup = typeof SETTINGS_GROUPS[number]
 export type Route = { page: 'overview' | 'source'; id?: undefined; query?: undefined }
   | { page: 'discussions'; id?: undefined; query?: undefined }
   | { page: 'discussions'; id: string; query?: undefined }
-  | { page: 'requirements'; id?: undefined; create?: true; edit?: undefined; query?: { filter?: RequirementFilter } }
-  | { page: 'requirements'; id?: undefined; create?: undefined; edit: string; query?: undefined }
-  | { page: 'requirements'; id: string; create?: undefined; edit?: undefined; query?: { filter?: RequirementFilter } }
+  | { page: 'requirements'; id?: undefined; create?: true; query?: { filter?: RequirementFilter } }
+  | { page: 'requirements'; id: string; create?: undefined; query?: { filter?: RequirementFilter } }
   | { page: 'trigger'; id?: undefined; query?: { filter?: ThreadFilter } }
   | { page: 'trigger'; id: string; query?: { trigger?: string } }
   | { page: 'eval'; id?: undefined; query?: { filter?: DecisionFilter; window?: '24h' } }
   | { page: 'execution'; id?: undefined; query?: { filter?: TicketFilter } }
   | { page: 'execution'; id: string; query?: undefined }
-  | { page: 'settings'; id?: undefined; query: { group: SettingsGroup; source?: string; version?: string } }
+  | { page: 'settings'; id?: string; query: { group: SettingsGroup; source?: string; version?: string } }
 export const HOME: Route = { page: 'overview' }
-export const settingsRoute = (group: SettingsGroup, query: { source?: string; version?: string } = {}): Route =>
-  ({ page: 'settings', query: { group, ...query } })
+/** A settings page: the group, an optional record it names (a project's own page), and its own query values. */
+export const settingsRoute = (group: SettingsGroup,
+  query: { source?: string; version?: string; project?: string } = {}): Route => {
+  const { project, ...rest } = query
+  return { page: 'settings', ...(project ? { id: project } : {}), query: { group, ...rest } }
+}
 export const setupPage = (place: SetupPlace): Route =>
   place === 'deployment' ? settingsRoute('deployment') : settingsRoute('source', { source: place })
 export const routeLabel = (t: T, route: Route): string =>
   'create' in route && route.create ? t('discuss.newProject')
-    : 'edit' in route && route.edit ? t('discuss.editProject')
-    : route.id ? t(route.page === 'trigger' ? 'term.thread' : route.page === 'requirements' ? 'term.issue'
+    : route.id ? t(route.page === 'settings' ? 'settingsGroup.projects' : route.page === 'trigger' ? 'term.thread'
+      : route.page === 'requirements' ? 'term.issue'
       : route.page === 'discussions' ? 'term.discussion' : 'term.ticket')
     : t(`tab.${route.page}`)
 
@@ -57,8 +60,11 @@ export function parseRoute(value: unknown): Route | undefined {
       const chosen = pick(REQUIREMENT_FILTERS, query?.filter)
       const filter = chosen === 'pending' ? undefined : chosen
       const kept = filter ? { query: { filter } } : {}
+      // A project's stored edit route now opens that project's own page under Settings → Projects.
+      if (edit !== undefined) return typeof edit === 'string' && edit
+        ? { page: 'settings', id: edit, query: { group: 'projects' } }
+        : { page: 'settings', query: { group: 'projects' } }
       return record ? { page: 'requirements', id: record, ...kept }
-        : typeof edit === 'string' && edit ? { page: 'requirements', edit }
         : create === true ? { page: 'requirements', create: true } : { page: 'requirements', ...kept }
     }
     case 'trigger': return record ? { page, id: record, query: compact({ trigger: text('trigger') }) }
@@ -66,7 +72,8 @@ export function parseRoute(value: unknown): Route | undefined {
     case 'eval': return { page, query: compact({ filter: pick(DECISION_FILTERS, query?.filter),
       window: query?.window === '24h' ? '24h' as const : undefined }) }
     case 'execution': return record ? { page, id: record } : { page, query: compact({ filter: pick(TICKET_FILTERS, query?.filter) }) }
-    case 'settings': return { page, query: { group: pick(SETTINGS_GROUPS, query?.group) ?? 'source',
+    case 'settings': return { page, ...(record ? { id: record } : {}), query: {
+      group: pick(SETTINGS_GROUPS, query?.group) ?? 'source',
       ...compact({ source: text('source'), version: text('version') }) } }
     default: return undefined
   }
@@ -94,14 +101,13 @@ export function routeToSearch(route: Route, project?: string | undefined): URLSe
   const id = 'id' in route ? route.id : undefined
   if (id) search.set('id', id)
   if ('create' in route && route.create === true) search.set('create', '1')
-  const edit = 'edit' in route ? route.edit : undefined
-  if (edit) search.set('edit', edit)
   const query = ('query' in route ? route.query : undefined) as Record<string, unknown> | undefined
   for (const name of ['filter', 'group', 'source', 'version', 'window', 'trigger'] as const) {
     const value = query?.[name]
     if (typeof value === 'string' && value) search.set(name, value)
   }
-  if (project) search.set('project', project)
+  // A project settings page carries the project it edits; every other route carries the project it is browsed in.
+  if (project && search.get('project') === null) search.set('project', project)
   return search
 }
 /**

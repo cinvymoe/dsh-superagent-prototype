@@ -31,7 +31,6 @@ const ROUTES: Route[] = [
   { page: 'requirements', query: { filter: 'confirmed' } },
   { page: 'requirements', query: { filter: 'all' } },
   { page: 'requirements', create: true },
-  { page: 'requirements', edit: 'p-widgets' },
   { page: 'requirements', id: 'q-1' },
   { page: 'requirements', id: 'q-2', query: { filter: 'closed' } },
   { page: 'trigger' },
@@ -46,6 +45,8 @@ const ROUTES: Route[] = [
   { page: 'settings', query: { group: 'source' } },
   { page: 'settings', query: { group: 'eval' } },
   { page: 'settings', query: { group: 'source', source: 'p-widgets', version: 'v-2' } },
+  { page: 'settings', query: { group: 'projects' } },
+  { page: 'settings', id: 'p-widgets', query: { group: 'projects' } },
 ]
 
 it('round-trips every route variant and the current project through a permalink', () => {
