@@ -212,3 +212,19 @@ it('shows the GitHub Source\'s switches for what it receives across the reposito
   expect(field('Default branch CI · Not on the list · no mention')).toBeTruthy()
   expect(all('.dt-admission thead th').map(cell => cell.textContent)).toContain(en.admissionAddressed)
 })
+
+it('lands a merged pull request on this machine only when the Policy asks for it, and says what that takes', async () => {
+  await mount()
+  await click(zh['tab.eval'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  const knob = () => all('button[role="switch"]').find(item => item.getAttribute('aria-label') === zh.deliveryLand)!
+  expect(knob().getAttribute('aria-checked')).toBe('false')
+  expect(text()).toContain(zh.deliveryLand)
+  await click(knob())
+  await click(zh.save)
+  expect(server.settings.policy.delivery).toEqual({ land: 'merge' })
+  await remount()
+  await click(zh['tab.eval'])
+  await click(find(zh['tab.settings'], '.dt-status-head button'))
+  expect(knob().getAttribute('aria-checked')).toBe('true')
+})

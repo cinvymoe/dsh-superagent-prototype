@@ -239,6 +239,7 @@ describe('settings migration', () => {
     }))
     expect(saved.policy).toEqual({
       rules: [{ id: 'visual', name: 'V', enabled: true, instruction: 'x' }],
+      delivery: { land: 'never' },
       sources: { feishu: { allowed: [{ id: MEMBER, name: 'Alice' }, { id: 'ou_bob', name: 'Bob' }], syncChat: CHAT, admission: {} }, github: { allowed: [{ id: 'alice' }, { id: 'carol' }], admission: {} } },
     })
     expect(saved).toMatchObject({ paused: false, executor: { model: null, maxWorkers: 2, directory: '', prepare: '', blockedCommands: [] } })
@@ -252,7 +253,7 @@ describe('settings migration', () => {
     expect(migrated).toEqual({
       paused: true,
       sources: { feishu: feishuSource({ chats: [{ chatId: CHAT, listen: 'mentions' }, { chatId: OBSERVED, listen: 'all' }], directMessages: false }), github: { enabled: true, config: { pollSeconds: 120 } } },
-      policy: { rules: [], sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
+      policy: { rules: [], delivery: { land: 'never' }, sources: { feishu: { allowed: [{ id: MEMBER, name: 'A' }], admission: {} }, github: { allowed: [{ id: 'a' }], admission: {} } } },
       eval: { mode: 'auto', timeoutSeconds: 90, model: { provider: 'p', model: 'm' } },
       executor: { model: null, maxWorkers: 5, directory: '', prepare: '', blockedCommands: [] },
       projects: {},
@@ -559,5 +560,21 @@ describe('settingsFor', () => {
   it('refuses a project override of a block a project may not change', () => {
     expect(() => SettingsSchema.parse({ projects: { demo: { policy: { rules: [] } } } })).toThrow()
     expect(() => SettingsSchema.parse({ projects: { demo: { eval: { mode: 'auto' } } } })).toThrow()
+  })
+})
+
+describe('delivery', () => {
+  it('leaves every merge at the remote until a Policy asks to land them here', () => {
+    expect(SettingsSchema.parse({}).policy.delivery).toEqual({ land: 'never' })
+  })
+  it('takes the landing switch without making a new Policy version', () => {
+    const never = SettingsSchema.parse({})
+    const merge = SettingsSchema.parse({ policy: { delivery: { land: 'merge' } } })
+    expect(merge.policy.delivery).toEqual({ land: 'merge' })
+    // The switch decides delivery, not who may originate work, so no open Ticket is re-judged for it.
+    expect(policyVersion(merge)).toBe(policyVersion(never))
+  })
+  it('refuses a landing value it does not know', () => {
+    expect(() => SettingsSchema.parse({ policy: { delivery: { land: 'always' } } })).toThrow()
   })
 })

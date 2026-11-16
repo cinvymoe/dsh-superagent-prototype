@@ -161,6 +161,13 @@ function PolicyBlock() {
         <LabelValue label={t('policyVersion')} value={<span className="dt-mono">{policyVersion.slice(0, 8)}</span>} /><InfoTip
           text={t('policyVersionHint')} />
       </p>
+      <Section title={t('delivery')} hint={t('deliveryHint')}>
+        <div className="dt-switch-row">
+          <div className="dt-field-head">{t('deliveryLand')}<InfoTip text={t('deliveryLandHint')} /></div>
+          <Switch checked={policy.delivery.land === 'merge'} label={t('deliveryLand')}
+            onChange={land => edit({ delivery: { land: land ? 'merge' : 'never' } })} />
+        </div>
+      </Section>
       <Section title={t('rules')} hint={t('rulesHint')} action={<Button variant="ghost" size="sm" icon={<Icon name="plus" />}
         onClick={add}>{t('addRule')}</Button>}>
         {policy.rules.length ? <ul className="dt-rules">{policy.rules.map((rule, index) => <RuleRow key={rule.id} rule={rule}

@@ -445,6 +445,9 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     head: '0123456789abcdef0123456789abcdef01234567', committedAt: '2026-09-23T00:00:00Z', dirty: false,
     remotes: [{ name: 'origin', repository: 'acme/widgets' }], available: true, reasons: [], restartRequired: false }) },
   'GET deployment/prepare': { answer: () => server.prepare },
+  // A landing needs a supervisor; the fake answers the unit a systemd host would report, and no running worker.
+  'GET deployment/landing': { answer: () => ({ unit: 'dsh-web.service', available: server.prepare.available,
+    reasons: server.prepare.reasons, running: 0, prepare: server.prepare }) },
   'POST deployment/prepare': { answer: () => {
     if (server.prepareFailure) {
       return refuse(400, `The pull and build failed: ${server.prepareFailure.message}`, { code: 'prepareFailed',

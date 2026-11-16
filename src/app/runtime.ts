@@ -32,6 +32,7 @@ import { Effects } from './effects.ts'
 import { Prompts } from './prompts.ts'
 import { registerHttp, type HttpHost } from './http.ts'
 import { Checkout } from './checkout.ts'
+import { Landing } from './landing.ts'
 import { Prepare } from './prepare.ts'
 import { LocalIssues } from './local.ts'
 import { Discussions } from './discussions.ts'
@@ -88,6 +89,7 @@ export class Runtime extends Service implements SourceHost {
   readonly projects: Projects
   readonly checkout: Checkout
   readonly prepare: Prepare
+  readonly landing: Landing
   readonly ready: Promise<void>
   private readonly board = new HealthBoard()
   private readonly runtimeHealth = this.board.claim('runtime', { state: 'starting', detail: '' })
@@ -123,6 +125,10 @@ export class Runtime extends Service implements SourceHost {
         logDir: join(machine.stateDir, 'prepare'),
         chains: () => setup.configured()
           ? Object.entries(setup.deployment.chains ?? {}).map(([id, target]) => ({ id, repository: target.repository })) : [] })
+      // A merge lands on this machine only when the Policy asks for it; the landing waits while a worker runs, and asks the
+      // unit that started this process to restart it instead of stopping itself.
+      this.landing = new Landing({ checkout: this.checkout, prepare: this.prepare, logDir: join(machine.stateDir, 'prepare'),
+        running: () => this.executor.activeCount() })
       const deployed = () => setup.configured()
         ? environmentOf({ deployment: setup.deployment, sources: this.sources, settings: store.settings() }) : undefined
       const feishu = () => setup.configured() && !!setup.deployment.feishu
@@ -186,6 +192,13 @@ export class Runtime extends Service implements SourceHost {
             const issueId = event.data.threadKey.startsWith('local:') ? event.data.threadKey.slice('local:'.length) : undefined
             if (issueId) effects.enqueue('discussion', event.data.decisionId, { issueId })
           }
+          // A merge that reached the chain's remote lands on this machine when the Policy asks for it; one waiting landing per
+          // repository coalesces a burst of merges, and the landing itself checks the commit actually moved.
+          const merged = event.type === 'ticket.ended' && event.data.outcome === 'merged' ? store.tickets.get(event.data.ticketId) : undefined
+          if (merged && setup.configured() && store.settings().policy.delivery.land === 'merge') {
+            const repository = setup.deploymentFor(merged.execution?.chain).repository.toLowerCase()
+            effects.enqueue('deploy', repository, { repository })
+          }
           // Notify the ticket's conversations whenever it ends via a pull request.
           const ended = event.type === 'ticket.ended' ? store.tickets.get(event.data.ticketId) : undefined
           if (ended && setup.configured()) {
@@ -213,6 +226,12 @@ export class Runtime extends Service implements SourceHost {
         receive: trigger => this.passes.receive(trigger) })
       // A discussion the Router asked for is opened after the decision's transaction commits, so it never holds an Eval open.
       effects.handle('discussion', async ({ issueId }) => { this.openDiscussion(issueId) })
+      // A merge the Policy asks to land pulls, rebuilds and asks the supervisor to restart; a running worker makes it `Later`,
+      // and a Policy that changed its mind after the merge drops the landing instead of restarting anything.
+      effects.handle('deploy', async ({ repository }) => {
+        if (store.settings().policy.delivery.land !== 'merge') return
+        await this.landing.land(repository)
+      }, { retry: [60_000, 600_000] })
       // Asking is answered in the background, so a request never waits for a forked Session; a stop leaves the question `asked`.
       this.localQuestions = new LocalQuestions({ store, local: this.local, stateDir: machine.stateDir,
         answers: new Questions({ context: ctx, store, sessions, stateDir: machine.stateDir, lifetime: this.lifetime }), lifetime: this.lifetime,
@@ -414,7 +433,7 @@ export class Runtime extends Service implements SourceHost {
     return { store, sources, prompts, sessions, settings, engine, executor, health, machine, masterId, ready, sourceLinks, local: this.local,
       discussions: this.discussions, answers: this.answers, localQuestions: this.localQuestions, projects: this.projects,
       answerDiscussionAsk: (id, askId, replies) => runtime.answerDiscussionAsk(id, askId, replies),
-      checkout: this.checkout, prepare: this.prepare,
+      checkout: this.checkout, prepare: this.prepare, landing: this.landing,
       get deployment() { return setup.deployment },
       deploymentFor: (chain?: string) => setup.deploymentFor(chain),
       get setupProblem() { return setup.problem }, get feishuProblem() { return setup.feishuProblem },

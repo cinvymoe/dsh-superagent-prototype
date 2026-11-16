@@ -156,9 +156,20 @@ export const AdmissionRowSchema: z.ZodType<AdmissionRow> = z.object({ listedUnad
 export const AdmissionTableSchema = z.record(z.string(), AdmissionRowSchema)
 export const SourcePolicySchema = z.object({ allowed: z.array(AllowedSchema).default([]), admission: AdmissionTableSchema.default({}) }).catchall(z.unknown())
 export type SourcePolicy = z.infer<typeof SourcePolicySchema>
+/**
+ * Whether a merge that reached a chain's remote also lands on the machine that runs this panel. `merge` pulls the chain's
+ * main, rebuilds, and asks this process's supervisor to restart it once the merge's Ticket ends and no worker is running;
+ * `never` leaves every merge at the remote for a person to deploy. A landing never interrupts a running worker: it waits
+ * for the next attempt instead, so a queue of merges lands once the queue drains.
+ */
+export const DeliveryConfigSchema = z.object({
+  land: z.enum(['never', 'merge']).default('never'),
+}).strict()
+export type DeliveryConfig = z.infer<typeof DeliveryConfigSchema>
 export const PolicyConfigSchema = z.object({
   rules: z.array(RuleSchema).refine(rules => new Set(rules.map(rule => rule.id)).size === rules.length, 'Duplicate rule IDs').default(DEFAULT_RULES),
   sources: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), SourcePolicySchema).default({}),
+  delivery: DeliveryConfigSchema.default(() => DeliveryConfigSchema.parse({})),
 }).strict()
 export const EvalConfigSchema = z.object({
   mode: z.enum(['off', 'observe', 'auto']).default('observe'),

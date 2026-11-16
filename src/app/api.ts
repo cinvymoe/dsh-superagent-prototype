@@ -4,6 +4,7 @@ import type { PromptConfig, Prompts } from './prompts.ts'
 import type { PromptsView, StateView, TicketPageView } from './http.ts'
 import type { CheckoutView } from './checkout.ts'
 import type { PrepareStatus } from './prepare.ts'
+import type { LandingStatus } from './landing.ts'
 import type { HistoryView } from './settings-history.ts'
 import type { OverviewView } from './views/overview.ts'
 import type { SettingsView } from './views/settings.ts'
@@ -27,6 +28,7 @@ export interface Api {
   'GET deployment/checkout': { response: CheckoutView }
   'GET deployment/prepare': { response: PrepareStatus }
   'POST deployment/prepare': { response: { merged: boolean; head: string | null; log: string } }
+  'GET deployment/landing': { response: LandingStatus }
   'GET overview': { response: OverviewView }
   'GET search': { query: { q: string }; response: SearchView }
   'GET sources': { response: SourceStatusView[] }

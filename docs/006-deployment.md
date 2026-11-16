@@ -180,6 +180,8 @@ Four steps make the running version match the checkout. dsh-superagent loads its
 
    `prepare` is shared by both forms; `restart` and `activate` restart the profile's process in this script's tmux session `dsh-<profile>`, so never point them at a host profile: they would stop the process its supervisor owns and relaunch it under the script's tmux session. The plugin never restarts the process that loaded it.
 
+   **Letting the Policy land a merge.** The **Delivery** switch in **Settings → Eval** (`policy.delivery.land`, off by default) makes steps 2 and 3 happen without a person. When a pull request of a chain's repository merges, the `deploy` effect runs `prepare` on that repository, keeps the run in `<stateDir>/prepare/`, and then asks the supervisor to restart: a process a service unit owns is restarted through `systemd-run --on-active=3 --unit=dsh-superagent-land-<stamp> --collect systemctl restart <unit>`, a transient unit outside the process's own cgroup, so the restart outlives the process it replaces and the effect's transaction commits first. A process no supervisor owns answers `unsupervised` on `GET deployment/landing` and stays unlanded, and so does a checkout that cannot take a merge. A landing waits while an Executor Session runs, because the restart would cut it off: it defers and tries again after 60 s and then after 600 s. Each landing writes `land-<stamp>-<pid>.log` with the unit it asked and that request's output. Merges of one repository coalesce into one waiting landing, and a merge that moves the checkout nowhere lands nothing.
+
 4. **Verify.** Once the process runs the new build, the route answers with the new commit and no pending restart:
 
    ```sh

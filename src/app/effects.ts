@@ -23,6 +23,8 @@ export interface EffectPayloads {
   reply: Record<string, never>
   /** Open a discussion about a local requirement the Router decided to talk through; the key is the Decision ID. */
   discussion: { issueId: string }
+  /** Land a merge on this machine: pull the chain's main, rebuild, and restart through the supervisor; the key is the repository. */
+  deploy: { repository: string }
 }
 export type EffectKind = keyof EffectPayloads
 interface Handler<K extends EffectKind> {

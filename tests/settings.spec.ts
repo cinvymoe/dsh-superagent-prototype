@@ -153,3 +153,16 @@ it('refuses an agents save outside the panel, saves a changed one once and recor
   expect(store.blockRevision('agents')).toBe(2)
   expect(store.settingsHistory(1)[0]!.revision).toBe(revision)
 })
+
+it('saves whether a merge lands here as part of the Policy, and refuses a value it does not know', async () => {
+  h = await startRuntime()
+  const { settings, store } = h.runtime
+  const policy = store.settings().policy
+  const revision = store.blockRevision('policy')
+  await settings.save('policy', { ...policy, delivery: { land: 'merge' } }, revision, 'panel')
+  expect(store.settings().policy.delivery).toEqual({ land: 'merge' })
+  expect(store.blockRevision('policy')).toBeGreaterThan(revision)
+  await expect(settings.save('policy', { ...store.settings().policy, delivery: { land: 'always' } }, store.blockRevision('policy'), 'panel'))
+    .rejects.toThrow()
+  expect(store.settings().policy.delivery).toEqual({ land: 'merge' })
+})

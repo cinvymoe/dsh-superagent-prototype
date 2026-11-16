@@ -387,6 +387,27 @@ it('records worker reports, binds the task PR, ends the ticket on ready without 
   expect(notice ?? runtime.store.replyStatus(key('pr-terminal', '42', 'feishu', JSON.stringify({ chatId: CHAT, messageId: 'om_1' }), 'merged'))).toBeTruthy()
 })
 
+it('asks for a landing on this machine when a merge lands here, and only when the Policy says so', async () => {
+  const land = vi.spyOn(runtime.landing, 'land').mockResolvedValue({ landed: false, head: null, reason: 'current' })
+  const merged = (number: number) => ({ number, state: 'closed', merged: true, merged_at: new Date().toISOString(),
+    html_url: `https://github.com/acme/widgets/pull/${number}`, user: { login: 'agent-bot' },
+    head: { sha: 'abc', ref: 'agent/x', repo: { full_name: 'acme/widgets' } } })
+  const open = async (id: string, number: number) => {
+    const { sessionId } = await acceptedTicket(feishu(id, '@bot 修一下回归'))
+    await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'pr open', pr_number: number })
+    await observePull(runtime.context(githubKind), merged(number))
+  }
+  // A merge leaves the machine alone until the Policy asks for a landing, so nothing restarts under a running panel.
+  await open('2', 43)
+  await runtime.idle()
+  expect(runtime.store.tickets.list().some(ticket => ticket.ended?.outcome === 'merged')).toBe(true)
+  expect(land).not.toHaveBeenCalled()
+  const policy = runtime.store.settings().policy
+  await runtime.settings.save('policy', { ...policy, delivery: { land: 'merge' } }, runtime.store.blockRevision('policy'), 'panel')
+  await open('3', 44)
+  await vi.waitFor(() => expect(land).toHaveBeenCalledWith('acme/widgets'))
+})
+
 it('lists each ticket with the Threads it subscribes to, as their Sources describe them', async () => {
   const { sessionId, ticket } = await acceptedTicket()
   await runTool(sessionId, 'orchestrator_report', { state: 'progress', summary: 'pr open', pr_number: 42 })

@@ -34,6 +34,7 @@ import type { Answers } from './answers.ts'
 import { QUESTION_CHARS, type LocalQuestions } from './local-questions.ts'
 import type { Projects } from './projects.ts'
 import type { Checkout } from './checkout.ts'
+import type { Landing } from './landing.ts'
 import type { Prepare } from './prepare.ts'
 import { REQUIREMENT_BODY_BYTES } from '../limits.ts'
 
@@ -59,6 +60,8 @@ export interface HttpHost {
   readonly checkout: Pick<Checkout, 'status'>
   /** Whether that checkout can take a local merge, and the one merge at a time it runs through the service script. */
   readonly prepare: Pick<Prepare, 'status' | 'merge'>
+  /** Whether a merge can land here, and how: the supervisor that restarts this process, read from the process itself. */
+  readonly landing: Pick<Landing, 'status' | 'land'>
   dispatchPlan(issueId: string): Ticket[]
   /** Hand a discussion's conclusion to the requirement's Aligner, returning the alignment ticket it started or reused. */
   handOffDiscussion(discussionId: string): Ticket
@@ -193,6 +196,7 @@ function routes(runtime: HttpHost): Routes {
     'GET deployment/checkout': () => runtime.checkout.status(),
     'GET deployment/prepare': () => runtime.prepare.status(),
     'POST deployment/prepare': () => runtime.prepare.merge(),
+    'GET deployment/landing': () => runtime.landing.status(),
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem, runtime.projects.missingChains()),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),
