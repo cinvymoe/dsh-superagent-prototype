@@ -5,7 +5,7 @@ import { expect, it } from 'vitest'
 import { DECISION_FILTERS } from '../src/client/api.ts'
 import { THREAD_FILTERS, TICKET_FILTERS } from '../src/app/api.ts'
 import { zh } from '../src/client/locales.ts'
-import { HOME, PANEL_VALUE, parseRoute, routeFromSearch, routeToSearch, type Route } from '../src/client/route.ts'
+import { HOME, PANEL_VALUE, parseRoute, routeFromSearch, routeToSearch, STANDALONE_PARAM, type Route } from '../src/client/route.ts'
 import { at, click, all, find, mount, text, usePanel } from './fixtures/panel.tsx'
 import { localIssue, server } from './fixtures/panel-server.ts'
 
@@ -103,16 +103,28 @@ it('gives the header a new-tab link to the current page without the launch token
   await mount(zh, { url: '/?token=secret&panel=dsh-superagent&page=requirements&project=p-widgets' })
   expect(location.search).not.toContain('token')
   const here = location.origin + location.pathname + location.search
-  expect(link().href).toBe(here)
+  // The link opens the page on its own, so it asks for the standalone page on top of this panel's parameters.
+  expect(link().href).toBe(`${here}&${STANDALONE_PARAM}=1`)
   expect(link().href).not.toContain('token')
   expect(link().target).toBe('_blank')
   expect(link().rel).toContain('noopener')
   expect(link().getAttribute('title')).toBe(zh.openPage)
   // The link follows the page: opening the record moves it to that record's permalink too.
   await click(find('Widgets requirement'))
-  expect(link().href).toBe(location.origin + location.pathname + location.search)
+  expect(link().href).toBe(`${location.origin + location.pathname + location.search}&${STANDALONE_PARAM}=1`)
   expect(new URL(link().href).searchParams.get('page')).toBe('requirements')
   expect(new URL(link().href).searchParams.get('id')).toBe('q-widgets')
+})
+
+it('keeps the standalone marker in the address bar while the page is navigated', async () => {
+  server.localProjects = [WIDGETS]
+  server.localIssues = [issue('q-widgets', 'p-widgets', 'Widgets requirement')]
+  await mount(zh, { url: '/?panel=dsh-superagent&page=requirements&standalone=1' })
+  expect(new URL(location.href).searchParams.get(STANDALONE_PARAM)).toBe('1')
+  // Navigating writes the next page's permalink and keeps the standalone marker, so a refresh stays standalone.
+  await click(find('Widgets requirement'))
+  expect(new URL(location.href).searchParams.get('id')).toBe('q-widgets')
+  expect(new URL(location.href).searchParams.get(STANDALONE_PARAM)).toBe('1')
 })
 
 it('adds one link and no copy or share control', async () => {

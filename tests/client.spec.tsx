@@ -48,7 +48,8 @@ const serve = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     setup: { machine: { stateDir: '/srv/state', worktreeRoot: '/srv/state/worktrees', blockedCommands: [], promptMaxChars: 100000, admissionContextMaxPages: 10, admissionContextTimeoutMs: 15000 }, problem: null, feishuProblem: null, accounts: null } })
   return Response.json({ error: 'unavailable' }, { status: 503 })
 }))
-afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
+afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '/'); document.title = '';
+  delete document.documentElement.dataset.dtStandalone })
 
 it('registers a localized main panel, sidebar entry and Plugin Manager row page, and no settings section', () => {
   const { entries, dictionaries, main, nav } = fixture([])
@@ -64,6 +65,25 @@ it('selects this panel once when the address bar is one of its permalinks', () =
   window.history.replaceState(null, '', '/?panel=dsh-superagent&page=requirements&id=q-1')
   const { ctx } = fixture([])
   expect(ctx.layout.selectPanel).toHaveBeenCalledExactlyOnceWith('dsh-superagent')
+})
+
+it('marks the document for the standalone page only when its own new-tab link asked for it', () => {
+  window.history.replaceState(null, '', '/?panel=dsh-superagent&page=overview&standalone=1')
+  fixture([])
+  expect(document.documentElement.dataset.dtStandalone).toBe('')
+  window.history.replaceState(null, '', '/?panel=dsh-superagent&page=overview')
+  delete document.documentElement.dataset.dtStandalone
+  fixture([])
+  expect(document.documentElement.dataset.dtStandalone).toBeUndefined()
+})
+
+it('names this panel in the browser title while it is the page', async () => {
+  serve()
+  const { main } = fixture([])
+  const view = await render(main, { t })
+  expect(document.title).toBe(zh.title)
+  view.dispose()
+  expect(document.title).toBe('')
 })
 
 it('leaves the shell\'s panel alone when the address bar is not a permalink', () => {

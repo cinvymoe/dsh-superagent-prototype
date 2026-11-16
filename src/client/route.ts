@@ -80,6 +80,12 @@ export const currentSearch = (): string => typeof location === 'undefined' ? '' 
 /** Whether the address bar names this panel, either as a permalink or because the panel wrote it while mounted. */
 export const panelRequested = (search: string): boolean => new URLSearchParams(search).get(PANEL_PARAM) === PANEL_VALUE
 /**
+ * Query parameter that asks for the panel alone: the shell's own columns are hidden, so a page opened from the title
+ * bar's new-tab link reads as this panel rather than as the host it is mounted in.
+ */
+export const STANDALONE_PARAM = 'standalone'
+export const standaloneRequested = (search: string): boolean => new URLSearchParams(search).get(STANDALONE_PARAM) === '1'
+/**
  * Encode one route and the current project into the permalink parameters. Page names, record ids, filters, the
  * settings group and the project stay readable in the address bar; the project is only written when one is current.
  */
@@ -124,11 +130,14 @@ export function routeFromSearch(search: string): { route: Route; project?: strin
 }
 /**
  * The absolute permalink of a route: the page path with only this panel's parameters, so a launch token that happened
- * to be in the address bar is never carried into a link or a copied URL.
+ * to be in the address bar is never carried into a link or a copied URL. `standalone` adds the parameter that opens the
+ * page with the shell's own columns hidden, which is what the title bar's new-tab link wants.
  */
-export function permalink(route: Route, project?: string | undefined): string {
-  if (typeof location === 'undefined') return `?${routeToSearch(route, project).toString()}`
-  return `${location.origin}${location.pathname}?${routeToSearch(route, project).toString()}`
+export function permalink(route: Route, project?: string | undefined, standalone = false): string {
+  const search = routeToSearch(route, project)
+  if (standalone) search.set(STANDALONE_PARAM, '1')
+  if (typeof location === 'undefined') return `?${search.toString()}`
+  return `${location.origin}${location.pathname}?${search.toString()}`
 }
 const ROUTE_KEY = 'dsh-superagent/route'
 export interface Location { route: Route; stack: Route[]; group?: SettingsGroup | undefined; project?: string | undefined }
@@ -162,7 +171,10 @@ export function remember(location: Location): void {
  */
 export function reflect(shown: Location | undefined): void {
   if (typeof location === 'undefined' || typeof history === 'undefined' || typeof history.replaceState !== 'function') return
-  const target = shown === undefined ? '' : `?${routeToSearch(shown.route, shown.project).toString()}`
+  const search = shown === undefined ? undefined : routeToSearch(shown.route, shown.project)
+  // The standalone page keeps its own marker: navigating inside it must not turn the next refresh back into a framed page.
+  if (search && standaloneRequested(location.search)) search.set(STANDALONE_PARAM, '1')
+  const target = search === undefined ? '' : `?${search.toString()}`
   const url = `${location.pathname}${target}`
   if (`${location.pathname}${location.search}` === url) return
   history.replaceState(history.state, '', url)

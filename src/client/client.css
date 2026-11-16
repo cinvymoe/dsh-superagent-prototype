@@ -443,3 +443,10 @@ a.dt-btn, a.dt-btn:hover { text-decoration: none; }
 .dt-image-caption { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-caption); overflow-wrap: anywhere; }
 .dt-requirement-image { display: block; max-width: min(320px, 100%); max-height: 240px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; object-fit: contain; background: var(--dsw-alias-interactive-bg-hover); }
 .dt-image-placeholder { display: block; width: 160px; height: 96px; border: 0.5px dashed var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-interactive-bg-hover); }
+
+/*
+ * `standalone=1` (the title bar's new-tab link) opens this panel on its own: the shell's sidebar column leaves no track
+ * and the sidebar itself is hidden, so the panel fills the window instead of reading as a page inside dsh.
+ */
+html[data-dt-standalone] [data-slot='root'] > div { grid-template-columns: 0 minmax(0, 1fr) 0 !important }
+html[data-dt-standalone] [data-slot='sidebar'] { display: none !important }

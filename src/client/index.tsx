@@ -11,7 +11,7 @@ import type { PluginConfigViewProps } from '@deepseek-ai/dsh-client-ui-plugin-ma
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { openKnownSession, SessionNavigationError } from '../navigation.ts'
-import { currentSearch, panelRequested } from './route.ts'
+import { currentSearch, panelRequested, standaloneRequested } from './route.ts'
 import { App } from './app.tsx'
 import { PluginConfig, usePageForm } from './deployment.tsx'
 import { en, zh } from './locales.ts'
@@ -32,6 +32,9 @@ function HammerIcon({ size }: SidebarPanelIconOwnerProps) {
 function Mounted({ ctx, t }: { ctx: ClientContext; t: T }) {
   const pending = useRef<AbortController>(undefined)
   useEffect(() => () => { pending.current?.abort() }, [])
+  // The standalone marker is set when the plugin loads, before the panel paints; leaving the panel for a Session drops
+  // it, so the shell's own columns come back even though the plugin stays loaded.
+  useEffect(() => () => { delete document.documentElement.dataset.dtStandalone }, [])
   const openSession = useCallback(async (id: string) => {
     pending.current?.abort()
     const request = new AbortController(); pending.current = request
@@ -43,6 +46,16 @@ function Mounted({ ctx, t }: { ctx: ClientContext; t: T }) {
     }
   }, [ctx, t])
   const form = usePageForm(ctx.get('configForms')?.get<Record<string, unknown>>(ENTRY))
+  // The shell projects its own product title, which keeps naming dsh while this panel is the page: name the panel
+  // instead, and put the shell's title back when the panel goes away (a Session selection may have changed it since).
+  useEffect(() => {
+    const previous = document.title
+    const label = t('title')
+    const show = () => { document.title = label }
+    show()
+    const stop = ctx.layout.panelInfo.subscribe(() => { if (ctx.layout.panelInfo.getSnapshot().activePanelId === PANEL_ID) show() })
+    return () => { stop(); if (document.title === label) document.title = previous }
+  }, [ctx, t])
   return <App t={t} openSession={openSession} deploymentForm={form} />
 }
 
@@ -50,6 +63,14 @@ export const inject = ['slots', 'locale', 'sessions', 'uiWorkspace', 'layout']
 /** Registers the panel, sidebar icon, and Plugin Manager config view; `configForms` is optional (without it, machine settings are read-only). */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-superagent: dictionaries')
+  // `standalone=1` is the title bar's own new-tab link: it marks the document so the stylesheet can drop the shell's
+  // sidebar column, leaving the panel alone in the window instead of a page framed by dsh.
+  if (standaloneRequested(currentSearch()) && typeof document !== 'undefined') {
+    ctx.effect(() => {
+      document.documentElement.dataset.dtStandalone = ''
+      return () => { delete document.documentElement.dataset.dtStandalone }
+    }, 'dsh-superagent: standalone page')
+  }
   const t = ctx.locale.bind(NS)
   ctx.slots.inject('main', () => {
     const dispose = ctx.slots.register({ name: 'main', key: PANEL_ID, locale: NS, inject: () => ({}) },

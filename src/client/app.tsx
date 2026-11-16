@@ -170,7 +170,7 @@ function Pages({ route, openTab, deploymentForm }: { route: Route; openTab: (tab
   })()
   return <div className="dt-page">
     <div className="dt-column">
-      <Header masterId={state?.masterId} href={permalink(route, project)} />
+      <Header masterId={state?.masterId} href={permalink(route, project, true)} />
       {error && state && <p className="dt-error" role="status">{error.message}</p>}
       <ProjectBar route={route} />
       <SegmentedTabs className="dt-tabs" label={t('pagesLabel')} value={route.page} onChange={openTab}
