@@ -292,10 +292,11 @@ export class LocalIssues {
     return text ? `${text}\n\nImages:\n${lines.join('\n')}` : `Images:\n${lines.join('\n')}`
   }
 
-  /** The stored bytes and media type of one requirement image, from the requirement or any follow-up message. */
+  /** The stored bytes and media type of one requirement image, from the requirement, a follow-up or a question. */
   image(id: string, imageId: string): { bytes: Buffer; mediaType: string } | undefined {
     const issue = this.get(id)
-    const image = [...(issue?.images ?? []), ...(issue?.commentImages ?? []).flatMap(entry => entry.images)]
+    const image = [...(issue?.images ?? []), ...(issue?.commentImages ?? []).flatMap(entry => entry.images),
+      ...(issue?.questions ?? []).flatMap(question => question.images ?? [])]
       .find(entry => entry.id === imageId)
     if (!image) return undefined
     try { return { bytes: readFileSync(requirementImagePath(this.host.stateDir, id, image)), mediaType: image.mediaType } }

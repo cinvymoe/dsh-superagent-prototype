@@ -214,8 +214,8 @@ export class Runtime extends Service implements SourceHost {
       // A discussion the Router asked for is opened after the decision's transaction commits, so it never holds an Eval open.
       effects.handle('discussion', async ({ issueId }) => { this.openDiscussion(issueId) })
       // Asking is answered in the background, so a request never waits for a forked Session; a stop leaves the question `asked`.
-      this.localQuestions = new LocalQuestions({ store, local: this.local,
-        answers: new Questions({ context: ctx, store, sessions, lifetime: this.lifetime }), lifetime: this.lifetime,
+      this.localQuestions = new LocalQuestions({ store, local: this.local, stateDir: machine.stateDir,
+        answers: new Questions({ context: ctx, store, sessions, stateDir: machine.stateDir, lifetime: this.lifetime }), lifetime: this.lifetime,
         warn: message => ctx.logger.warn('dsh-superagent: %s', message) })
       this.projects = new Projects({ store, local: this.local, settings: this.settings, configured: () => setup.configured(),
         deploymentFor: chain => setup.deploymentFor(chain), refreshProject: project => setup.projectCommands(project) })

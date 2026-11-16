@@ -777,8 +777,10 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'POST local/issues/:id/questions': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
+    const images = ((body.images ?? []) as { name: string; mediaType: string }[]).map((image, index) => ({
+      id: `img-q${index + 1}`, name: image.name, mediaType: image.mediaType, bytes: PIXEL_PNG.length }))
     const question = { id: `qn-${String((issue.questions ?? []).length).padStart(8, '0')}`, ticket: body.ticket as string,
-      text: body.text as string, status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
+      text: body.text as string, ...(images.length ? { images } : {}), status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
     const next = { ...issue, questions: [...issue.questions ?? [], question] }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     return { issue: issueView(next), question }
@@ -931,7 +933,8 @@ function imageReply(path: string): Response | undefined {
   const imageId = decodeURIComponent(segments[4]!)
   if (segments[1] === 'issues') {
     const issue = server.localIssues.find(item => item.id === id)
-    const image = [...issue?.images ?? [], ...(issue?.commentImages ?? []).flatMap(entry => entry.images)]
+    const image = [...issue?.images ?? [], ...(issue?.commentImages ?? []).flatMap(entry => entry.images),
+      ...(issue?.questions ?? []).flatMap(question => question.images ?? [])]
       .find(item => item.id === imageId)
     return image ? new Response(PIXEL_PNG, { status: 200, headers: { 'content-type': image.mediaType } })
       : new Response(null, { status: 404 })

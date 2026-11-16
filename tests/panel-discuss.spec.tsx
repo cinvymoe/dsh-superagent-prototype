@@ -404,6 +404,49 @@ it('asks about one linked Ticket and shows the question waiting in the message t
   expect(timelineSection().textContent).not.toContain('The questioned description')
 })
 
+it('pastes an image into the Ask box and keeps it on that question\'s timeline entry', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [localIssue('Ask with image', 'The described requirement')]
+  server.threadPages = withTickets(ticketSummary())
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  await click(rowButton(ticketRows(zh)[0]!, zh['discuss.ask'])!)
+  const composer = area(zh['discuss.askPlaceholder'])
+  const send = (): HTMLButtonElement => all('.dt-question-form button')
+    .find(button => button.textContent?.trim() === zh['discuss.askSubmit']) as HTMLButtonElement
+  expect(send().disabled).toBe(true)
+  await dispatchFiles(composer, pasteEvent([imageFile('question.png')]))
+  // An image alone is a question: the paste is enough to send it.
+  expect(send().disabled).toBe(false)
+  await click(send())
+  const posted = server.requests.find(request => request.method === 'POST'
+    && request.path === 'local/issues/q-fixture/questions')!
+  expect(posted).toMatchObject({ method: 'POST', body: { ticket: 't1', text: '',
+    images: [{ name: 'question.png', mediaType: 'image/png' }] } })
+  expect(all('.dt-question-form')).toHaveLength(0)
+  // The question's own timeline entry shows the stored thumbnail, and no other message picks it up.
+  const events = questionEvents()
+  expect(events).toHaveLength(1)
+  expect(events[0]!.querySelectorAll('.dt-image-gallery img')).toHaveLength(1)
+  expect(events[0]!.querySelector('.dt-image-caption')?.textContent).toContain('question.png')
+  expect(timelineSection().querySelectorAll('.dt-image-gallery img')).toHaveLength(1)
+})
+
+it('tells the person the answering model cannot see an image question, while still showing its thumbnails', async () => {
+  server.localProjects = [PROJECT]
+  server.localIssues = [{ ...localIssue('Blind model requirement'), questions: [{ id: 'qn-blind', ticket: 't1', text: '',
+    images: [{ id: 'img-q1', name: 'ui.png', mediaType: 'image/png', bytes: 68 }], imagesAsText: true,
+    status: 'answered' as const, askedAt: '2026-09-23T01:00:00Z', answeredAt: '2026-09-23T02:00:00Z', answer: '我看不到图片。' }] }]
+  server.threadPages = withTickets(ticketSummary())
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const event = questionEvents()[0]!
+  // The visible hint sits on the question, under the thumbnails the record still carries.
+  expect(event.querySelectorAll('.dt-image-gallery img')).toHaveLength(1)
+  expect(event.querySelector('.dt-question-images-as-text')?.textContent).toBe(zh['discuss.questionImagesAsText'])
+  expect(event.textContent).toContain(zh['discuss.questionAnswer'])
+})
+
 it('renders an answered question with its Markdown answer and its Ticket label', async () => {
   server.localProjects = [PROJECT]
   server.localIssues = [{ ...localIssue('Answered requirement'), questions: [{ id: 'qn-1', ticket: 't1',

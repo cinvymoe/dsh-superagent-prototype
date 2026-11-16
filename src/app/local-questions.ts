@@ -1,6 +1,8 @@
 /** Questions about a requirement's dispatched Tickets, kept on the requirement record and answered in the background. */
+import { rmSync } from 'node:fs'
 import { key, UserError, type Ticket } from '../core/index.ts'
-import type { LocalIssue, LocalQuestion } from '../sources/local-format.ts'
+import type { LocalImage, LocalImageInput, LocalIssue, LocalQuestion } from '../sources/local-format.ts'
+import { requirementImagePath, storeQuestionImages } from './local-images.ts'
 import type { LocalIssues } from './local.ts'
 import type { Store } from './store.ts'
 
@@ -9,9 +11,19 @@ export const QUESTION_LIMIT = 20
 /** The longest question text a requirement accepts. */
 export const QUESTION_CHARS = 4_000
 
+/** One stored image a question delivers to its answering Session: the file, and the facts a text-only delivery names. */
+export interface QuestionImage {
+  /** Absolute path of the stored file, which a model that cannot read images is told instead. */
+  path: string
+  name: string
+  mediaType: string
+  bytes: number
+}
+
 /** The port that answers one question about a Ticket; `Questions` satisfies it. */
 export interface TicketAnswers {
-  ask(ticket: Ticket, question: string, options?: { signal?: AbortSignal }): Promise<{ ok: true; answer: string } | { ok: false; reason: string; message: string }>
+  ask(ticket: Ticket, question: string, options?: { signal?: AbortSignal; images?: readonly QuestionImage[] }):
+    Promise<{ ok: true; answer: string; imagesAsText?: boolean } | { ok: false; reason: string; message: string }>
 }
 
 /** Host dependencies used by `LocalQuestions`. */
@@ -21,6 +33,8 @@ export interface LocalQuestionsHost {
   /** The requirement records this port is the only writer of, through `putIssue`. */
   readonly local: Pick<LocalIssues, 'get' | 'list' | 'putIssue'>
   readonly answers: TicketAnswers
+  /** Directory every requirement image is stored under, so a question's images can be named to its answerer. */
+  readonly stateDir: string
   /** Host lifetime; a stop leaves in-flight questions `asked` for the next start. */
   readonly lifetime?: AbortSignal
   /** Reports an answer that could not be settled at all, which a restart re-queues but which would otherwise go unlogged. */
@@ -45,12 +59,14 @@ export class LocalQuestions {
   /**
    * Record a person's question about one of the requirement's dispatched Tickets, then answer it in the background. The
    * Ticket must belong to the requirement and have started a worker Session, because a fork needs a conversation to read.
+   * A question may carry images and no text; its images are validated and stored before anything is written, so one
+   * refused image leaves the requirement record as it was.
    */
-  ask(issueId: string, ticketId: string, text: string): { issue: LocalIssue; question: LocalQuestion } | undefined {
+  ask(issueId: string, ticketId: string, text: string, images: readonly LocalImageInput[] = []): { issue: LocalIssue; question: LocalQuestion } | undefined {
     const issue = this.host.local.get(issueId)
     if (!issue) return undefined
     const trimmed = text.trim()
-    if (!trimmed) throw new UserError('questionText')
+    if (!trimmed && !images.length) throw new UserError('questionText')
     const ticket = this.host.store.tickets.get(ticketId)
     if (!ticket) throw new UserError('unknownTicket')
     if (ticket.plan?.issueId !== issueId) throw new UserError('questionTicket')
@@ -58,12 +74,19 @@ export class LocalQuestions {
     const questions = issue.questions ?? []
     if (questions.length >= QUESTION_LIMIT) throw new UserError('questionLimit', { max: String(QUESTION_LIMIT) })
     const at = this.clock()
+    const questionId = `qn-${key('local-question', at, issueId, String(questions.length), trimmed).slice(0, 8)}`
+    const stored = storeQuestionImages(this.host.stateDir, issueId, questionId, images)
     const question: LocalQuestion = {
-      id: `qn-${key('local-question', at, issueId, String(questions.length), trimmed).slice(0, 8)}`,
-      ticket: ticketId, text: trimmed, status: 'asked', askedAt: at,
+      id: questionId, ticket: ticketId, text: trimmed, ...(stored.length ? { images: stored } : {}),
+      status: 'asked', askedAt: at,
     }
     const updated: LocalIssue = { ...issue, questions: [...questions, question], updatedAt: at }
-    this.host.local.putIssue(updated)
+    try { this.host.local.putIssue(updated) }
+    catch (error) {
+      // A record that could not be written leaves the question's bytes behind nowhere either.
+      this.removeImages(issueId, stored)
+      throw error
+    }
     this.queue(issueId, question.id)
     return { issue: updated, question }
   }
@@ -85,6 +108,8 @@ export class LocalQuestions {
     delete question.answer
     delete question.error
     delete question.answeredAt
+    // The retried delivery resolves the model again, so an earlier text-only delivery is no longer the record's truth.
+    delete question.imagesAsText
     const updated: LocalIssue = {
       ...issue, questions: (issue.questions ?? []).map(entry => entry.id === questionId ? question : entry), updatedAt: at,
     }
@@ -131,15 +156,24 @@ export class LocalQuestions {
     if (!issue || record?.status !== 'asked') return
     const ticket = this.host.store.tickets.get(record.ticket)
     if (!ticket) { this.record(issueId, questionId, { status: 'failed', error: `Ticket ${record.ticket} is gone` }); return }
+    const images: QuestionImage[] = (record.images ?? []).map(image => ({ path: requirementImagePath(this.host.stateDir, issueId, image),
+      name: image.name, mediaType: image.mediaType, bytes: image.bytes }))
     let result: Awaited<ReturnType<TicketAnswers['ask']>>
-    try { result = await this.host.answers.ask(ticket, record.text, this.host.lifetime ? { signal: this.host.lifetime } : undefined) }
-    catch (error) { result = { ok: false, reason: 'error', message: error instanceof Error ? error.message : String(error) } }
+    try {
+      result = await this.host.answers.ask(ticket, record.text, {
+        ...(this.host.lifetime ? { signal: this.host.lifetime } : {}), ...(images.length ? { images } : {}) })
+    } catch (error) { result = { ok: false, reason: 'error', message: error instanceof Error ? error.message : String(error) } }
     // A stop or a restart leaves the question `asked`, so the next start re-queues it instead of recording a failure.
     if (this.stopping || this.host.lifetime?.aborted) return
     const answer = result.ok ? result.answer.trim() : ''
     this.record(issueId, questionId, result.ok && answer
-      ? { status: 'answered', answer }
+      ? { status: 'answered', answer, ...(result.imagesAsText ? { imagesAsText: true as const } : {}) }
       : { status: 'failed', error: result.ok ? 'The answer was empty' : result.message })
+  }
+
+  /** Delete the bytes of images whose question record was never written, leaving every stored question's images intact. */
+  private removeImages(issueId: string, images: readonly LocalImage[]): void {
+    for (const image of images) rmSync(requirementImagePath(this.host.stateDir, issueId, image), { force: true })
   }
 
   /** Write one settled status on its own record, re-reading the issue so concurrent edits to other fields survive. */

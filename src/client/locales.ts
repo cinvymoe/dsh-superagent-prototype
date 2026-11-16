@@ -256,6 +256,7 @@ const TEXT = {
   'discuss.questionOf': ['工单：{title}', 'Ticket: {title}'],
   'discuss.questionAsked': ['等待回答…', 'Waiting for the answer…'],
   'discuss.questionAnswered': ['已回答', 'Answered'],
+  'discuss.questionImagesAsText': ['当前模型不能看图，图片只以绝对路径文本交付给模型。', 'The model cannot see images, so only their absolute paths were sent as text.'],
   'discuss.questionAnswer': ['回答', 'Answer'],
   'discuss.questionFailed': ['回答失败', 'Answer failed'],
   'discuss.questionRetry': ['重试提问', 'Retry question'],

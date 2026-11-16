@@ -234,6 +234,7 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   // The linked Ticket whose Ask composer is open, and its draft: one composer at a time, closed by cancel or submit.
   const [asking, setAsking] = useState<string>()
   const [draft, setDraft] = useState('')
+  const draftPaste = useImagePaste()
   const [busy, setBusy] = useState(false)
   const issue = data?.issue
   /** Run one mutation, reload on success and report a refusal; true tells a form its box may clear itself. */
@@ -260,15 +261,19 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
       ...(body.images.length ? { images: body.images } : {}) } }))
   // A question is about one linked Ticket: the host records it as asked and answers it in the background, and only the
   // requirement record changes, so the page re-reads that record to let the answer appear in the timeline on its poll.
+  // A question may be images alone, and its images stay on that question's timeline entry.
   const ask = async (event: FormEvent, ticketId: string) => {
     event.preventDefault()
     const text = draft.trim()
-    if (!text || busy) return
-    await act(async () => {
-      await call('POST local/issues/:id/questions', { id, body: { ticket: ticketId, text } })
+    if ((!text && !draftPaste.images.length) || busy) return
+    const sent = await act(async () => {
+      await call('POST local/issues/:id/questions', { id, body: { ticket: ticketId, text, ...(draftPaste.images.length ? {
+        images: draftPaste.images.map(({ name, mediaType, data }) => ({ name, mediaType, data })),
+      } : {}) } })
       setAsking(undefined)
       setDraft('')
     })
+    if (sent) draftPaste.clear()
   }
   const retryQuestion = (questionId: string) => act(() => call('POST local/issues/:id/questions/:questionId/retry',
     { id, questionId }))
@@ -395,6 +400,9 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
               {event.question.status === 'answered' && <Tag tone="success">{t('discuss.questionAnswered')}</Tag>}
               {event.question.status === 'failed' && <Tag tone="danger">{t('discuss.questionFailed')}</Tag>}</div>
             <MarkdownLite text={event.question.text} />
+            <RequirementImages issueId={issue.id} images={event.question.images} />
+            {!!event.question.images?.length && event.question.imagesAsText && <p className="dt-hint dt-question-images-as-text">
+              {t('discuss.questionImagesAsText')}</p>}
             {event.question.status === 'answered' && !!event.question.answer && <div className="dt-question-answer">
               <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.questionAnswer')}</h3></div>
               <MarkdownLite text={event.question.answer} />
@@ -424,14 +432,13 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
             {/* Only a Ticket that started its Executor Session can be asked about; the same condition offers Open Session. */}
             {ticket.sessionId && asking === ticket.id && <form className="dt-form dt-question-form"
               onSubmit={event => { void ask(event, ticket.id) }}>
-              <textarea className="dt-textarea" value={draft} maxLength={4000} rows={3}
-                placeholder={t('discuss.askPlaceholder')} aria-label={t('discuss.askPlaceholder')}
-                onChange={event => setDraft(event.target.value)} />
+              <PasteImageField state={draftPaste} value={draft} onChange={setDraft} maxLength={4000} rows={3}
+                placeholder={t('discuss.askPlaceholder')} ariaLabel={t('discuss.askPlaceholder')} />
               <div className="dt-actions">
                 <Button type="submit" variant="primary" size="sm" icon={<Icon name="message" size={14} />}
-                  disabled={busy || !draft.trim()}>{t('discuss.askSubmit')}</Button>
+                  disabled={busy || (!draft.trim() && !draftPaste.images.length)}>{t('discuss.askSubmit')}</Button>
                 <Button variant="ghost" size="sm" disabled={busy}
-                  onClick={() => { setAsking(undefined); setDraft('') }}>{t('cancel')}</Button>
+                  onClick={() => { setAsking(undefined); setDraft(''); draftPaste.clear() }}>{t('cancel')}</Button>
               </div>
             </form>}
           </div>
