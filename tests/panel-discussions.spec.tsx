@@ -80,6 +80,26 @@ it('starts a discussion from a dialog on the list and opens it', async () => {
     .toEqual({ page: 'discussions', id: 'd-fixture-1' })
 })
 
+it('folds a long message until a person asks for the rest', async () => {
+  server.localProjects = [PROJECT]
+  const base = localDiscussion('Long talk', 'A short body', PROJECT.id, 'd-long')
+  const long = 'A long answer about the layout, the copy and the order of the page. '.repeat(20)
+  server.localDiscussions = [{ ...base, answers: [
+    localDiscussionAnswer(base, 'Short remark', '2026-09-20T00:00:01Z', { answer: long })] }]
+  at({ page: 'discussions', id: 'd-long' })
+  await mount()
+  // The long answer folds; the short message next to it keeps its height.
+  expect(all('.dt-chat-body').filter(body => body.hasAttribute('data-folded'))).toHaveLength(1)
+  const more = all('.dt-chat-more')
+  expect(more).toHaveLength(1)
+  expect(more[0]!.textContent).toBe(zh['discussion.unfold'])
+  expect(more[0]!.getAttribute('aria-expanded')).toBe('false')
+  await click(more[0]!)
+  expect(all('.dt-chat-body').filter(body => body.hasAttribute('data-folded'))).toHaveLength(0)
+  expect(all('.dt-chat-more')[0]!.textContent).toBe(zh['discussion.fold'])
+  expect(all('.dt-chat-more')[0]!.getAttribute('aria-expanded')).toBe('true')
+})
+
 it('reads one discussion with its messages newest first, the follow-up box above them, and posts a comment', async () => {
   server.localProjects = [PROJECT]
   const base = localDiscussion('Layout talk', 'The body of the talk', PROJECT.id, 'd-talk')

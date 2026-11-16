@@ -2,7 +2,7 @@
  * The discussion pages of the current project: list discussions and open one, where its exchange reads on the left and
  * its result panel on the right can send that result to a requirement.
  */
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import type { Receipt } from '../app/store.ts'
 import { discussionAlignments, projectRepositories, type LocalAnswer, type LocalDiscussion, type LocalHandoff,
   type LocalImage } from '../sources/local-format.ts'
@@ -60,6 +60,23 @@ function DiscussionImages({ discussionId, images }: { discussionId: string; imag
 /** One bubble of the chat: a person's message on the right, an Answerer's reply on the left, and its state when pending. */
 type ChatMessage = { at: string; side: 'mine' | 'other'; text: string; images?: LocalImage[]
   answerId?: string; state?: LocalAnswer['state'] }
+
+/** How much of a message shows before it folds: a couple of paragraphs, not a whole essay. */
+const FOLDED = 280
+
+/** One bubble of the chat, folded to a few lines until a person asks for the rest of a long message. */
+function ChatBubble({ text, children }: { text: string; children?: ReactNode }) {
+  const { t } = usePanel()
+  const [open, setOpen] = useState(false)
+  return <div className="dt-chat-bubble">
+    <div className="dt-chat-body" data-folded={text.length > FOLDED && !open ? '' : undefined}>
+      {text ? <MarkdownLite text={text} /> : null}
+    </div>
+    {children}
+    {text.length > FOLDED && <button type="button" className="dt-chat-more" aria-expanded={open}
+      onClick={() => setOpen(current => !current)}>{t(open ? 'discussion.fold' : 'discussion.unfold')}</button>}
+  </div>
+}
 
 /** One message of a discussion with its answer, a reply an older discussion already recorded, or a message recorded before answers were. */
 type Exchange = { at: string; kind: 'answer'; answer: LocalAnswer } | { at: string; kind: 'reply'; reply: Receipt }
@@ -337,13 +354,12 @@ export function DiscussionDetail({ id }: { id: string }) {
                   : item.state === 'answered' || (item.side === 'other' && !item.state && item.text) ? <Tag tone="success">{t('discuss.agent')}</Tag>
                   : item.state ? <Tag tone="neutral">{item.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>
                   : null}</div>
-              <div className="dt-chat-bubble">
-                {item.text ? <MarkdownLite text={item.text} /> : null}
+              <ChatBubble text={item.text}>
                 <DiscussionImages discussionId={discussion.id} images={item.images} />
                 {item.state === 'failed' && item.answerId && <div className="dt-actions">
                   <Button variant="ghost" size="sm" disabled={busy}
                     onClick={() => { void retry(item.answerId!) }}>{t('discussion.retry')}</Button></div>}
-              </div>
+              </ChatBubble>
             </li>)}</ul>
           </Section>
         </div>

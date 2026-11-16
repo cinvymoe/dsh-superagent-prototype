@@ -146,6 +146,8 @@ const TEXT = {
   'discussion.roundsHint': ['已经交给对齐 {count} 轮，新的轮次排队执行', 'Aligned {count} round(s); a new one waits for the last'],
   'discussion.alignmentWaiting': ['排队中，等待上一轮对齐结束', 'Queued behind the previous alignment'],
   'discussion.openTicket': ['打开工单', 'Open ticket'],
+  'discussion.unfold': ['展开全文', 'Show more'],
+  'discussion.fold': ['收起', 'Show less'],
   'discussion.result': ['讨论结论', 'Discussion result'],
   'discussion.resultHint': ['来自最新一次回答；创建 Issue 时会连同讨论正文一起带入。', 'From the latest answer; creating an Issue copies it into the description.'],
   'discussion.comment': ['发表评论', 'Comment'],
