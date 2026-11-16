@@ -12,7 +12,7 @@ import { PasteImageField, useImagePaste } from './image-paste.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { RequirementDialog } from './requirement-dialog.tsx'
 import { errorText, type T } from './text.ts'
-import { MarkdownLite, PageHead, Section, When } from './widgets.tsx'
+import { Folded, MarkdownLite, PageHead, Section, When } from './widgets.tsx'
 
 /** The tag of a discussion's own state, apart from whether it already created a requirement. */
 const stateTag = (t: T, discussion: LocalDiscussion) => discussion.state === 'closed'
@@ -61,20 +61,11 @@ function DiscussionImages({ discussionId, images }: { discussionId: string; imag
 type ChatMessage = { at: string; side: 'mine' | 'other'; text: string; images?: LocalImage[]
   answerId?: string; state?: LocalAnswer['state'] }
 
-/** How much of a message shows before it folds: a couple of paragraphs, not a whole essay. */
-const FOLDED = 280
-
-/** One bubble of the chat, folded to a few lines until a person asks for the rest of a long message. */
+/** One bubble of the chat: its text folds when long, and its images or retry action stay under it. */
 function ChatBubble({ text, children }: { text: string; children?: ReactNode }) {
-  const { t } = usePanel()
-  const [open, setOpen] = useState(false)
   return <div className="dt-chat-bubble">
-    <div className="dt-chat-body" data-folded={text.length > FOLDED && !open ? '' : undefined}>
-      {text ? <MarkdownLite text={text} /> : null}
-    </div>
+    <Folded text={text} />
     {children}
-    {text.length > FOLDED && <button type="button" className="dt-chat-more" aria-expanded={open}
-      onClick={() => setOpen(current => !current)}>{t(open ? 'discussion.fold' : 'discussion.unfold')}</button>}
   </div>
 }
 
@@ -192,7 +183,7 @@ function AlignmentRound({ round, index }: { round: LocalHandoff; index: number }
     <div className="dt-row-meta"><span className="dt-mono">{round.roundId}</span>
       {round.ticketId && <span className="dt-mono">{round.ticketId}</span>}
       {label && <Tag tone={ticket?.state === 'ended' ? 'success' : 'neutral'}>{label}</Tag>}</div>
-    <div className="dt-result"><MarkdownLite text={round.text} /></div>
+    <div className="dt-result"><Folded text={round.text} /></div>
     {error && <p className="dt-error" role="alert">{error.message}</p>}
     {waiting && <p className="dt-hint">{t('discussion.alignmentWaiting')}</p>}
     {round.ticketId && <div className="dt-actions">
@@ -309,7 +300,7 @@ export function DiscussionDetail({ id }: { id: string }) {
             <div className="dt-row-meta"><span>{t('discuss.author')}：{discussion.author}</span><When at={discussion.createdAt} />
               <span className="dt-mono">{discussion.id}</span>
               {data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}</span>}</div>
-            <MarkdownLite text={discussion.body} />
+            <Folded text={discussion.body} />
             <DiscussionImages discussionId={discussion.id} images={discussion.images} />
           </section>
 

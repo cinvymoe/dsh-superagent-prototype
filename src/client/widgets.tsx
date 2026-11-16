@@ -48,6 +48,25 @@ function Inlines({ parts }: { parts: Inline[] }) {
     : part.kind === 'link' ? <a key={index} className="dt-inline-link" href={part.url} title={part.url} {...external}>{part.text}</a>
     : <Fragment key={index}>{part.text}</Fragment>)}</>
 }
+/** How much of a message shows before it folds: a couple of paragraphs, not a whole essay. */
+const FOLDED = 280
+
+/**
+ * Long text that folds to its first lines behind a fade until a person asks for the rest. Every message box a page shows
+ * uses this, so a long answer never towers over the page it sits in.
+ */
+export function Folded({ text }: { text: string }) {
+  const { t } = usePanel()
+  const [open, setOpen] = useState(false)
+  if (!text) return null
+  const long = text.length > FOLDED
+  return <div className="dt-fold" data-folded={long && !open ? '' : undefined}>
+    <div className="dt-fold-body"><MarkdownLite text={text} /></div>
+    {long && <button type="button" className="dt-fold-more" aria-expanded={open}
+      onClick={() => setOpen(current => !current)}>{t(open ? 'discussion.fold' : 'discussion.unfold')}</button>}
+  </div>
+}
+
 /** Renders a safe Markdown subset (headings, lists, paragraphs, bold, inline code, links) without interpreting raw HTML. */
 export function MarkdownLite({ text }: { text: string }) {
   const { t } = usePanel()

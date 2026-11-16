@@ -11,7 +11,7 @@ import { settingsRoute } from './route.ts'
 import { RequirementDialog } from './requirement-dialog.tsx'
 import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
 import { actorName, errorText, reasonLabel, type T } from './text.ts'
-import { MarkdownLite, PageHead, Section, SessionButton, When } from './widgets.tsx'
+import { Folded, MarkdownLite, PageHead, Section, SessionButton, When } from './widgets.tsx'
 
 /** Format a byte count with one decimal in B, KiB or MiB, for the image gallery's captions. */
 function formatBytes(bytes: number): string {
@@ -100,7 +100,7 @@ function statusTag(t: T, round: LocalAlignment | undefined) {
 function AlignmentBody({ round }: { round: LocalAlignment }) {
   const { t } = usePanel()
   return <>
-    {round.summary && <MarkdownLite text={round.summary} />}
+    {round.summary && <Folded text={round.summary} />}
     {round.slices.length > 0 && <ul className="dt-list">{round.slices.map(slice => <li key={slice.id} className="dt-row">
       <Tag tone="outline">{slice.id}</Tag>
       <div className="dt-row-main">
@@ -332,7 +332,7 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
             {data.project.worktreeRoot ? ` · ${data.project.worktreeRoot}` : ''}</span>}
           {data.project?.bot && <span className="dt-mono">{t('discuss.projectBotAccount', { account: data.project.bot })}</span>}</div>
         {issue.discussionId && <div className="dt-actions"><SourceDiscussion id={issue.discussionId} /></div>}
-        {issue.body && <MarkdownLite text={issue.body} />}
+        {issue.body && <Folded text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
         <RequirementImages issueId={issue.id} images={issue.images} />
       </section>
@@ -340,7 +340,7 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
       {/* A waiting Ticket is the page's call to action: the question and its answer box sit above the alignment proposal. */}
       {waiting.map(ticket => <section key={ticket.id} className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.waitingAnswer', { title: ticket.title })}</span></div>
-        {ticket.attention && <MarkdownLite text={ticket.attention.question} />}
+        {ticket.attention && <Folded text={ticket.attention.question} />}
         <WaitingAnswerBox busy={busy} onSubmit={answerSubmit} />
       </section>)}
 
@@ -400,13 +400,13 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
               {event.question.status === 'asked' && <Tag tone="info">{t('discuss.questionAsked')}</Tag>}
               {event.question.status === 'answered' && <Tag tone="success">{t('discuss.questionAnswered')}</Tag>}
               {event.question.status === 'failed' && <Tag tone="danger">{t('discuss.questionFailed')}</Tag>}</div>
-            <MarkdownLite text={event.question.text} />
+            <Folded text={event.question.text} />
             <RequirementImages issueId={issue.id} images={event.question.images} />
             {!!event.question.images?.length && event.question.imagesAsText && <p className="dt-hint dt-question-images-as-text">
               {t('discuss.questionImagesAsText')}</p>}
             {event.question.status === 'answered' && !!event.question.answer && <div className="dt-question-answer">
               <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.questionAnswer')}</h3></div>
-              <MarkdownLite text={event.question.answer} />
+              <Folded text={event.question.answer} />
             </div>}
             {event.question.status === 'failed' && <div className="dt-question-failure">
               {!!event.question.error && <p className="dt-error" role="alert">{event.question.error}</p>}
@@ -417,9 +417,9 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
             <div className="dt-row-meta">{event.kind === 'trigger' ? actorName(t, event.trigger.actor) : t('discuss.agent')}
               <When at={event.at} />{event.kind === 'reply' && <Tag tone="info">{t('discuss.agent')}</Tag>}</div>
             {event.kind === 'trigger'
-              ? <><MarkdownLite text={commentText(event.trigger.text, commentImages(issue, event.trigger.id))} />
+              ? <><Folded text={commentText(event.trigger.text, commentImages(issue, event.trigger.id))} />
                 <RequirementImages issueId={issue.id} images={commentImages(issue, event.trigger.id)} /></>
-              : <MarkdownLite text={event.reply.text} />}
+              : <Folded text={event.reply.text} />}
           </div>}
         </li>)}</ul>
       </Section>

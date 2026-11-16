@@ -150,9 +150,9 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-chat-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .dt-chat-bubble { padding: 10px 12px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); font-size: 14px; line-height: 1.7; min-width: 0; overflow-wrap: anywhere; }
 .dt-chat-message[data-side='mine'] .dt-chat-bubble { background: var(--dsw-alias-interactive-bg-hover); }
-.dt-chat-body[data-folded] { max-height: 168px; overflow: hidden; position: relative; mask-image: linear-gradient(180deg, #000 74%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 74%, transparent); }
-.dt-chat-more { margin-top: 6px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); cursor: pointer; }
-.dt-chat-more:hover { color: var(--dsw-alias-label-primary); }
+.dt-fold[data-folded] .dt-fold-body { max-height: 168px; overflow: hidden; position: relative; mask-image: linear-gradient(180deg, #000 74%, transparent); -webkit-mask-image: linear-gradient(180deg, #000 74%, transparent); }
+.dt-fold-more { margin-top: 6px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.dt-fold-more:hover { color: var(--dsw-alias-label-primary); }
 .dt-discussion { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; max-width: 1200px; margin: 0 auto; padding-bottom: 48px; }
 .dt-discussion-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .dt-discussion-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }

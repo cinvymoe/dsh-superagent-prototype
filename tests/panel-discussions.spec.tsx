@@ -89,15 +89,15 @@ it('folds a long message until a person asks for the rest', async () => {
   at({ page: 'discussions', id: 'd-long' })
   await mount()
   // The long answer folds; the short message next to it keeps its height.
-  expect(all('.dt-chat-body').filter(body => body.hasAttribute('data-folded'))).toHaveLength(1)
-  const more = all('.dt-chat-more')
+  expect(all('.dt-fold').filter(body => body.hasAttribute('data-folded'))).toHaveLength(1)
+  const more = all('.dt-fold-more')
   expect(more).toHaveLength(1)
   expect(more[0]!.textContent).toBe(zh['discussion.unfold'])
   expect(more[0]!.getAttribute('aria-expanded')).toBe('false')
   await click(more[0]!)
-  expect(all('.dt-chat-body').filter(body => body.hasAttribute('data-folded'))).toHaveLength(0)
-  expect(all('.dt-chat-more')[0]!.textContent).toBe(zh['discussion.fold'])
-  expect(all('.dt-chat-more')[0]!.getAttribute('aria-expanded')).toBe('true')
+  expect(all('.dt-fold').filter(body => body.hasAttribute('data-folded'))).toHaveLength(0)
+  expect(all('.dt-fold-more')[0]!.textContent).toBe(zh['discussion.fold'])
+  expect(all('.dt-fold-more')[0]!.getAttribute('aria-expanded')).toBe('true')
 })
 
 it('reads one discussion with its messages newest first, the follow-up box above them, and posts a comment', async () => {

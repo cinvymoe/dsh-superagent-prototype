@@ -7,7 +7,7 @@ import { usePanel } from './provider.tsx'
 import { settingsRoute } from './route.ts'
 import { Earlier, ThreadLine, automatedRuns } from './rows.tsx'
 import { actorName, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
-import { ActionLink, ConfirmButton, ExternalLink, Hint, KeyValues, LabelValue, LoadState, MarkdownLite, PageHead, Section, SessionButton,
+import { ActionLink, ConfirmButton, ExternalLink, Folded, Hint, KeyValues, LabelValue, LoadState, MarkdownLite, PageHead, Section, SessionButton,
   StageMark, When } from './widgets.tsx'
 
 type Input = TicketPageView['inputs'][number]
@@ -23,7 +23,7 @@ function InputLine({ input, earlier = [] }: { input: Input; earlier?: { id: stri
       </button></div> : <div className="dt-row-title">{valueLabel(t, 'input', input.kind)}</div>}
       <div className="dt-row-meta">{input.kind === 'trigger' && <span>{valueLabel(t, 'input', input.kind)}</span>}<When
         at={input.at} /></div>
-      {(input.kind === 'text' || input.kind === 'note') && input.text && <div className="dt-row-quote"><MarkdownLite text={input.text} /></div>}
+      {(input.kind === 'text' || input.kind === 'note') && input.text && <div className="dt-row-quote"><Folded text={input.text} /></div>}
       {trigger?.handback && <Hint>{t('inputHandedBack', { reason: trigger.handback.reason })}</Hint>}
       <Earlier items={earlier} />
     </div>
@@ -145,7 +145,7 @@ export function TicketPage({ id }: { id: string }) {
       <LabelValue label={t('ticketUpdatedLabel')} value={when(data.updatedAt, t('lang'))} />
     </div>
     {ended && <Hint>{ended}</Hint>}
-    {data.attention && <div className="dt-banner"><span className="dt-banner-label">{t('attentionPrefix')}</span><MarkdownLite
+    {data.attention && <div className="dt-banner"><span className="dt-banner-label">{t('attentionPrefix')}</span><Folded
       text={data.attention.question} />
       {channel && <div className="dt-banner-actions">
         {localIssue
