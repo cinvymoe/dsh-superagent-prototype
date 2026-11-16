@@ -1,10 +1,11 @@
 /** Requirement pages: list the project's requirements in a dialog-opened form, and review the Aligner's proposal. */
 import { useEffect, useState, type FormEvent } from 'react'
 import { alignmentRounds, currentAlignment, projectRepositories, requirementExecutionMode, type LocalAlignment, type LocalImage,
-  type LocalIssue, type LocalIssueView } from '../sources/local-format.ts'
+  type LocalImageInput, type LocalIssue, type LocalIssueView } from '../sources/local-format.ts'
 import { requirementImage, usePoll } from './api.ts'
 import { Button, DisclosureRow, Icon, InfoTip, Pill, Switch, Tag } from './controls.tsx'
 import { SourceDiscussion } from './discussions.tsx'
+import { PasteImageField, useImagePaste } from './image-paste.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { RequirementDialog } from './requirement-dialog.tsx'
 import { REQUIREMENT_FILTERS, type RequirementFilter } from './route.ts'
@@ -36,14 +37,48 @@ function RequirementImage({ issueId, image }: { issueId: string; image: LocalIma
     : <span className="dt-image-placeholder" aria-hidden="true" />
 }
 
-/** The stored images of a requirement, in the order they were submitted, each named with its file and byte size. */
-function RequirementImages({ issue }: { issue: LocalIssue }) {
-  const images = issue.images ?? []
-  if (!images.length) return null
+/** The stored images of a requirement or of one of its follow-up messages, in submission order, each named with its file. */
+function RequirementImages({ issueId, images }: { issueId: string; images?: LocalImage[] }) {
+  if (!images?.length) return null
   return <div className="dt-image-gallery">{images.map(image => <figure key={image.id} className="dt-image-card">
-    <RequirementImage issueId={issue.id} image={image} />
+    <RequirementImage issueId={issueId} image={image} />
     <figcaption className="dt-image-caption">{image.name} · {formatBytes(image.bytes)}</figcaption>
   </figure>)}</div>
+}
+
+/** The images one follow-up message attached, looked up by the Trigger it became; nothing when it attached none. */
+const commentImages = (issue: LocalIssue, triggerId: string): LocalImage[] | undefined =>
+  issue.commentImages?.find(entry => entry.triggerId === triggerId)?.images
+
+/** A follow-up's own text without the Images block the host appends, since its thumbnails already show what it attached. */
+function commentText(text: string, images: LocalImage[] | undefined): string {
+  if (!images?.length) return text
+  return text.replace(/(?:\n\n)?Images:\n[\s\S]*$/, '')
+}
+
+/**
+ * The answer box of one waiting Ticket. Its own text and image selection keep each answer's thumbnails with that message,
+ * even when the requirement waits on several Tickets at once.
+ */
+function WaitingAnswerBox({ busy, onSubmit }: { busy: boolean
+  onSubmit: (body: { text: string; images: LocalImageInput[] }) => Promise<boolean> }) {
+  const { t } = usePanel()
+  const paste = useImagePaste()
+  const [text, setText] = useState('')
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const body = text.trim()
+    if (busy || (!body && !paste.images.length)) return
+    const sent = await onSubmit({ text: body,
+      images: paste.images.map(({ name, mediaType, data }) => ({ name, mediaType, data })) })
+    if (sent) { setText(''); paste.clear() }
+  }
+  return <form className="dt-form" onSubmit={event => { void submit(event) }}>
+    <PasteImageField state={paste} value={text} onChange={setText} rows={3} maxLength={20000}
+      placeholder={t('discuss.answerPlaceholder')} ariaLabel={t('discuss.answerPlaceholder')} />
+    <div className="dt-actions"><Button type="submit" variant="primary" size="sm" icon={<Icon name="message" size={14} />}
+      disabled={busy || (!text.trim() && !paste.images.length)}>{t('discuss.answerSubmit')}</Button></div>
+  </form>
 }
 
 // Pending close is the requirement's own state, derived from its slice Tickets; the alignment tag beside it is unchanged.
@@ -193,48 +228,52 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/issues/:id', { id }), [id])
   const [comment, setComment] = useState('')
-  // One answer draft per Ticket: a requirement can wait on several Tickets at once, and each answer is its own comment.
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const commentPaste = useImagePaste()
   const [reason, setReason] = useState('')
   const [rejecting, setRejecting] = useState(false)
   // The linked Ticket whose Ask composer is open, and its draft: one composer at a time, closed by cancel or submit.
   const [asking, setAsking] = useState<string>()
   const [draft, setDraft] = useState('')
+  const draftPaste = useImagePaste()
   const [busy, setBusy] = useState(false)
   const issue = data?.issue
-  const act = async (work: () => Promise<unknown>) => {
-    if (busy) return
+  /** Run one mutation, reload on success and report a refusal; true tells a form its box may clear itself. */
+  const act = async (work: () => Promise<unknown>): Promise<boolean> => {
+    if (busy) return false
     setBusy(true)
-    try { await work(); await reload() } catch (failure) { notify(errorText(failure)) } finally { setBusy(false) }
+    try { await work(); await reload(); return true } catch (failure) { notify(errorText(failure)); return false } finally { setBusy(false) }
   }
   const commentSubmit = async (event: FormEvent) => {
     event.preventDefault()
     const text = comment.trim()
-    if (!text) return
-    await act(async () => { await call('POST local/issues/:id/comments', { id, body: { text } }); setComment('') })
+    if ((!text && !commentPaste.images.length) || busy) return
+    const submitted = await act(async () => {
+      await call('POST local/issues/:id/comments', { id, body: { text, ...(commentPaste.images.length ? {
+        images: commentPaste.images.map(({ name, mediaType, data }) => ({ name, mediaType, data })),
+      } : {}) } })
+    })
+    if (submitted) { setComment(''); commentPaste.clear() }
   }
   // A question from a Ticket is answered through the same human comment path as the follow-up box: the Engine routes
   // that Trigger to the subscribed Ticket and the answer joins this requirement's message timeline.
-  const answerSubmit = async (event: FormEvent, ticketId: string) => {
-    event.preventDefault()
-    const text = (answers[ticketId] ?? '').trim()
-    if (!text || busy) return
-    await act(async () => {
-      await call('POST local/issues/:id/comments', { id, body: { text } })
-      setAnswers(current => ({ ...current, [ticketId]: '' }))
-    })
-  }
+  const answerSubmit = (body: { text: string; images: LocalImageInput[] }): Promise<boolean> =>
+    act(() => call('POST local/issues/:id/comments', { id, body: { text: body.text,
+      ...(body.images.length ? { images: body.images } : {}) } }))
   // A question is about one linked Ticket: the host records it as asked and answers it in the background, and only the
   // requirement record changes, so the page re-reads that record to let the answer appear in the timeline on its poll.
+  // A question may be images alone, and its images stay on that question's timeline entry.
   const ask = async (event: FormEvent, ticketId: string) => {
     event.preventDefault()
     const text = draft.trim()
-    if (!text || busy) return
-    await act(async () => {
-      await call('POST local/issues/:id/questions', { id, body: { ticket: ticketId, text } })
+    if ((!text && !draftPaste.images.length) || busy) return
+    const sent = await act(async () => {
+      await call('POST local/issues/:id/questions', { id, body: { ticket: ticketId, text, ...(draftPaste.images.length ? {
+        images: draftPaste.images.map(({ name, mediaType, data }) => ({ name, mediaType, data })),
+      } : {}) } })
       setAsking(undefined)
       setDraft('')
     })
+    if (sent) draftPaste.clear()
   }
   const retryQuestion = (questionId: string) => act(() => call('POST local/issues/:id/questions/:questionId/retry',
     { id, questionId }))
@@ -294,21 +333,14 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
         {issue.discussionId && <div className="dt-actions"><SourceDiscussion id={issue.discussionId} /></div>}
         {issue.body && <MarkdownLite text={issue.body} />}
         {!issue.body && <p className="dt-hint">{t('discuss.noBody')}</p>}
-        <RequirementImages issue={issue} />
+        <RequirementImages issueId={issue.id} images={issue.images} />
       </section>
 
       {/* A waiting Ticket is the page's call to action: the question and its answer box sit above the alignment proposal. */}
       {waiting.map(ticket => <section key={ticket.id} className="dt-card">
         <div className="dt-card-head"><span className="dt-card-title">{t('discuss.waitingAnswer', { title: ticket.title })}</span></div>
         {ticket.attention && <MarkdownLite text={ticket.attention.question} />}
-        <form className="dt-form" onSubmit={event => { void answerSubmit(event, ticket.id) }}>
-          <textarea className="dt-textarea" rows={3} maxLength={20000} value={answers[ticket.id] ?? ''}
-            placeholder={t('discuss.answerPlaceholder')} aria-label={t('discuss.answerPlaceholder')}
-            onChange={event => { const text = event.target.value
-              setAnswers(current => ({ ...current, [ticket.id]: text })) }} />
-          <div className="dt-actions"><Button type="submit" variant="primary" size="sm" icon={<Icon name="message" size={14} />}
-            disabled={busy || !(answers[ticket.id] ?? '').trim()}>{t('discuss.answerSubmit')}</Button></div>
-        </form>
+        <WaitingAnswerBox busy={busy} onSubmit={answerSubmit} />
       </section>)}
 
       <section className="dt-card">
@@ -354,11 +386,10 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
       <Section title={t('discuss.timeline')} count={events.length}>
         {/* The follow-up box sits above the list: a submitted message lands at the top, right under the box. */}
         <form className="dt-form dt-timeline-form" onSubmit={event => { void commentSubmit(event) }}>
-          <textarea className="dt-textarea" value={comment} maxLength={20000} rows={3}
-            placeholder={t('discuss.commentPlaceholder')} aria-label={t('discuss.commentPlaceholder')}
-            onChange={event => setComment(event.target.value)} />
+          <PasteImageField state={commentPaste} value={comment} onChange={setComment} maxLength={20000} rows={3}
+            placeholder={t('discuss.commentPlaceholder')} ariaLabel={t('discuss.commentPlaceholder')} />
           <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
-            disabled={busy || !comment.trim()}>{t('discuss.comment')}</Button></div>
+            disabled={busy || (!comment.trim() && !commentPaste.images.length)}>{t('discuss.comment')}</Button></div>
         </form>
         <ul className="dt-list dt-timeline">{events.map((event, index) => <li key={index}
           className={event.kind === 'question' ? 'dt-row dt-event dt-question' : 'dt-row dt-event'}>
@@ -369,6 +400,9 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
               {event.question.status === 'answered' && <Tag tone="success">{t('discuss.questionAnswered')}</Tag>}
               {event.question.status === 'failed' && <Tag tone="danger">{t('discuss.questionFailed')}</Tag>}</div>
             <MarkdownLite text={event.question.text} />
+            <RequirementImages issueId={issue.id} images={event.question.images} />
+            {!!event.question.images?.length && event.question.imagesAsText && <p className="dt-hint dt-question-images-as-text">
+              {t('discuss.questionImagesAsText')}</p>}
             {event.question.status === 'answered' && !!event.question.answer && <div className="dt-question-answer">
               <div className="dt-subhead"><h3 className="dt-section-title">{t('discuss.questionAnswer')}</h3></div>
               <MarkdownLite text={event.question.answer} />
@@ -381,7 +415,10 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
           </div> : <div className="dt-row-main">
             <div className="dt-row-meta">{event.kind === 'trigger' ? actorName(t, event.trigger.actor) : t('discuss.agent')}
               <When at={event.at} />{event.kind === 'reply' && <Tag tone="info">{t('discuss.agent')}</Tag>}</div>
-            <MarkdownLite text={event.kind === 'trigger' ? event.trigger.text : event.reply.text} />
+            {event.kind === 'trigger'
+              ? <><MarkdownLite text={commentText(event.trigger.text, commentImages(issue, event.trigger.id))} />
+                <RequirementImages issueId={issue.id} images={commentImages(issue, event.trigger.id)} /></>
+              : <MarkdownLite text={event.reply.text} />}
           </div>}
         </li>)}</ul>
       </Section>
@@ -395,14 +432,13 @@ export function RequirementDetail({ id, filter }: { id: string; filter: Requirem
             {/* Only a Ticket that started its Executor Session can be asked about; the same condition offers Open Session. */}
             {ticket.sessionId && asking === ticket.id && <form className="dt-form dt-question-form"
               onSubmit={event => { void ask(event, ticket.id) }}>
-              <textarea className="dt-textarea" value={draft} maxLength={4000} rows={3}
-                placeholder={t('discuss.askPlaceholder')} aria-label={t('discuss.askPlaceholder')}
-                onChange={event => setDraft(event.target.value)} />
+              <PasteImageField state={draftPaste} value={draft} onChange={setDraft} maxLength={4000} rows={3}
+                placeholder={t('discuss.askPlaceholder')} ariaLabel={t('discuss.askPlaceholder')} />
               <div className="dt-actions">
                 <Button type="submit" variant="primary" size="sm" icon={<Icon name="message" size={14} />}
-                  disabled={busy || !draft.trim()}>{t('discuss.askSubmit')}</Button>
+                  disabled={busy || (!draft.trim() && !draftPaste.images.length)}>{t('discuss.askSubmit')}</Button>
                 <Button variant="ghost" size="sm" disabled={busy}
-                  onClick={() => { setAsking(undefined); setDraft('') }}>{t('cancel')}</Button>
+                  onClick={() => { setAsking(undefined); setDraft(''); draftPaste.clear() }}>{t('cancel')}</Button>
               </div>
             </form>}
           </div>

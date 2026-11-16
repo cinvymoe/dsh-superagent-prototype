@@ -1,6 +1,7 @@
 /** Lifecycle, prompt/tool/skill decoration, message delivery, and budget retry tracking for orchestrator and worker DSH sessions. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { MessageId } from '@deepseek-ai/dsh-llm'
 import { scopeParentOf } from '@deepseek-ai/dsh-scope'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -218,12 +219,15 @@ export class Sessions {
     const result = await this.ctx.sessionController.resolveAgent(sessionId as SessionId)
     return !('error' in result) && await this.agentDelivery.holds(result.agent, key(requestId))
   }
-  /** Deliver a message once per request id: to the next turn, the current one, or `inject`ed with its label without waking the agent. */
+  /**
+   * Deliver a message once per request id: to the next turn, the current one, or `inject`ed with its label without waking
+   * the agent. `images` ride after the text as image content parts, for a model that reads images.
+   */
   async prompt(sessionId: string, requestId: string, text: string, mode: 'queue' | 'steer' | { inject: string }, authorize?: () => void,
-    accepted?: () => void): Promise<void> {
+    accepted?: () => void, images?: readonly ImageAttachmentRef[]): Promise<void> {
     const result = await this.ctx.sessionController.resolveAgent(sessionId as SessionId)
     if ('error' in result) throw result.error
-    await this.agentDelivery.send(result.agent, key(requestId), text, mode, this.host.lifetime, authorize, accepted)
+    await this.agentDelivery.send(result.agent, key(requestId), text, mode, this.host.lifetime, authorize, accepted, images)
   }
   /** The id of the message `prompt` delivers under `requestId`, which DSH's inbox events name it by. */
   promptedId(requestId: string): MessageId { return messageId(key(requestId)) }

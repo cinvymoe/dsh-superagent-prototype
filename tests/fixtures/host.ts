@@ -38,7 +38,7 @@ type FakeAgent = {
 /** A text message, as DSH's job tools and subagents send their notices. */
 const notice = (id: string, text: string) => ({ id, role: 'user', content: [{ type: 'text', text }], source: { kind: 'tool-jobs', form: 'notice' } }) as unknown as UserMessage
 type HttpHandler = (req: unknown, res: unknown) => Promise<void>
-type Delivery = { sessionId: string; mode: 'queue' | 'steer'; id: string; text: string }
+type Delivery = { sessionId: string; mode: 'queue' | 'steer'; id: string; text: string; content: UserMessage['content'] }
 /** A system prompt section a Session registered, captured so a spec can read its completion flag and text. */
 type SystemPromptSection = { text: (context: { signal?: AbortSignal }) => string; complete?: boolean }
 
@@ -200,6 +200,14 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
   let forks = 0
   const archiveSession = vi.fn(async () => {})
   const deliveries = vi.fn<(request: Delivery) => void>()
+  /** The model's declared input modalities, which a spec switches to text-only to prove the image fallback. */
+  const resolveModelInfo = vi.fn(async () => ({ inputModalities: ['text', 'image'] as string[] }))
+  /** Durable image storage as the attachment service publishes it, naming each saved image in order. */
+  const saveImages = vi.fn(async (inputs: readonly { data: Uint8Array; mediaType: string; name?: string }[]) =>
+    inputs.map((input, index) => ({ attachmentId: `att-${index + 1}`, mediaType: input.mediaType, bytes: input.data.length,
+      width: 1, height: 1, name: input.name })))
+  const attachments = { saveImages, saveImage: vi.fn(), imageLimits: { mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] } }
+  const llm = { resolveCallConfig: vi.fn(async (value: unknown) => value), resolveModelInfo }
   let http!: HttpHandler
   const resolveDefault = async (id: string) => agents.has(id) ? { agent: agents.get(id) } : { error: { code: 'session/not-found' } }
   const controller = {
@@ -219,6 +227,9 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
           return () => {}
         }), guard: vi.fn(() => () => {}) })
       agentCtx.reflect.provide('skills', { register: () => () => {} })
+      // The services a forked Session reads its model route and durable image storage through.
+      agentCtx.reflect.provide('llm', llm)
+      agentCtx.reflect.provide('attachments', attachments)
       agentCtx.reflect.provide('systemPrompt', { section: (spec: SystemPromptSection) => {
         sections.set(sessionId, spec)
         return () => { if (sections.get(sessionId) === spec) sections.delete(sessionId) }
@@ -247,7 +258,8 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
       claims.set(sessionId, () => { take(false, true) })
       const deliver = (mode: 'queue' | 'steer') => vi.fn((message: UserMessage) => {
         inbox[mode === 'queue' ? 'nextTurn' : 'nextStep'].push(message)
-        deliveries({ sessionId, mode, id: message.id, text: message.content.map(block => block.type === 'text' ? block.text : '').join('') })
+        deliveries({ sessionId, mode, id: message.id, content: message.content,
+          text: message.content.map(block => block.type === 'text' ? block.text : '').join('') })
         // A message wakes an idle agent: its turn starts at once, and DSH says so, and its first step takes what waits.
         const agent = agents.get(sessionId)!
         if (agent.status !== 'idle') return
@@ -273,6 +285,7 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
         })
       })
       agents.set(sessionId, { id: sessionId, ctx: agentCtx, inbox, followup: deliver('queue'), steer: deliver('steer'), inject: vi.fn(), session, cancel,
+        options: { provider: 'fixture-provider', model: 'fixture-model' },
         get status() { return status }, set status(next: string) { status = next; if (next === 'idle') for (const wake of idle.splice(0)) wake() },
         // Once its turn ended, as DSH's does.
         whenIdle: () => status === 'idle' ? Promise.resolve() : new Promise<void>(resolve => { idle.push(resolve) }) } as never)
@@ -324,7 +337,7 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
       return () => { globalTools.delete(registered.name) }
     }),
   }
-  const services = { agents, llm: { resolveCallConfig: vi.fn(async (value: unknown) => value) }, sessionController: controller,
+  const services = { agents, llm, attachments, sessionController: controller,
     sessionPersistence: persistence, workspaceRegistry, permissionPresets: { set: () => {} }, subprocess, webServer,
     jobs: jobs.service, subagents: subagents.service, tools: toolRegistry }
   const ctx = new Context()
@@ -389,6 +402,6 @@ export async function startRuntime(seed?: (store: Store, clis: { agentCli: strin
   /** A step of the worker claims what waits for it, and is cut off before the Session took it. */
   const claim = (sessionId: string) => { claims.get(sessionId)!() }
   return { runtime, ctx, directory, agentCli: AGENT, projectBotCli: PROJECT_BOT, agents, tools, globalTools: toolRegistry, deliveries, relays, candidates, runTool, route, acceptedTicket, api, raw, controller, subprocess, hooks, resolveDefault, stop,
-    jobs, subagents, step, claim, events, headers, sections, restrictions, archiveSession }
+    jobs, subagents, step, claim, events, headers, sections, restrictions, archiveSession, resolveModelInfo, saveImages }
 }
 export type Host = Awaited<ReturnType<typeof startRuntime>>

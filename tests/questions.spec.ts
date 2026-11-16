@@ -2,6 +2,8 @@
  * Ticket questions on the host: one read-only answer from a Session forked off the Ticket worker at its latest completed
  * turn, the reasons a question cannot be answered, and the Ticket staying untouched by asking.
  */
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { threadKey } from '../src/core/index.ts'
@@ -17,7 +19,7 @@ const FORKED = 'session-fork-1'
 const QUESTION = 'Why did the regression reach the release?'
 const ANSWER = 'The margin reset in src/app/passes.ts dropped the padding.'
 
-const questions = () => new Questions({ context: host.ctx, store: host.runtime.store, sessions: host.runtime.sessions })
+const questions = () => new Questions({ context: host.ctx, store: host.runtime.store, sessions: host.runtime.sessions, stateDir: host.directory })
 /** A Session event as DSH's log holds it; this host reads only its type, its seq and a message's text blocks. */
 const event = (value: Record<string, unknown>): SessionEvent => value as unknown as SessionEvent
 /** Append one event to a Session's log at the next seq. */
@@ -112,4 +114,46 @@ it('reports an empty answer and archives the forked Session', async () => {
   host.agents.get(FORKED)!.status = 'idle'
   await expect(asked).resolves.toMatchObject({ ok: false, reason: 'empty-answer' })
   expect(host.archiveSession).toHaveBeenCalledWith(FORKED, { stopActivity: true })
+})
+
+/** A 1x1 PNG, so the stored question image holds real bytes as it does on disk. */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+/** Store one image under the host's state directory and name it as the record does. */
+const storedImage = (name: string): { path: string; name: string; mediaType: string; bytes: number } => {
+  const directory = join(host.directory, 'local-images', 'q-question')
+  mkdirSync(directory, { recursive: true })
+  const path = join(directory, `img-${name}`)
+  writeFileSync(path, PNG, { mode: 0o600 })
+  return { path, name, mediaType: 'image/png', bytes: PNG.length }
+}
+
+it('delivers a question\'s images as image content parts after its text, then reads the answer', async () => {
+  const { ticket, sessionId: worker } = await host.acceptedTicket(feishu('7', '@bot 修一下回归'))
+  completedTurn(worker)
+  const image = storedImage('shot.png')
+  const asked = questions().ask(ticket, QUESTION, { images: [image] })
+  await delivered()
+  const delivery = vi.mocked(host.deliveries).mock.calls.at(-1)![0]
+  expect(delivery.content[0]).toEqual({ type: 'text', text: QUESTION })
+  expect(delivery.content[1]).toMatchObject({ type: 'image', attachment: { attachmentId: 'att-1', mediaType: 'image/png', name: 'shot.png' } })
+  expect(host.saveImages).toHaveBeenCalledWith([expect.objectContaining({ mediaType: 'image/png', name: 'shot.png', data: PNG })])
+  answerWith(ANSWER)
+  await expect(asked).resolves.toEqual({ ok: true, answer: ANSWER })
+})
+
+it('sends the images\' absolute paths as text, and says the model cannot see them, when it reads no images', async () => {
+  host.resolveModelInfo.mockResolvedValue({ inputModalities: ['text'] })
+  const { ticket, sessionId: worker } = await host.acceptedTicket(feishu('8', '@bot 修一下回归'))
+  completedTurn(worker)
+  const image = storedImage('ui.png')
+  const asked = questions().ask(ticket, QUESTION, { images: [image] })
+  await vi.waitFor(() => expect(host.deliveries).toHaveBeenCalledWith(expect.objectContaining({ sessionId: FORKED })))
+  const delivery = vi.mocked(host.deliveries).mock.calls.map(([call]) => call).filter(call => call.sessionId === FORKED).at(-1)!
+  // The model still gets the question, plus one absolute path per image, instead of image content.
+  expect(delivery.content.every(block => block.type === 'text')).toBe(true)
+  expect(delivery.text).toContain(QUESTION)
+  expect(delivery.text).toContain(`Images:\n- ${image.path} (image/png, ${PNG.length} bytes)`)
+  expect(host.saveImages).not.toHaveBeenCalled()
+  answerWith(ANSWER)
+  await expect(asked).resolves.toMatchObject({ ok: true, answer: ANSWER, imagesAsText: true })
 })

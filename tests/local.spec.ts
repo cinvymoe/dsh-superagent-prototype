@@ -78,6 +78,59 @@ describe('the local issue board', () => {
     expect(issues.get(issue.id)?.title).toBe('Local requirement')
   })
 
+  it('stores a follow-up message\'s images under the requirement directory and names them in that message\'s Trigger', () => {
+    const { issues, triggers, project, directory } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    const updated = issues.comment(issue.id, 'Look at this', [image('shot.png', 'image/png', PNG)])!
+    // The requirement keeps its own images apart from the message's, which name the Trigger the message became.
+    expect(updated.images).toBeUndefined()
+    expect(updated.commentImages).toHaveLength(1)
+    const message = updated.commentImages![0]!
+    expect(message.triggerId).toBe(triggers[1]!.id)
+    expect(message.images[0]).toMatchObject({ name: 'shot.png', mediaType: 'image/png', bytes: PNG.length })
+    const file = join(directory, 'local-images', issue.id, `${message.images[0]!.id}.png`)
+    expect(readFileSync(file).equals(PNG)).toBe(true)
+    expect(issues.image(issue.id, message.images[0]!.id)).toMatchObject({ mediaType: 'image/png' })
+    // The Engine-routed Trigger names the image's absolute path, so a worker can read it with read_image.
+    expect(triggers[1]!.text).toBe(`Look at this\n\nImages:\n- ${file} (image/png, ${PNG.length} bytes)`)
+  })
+
+  it('accepts an image-only follow-up and keeps two messages\' identically named images apart', () => {
+    const { issues, triggers, project } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
+    const image: LocalImageInput = { name: 'shot.png', mediaType: 'image/png', data: PNG.toString('base64') }
+    issues.comment(issue.id, 'First', [image])
+    const second = issues.comment(issue.id, '   ', [image])!
+    expect(triggers).toHaveLength(3)
+    // An image-only message is accepted and its Trigger text carries only the Images block.
+    expect(triggers[2]!.text.startsWith('Images:\n- ')).toBe(true)
+    expect(second.commentImages).toHaveLength(2)
+    const [first, last] = second.commentImages!
+    expect(first!.triggerId).toBe(triggers[1]!.id)
+    expect(last!.triggerId).toBe(triggers[2]!.id)
+    // The same file name in two messages still stores two files, so neither message can change the other's image.
+    expect(first!.images[0]!.id).not.toBe(last!.images[0]!.id)
+  })
+
+  it('refuses a follow-up image or an empty follow-up, leaving the record and the Trigger count untouched', () => {
+    const { issues, triggers, project, directory } = setup()
+    const issue = issues.create({ title: 'Local requirement', project: project.id })
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    const code = (text: string, images: LocalImageInput[]): unknown => {
+      try { issues.comment(issue.id, text, images) } catch (error) { return (error as { code?: unknown }).code }
+      return undefined
+    }
+    expect(code('Bad', [image('bad.bmp', 'image/bmp', Buffer.from('BM'))])).toBe('issueImageType')
+    expect(code('Bad', [image('big.png', 'image/png', Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]))])).toBe('issueImageSize')
+    expect(code('Bad', Array.from({ length: 5 }, (_value, index) => image(`${index}.png`, 'image/png', PNG))))
+      .toBe('issueImageCount')
+    expect(code('   ', [])).toBe('issueCommentText')
+    expect(triggers).toHaveLength(1)
+    expect(issues.get(issue.id)).toEqual(issue)
+    expect(existsSync(join(directory, 'local-images'))).toBe(false)
+  })
+
   it('records a proposal and the person\'s review, and refuses a review without one', () => {
     const { issues, project } = setup()
     const issue = issues.create({ title: 'Local requirement', project: project.id })
@@ -308,8 +361,8 @@ describe('requirement questions', () => {
     const issues = new LocalIssues({ store, stateDir: directory, discussions: new Discussions({ store, receive }), receive })
     const project = issues.createProject({ name: 'Demo', repository: 'acme/widgets' })
     const issue = issues.create({ title: 'Ask about a dispatched ticket', project: project.id })
-    const questions = new LocalQuestions({ store, local: issues, answers: { ask }, lifetime, now: () => at })
-    return { issues, questions, store, issue }
+    const questions = new LocalQuestions({ store, local: issues, stateDir: directory, answers: { ask }, lifetime, now: () => at })
+    return { issues, questions, store, issue, directory }
   }
   /** A dispatched Ticket of `issueId`, whose worker Session started unless `started` is false. */
   const ticket = (issueId: string, started = true): Ticket => ({ id: 't-x', plan: { issueId },
@@ -397,5 +450,62 @@ describe('requirement questions', () => {
     expect(() => questions.ask(issue.id, 't-x', 'One too many')).toThrow(`at most ${QUESTION_LIMIT} questions`)
     expect(ask).not.toHaveBeenCalled()
     expect(issues.get(issue.id)!.questions).toHaveLength(QUESTION_LIMIT)
+  })
+
+  it('stores a question\'s images on the requirement and hands their paths to the answerer', async () => {
+    const ask = vi.fn(async () => ({ ok: true as const, answer: 'The button is blue.' }))
+    const { issues, questions, store, issue, directory } = setup(ask)
+    const dispatched = ticket(issue.id)
+    store.tickets.save(dispatched)
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    const asked = questions.ask(issue.id, dispatched.id, 'What color is this?', [image('shot.png', 'image/png', PNG)])!
+    const stored = asked.question.images![0]!
+    expect(stored).toMatchObject({ name: 'shot.png', mediaType: 'image/png', bytes: PNG.length })
+    expect(existsSync(join(directory, 'local-images', issue.id, `${stored.id}.png`))).toBe(true)
+    // The panel reads a question's image bytes through the same requirement-image route as every other message's.
+    expect(issues.image(issue.id, stored.id)).toMatchObject({ mediaType: 'image/png' })
+    expect(issues.get(issue.id)!.questions![0]!.images).toEqual([stored])
+    await questions.idle()
+    // The port receives the absolute stored path, which a model that cannot read images is told instead.
+    expect(ask).toHaveBeenCalledWith(dispatched, 'What color is this?',
+      expect.objectContaining({ images: [expect.objectContaining({ path: expect.stringContaining(`${issue.id}${join('/')}`), name: 'shot.png' })] }))
+    expect(issues.get(issue.id)!.questions![0]).toMatchObject({ status: 'answered', answer: 'The button is blue.' })
+    // The images stay on the record after answering, whichever form the delivery used.
+    expect(issues.get(issue.id)!.questions![0]!.images).toEqual([stored])
+  })
+
+  it('accepts an image-only question and refuses a bad image before writing the record or its bytes', () => {
+    const ask = vi.fn(async () => ({ ok: true as const, answer: 'ok' }))
+    const { issues, questions, store, issue, directory } = setup(ask)
+    store.tickets.save(ticket(issue.id))
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    // An image without text is still a question: the screenshot is the question.
+    const asked = questions.ask(issue.id, 't-x', '   ', [image('screenshot.png', 'image/png', PNG)])!
+    expect(asked.question.text).toBe('')
+    expect(asked.question.images).toHaveLength(1)
+    const kept = issues.get(issue.id)!
+    // A refused type reuses the localized image wording and leaves the requirement and its directory untouched.
+    expect(() => questions.ask(issue.id, 't-x', 'Bad', [image('bad.bmp', 'image/bmp', Buffer.from('BM'))]))
+      .toThrow('PNG')
+    expect(issues.get(issue.id)!.questions).toEqual(kept.questions)
+    expect(existsSync(join(directory, 'local-images', issue.id))).toBe(true)
+    expect(existsSync(join(directory, 'local-images', issue.id, 'not-written.png'))).toBe(false)
+  })
+
+  it('records that the answering model could not see the images, and keeps them on the record', async () => {
+    const ask = vi.fn(async () => ({ ok: true as const, answer: 'I cannot see the image.', imagesAsText: true }))
+    const { issues, questions, store, issue } = setup(ask)
+    store.tickets.save(ticket(issue.id))
+    const image = (name: string, mediaType: string, bytes: Buffer): LocalImageInput => ({ name, mediaType, data: bytes.toString('base64') })
+    const asked = questions.ask(issue.id, 't-x', 'What does this show?', [image('ui.png', 'image/png', PNG)])!
+    await questions.idle()
+    const settled = issues.get(issue.id)!.questions![0]!
+    expect(settled).toMatchObject({ status: 'answered', imagesAsText: true, answer: 'I cannot see the image.' })
+    expect(settled.images).toEqual(asked.question.images)
+    // Retrying resolves the model again, so the earlier text-only note is cleared under the same record.
+    issues.putIssue({ ...issues.get(issue.id)!, questions: [{ ...settled, status: 'failed', error: 'gone' }] })
+    const retried = questions.retry(issue.id, asked.question.id)!
+    expect(retried.question).toMatchObject({ status: 'asked', images: asked.question.images })
+    expect(retried.question.imagesAsText).toBeUndefined()
   })
 })

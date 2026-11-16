@@ -715,16 +715,23 @@ it('refuses an invalid image upload without creating the requirement or writing 
   expect(existsSync(join(h.directory, 'local-images'))).toBe(false)
 })
 
-it('lets only the create-requirement route carry a body above the management limit', async () => {
+it('lets the routes that carry images read a body above the management limit', async () => {
   const large = Buffer.concat([PNG, Buffer.alloc(200 * 1024)])
   const accepted = await h.api('POST', 'local/issues', ({ title: 'A large image', project: project.id,
     images: [{ name: 'large.png', mediaType: 'image/png', data: large.toString('base64') }] }))
   expect(accepted.status).toBe(200)
   expect((accepted.body.issue as { images?: { bytes: number }[] }).images![0]!.bytes).toBe(large.length)
+  // A follow-up that carries an image reads the same larger limit and keeps that message's image.
+  const followed = await h.api('POST', `local/issues/${(accepted.body.issue as { id: string }).id}/comments`, {
+    text: '', images: [{ name: 'follow-up.png', mediaType: 'image/png', data: large.toString('base64') }] })
+  expect(followed.status).toBe(200)
+  expect((followed.body.issue as { commentImages?: { images: { bytes: number }[] }[] }).commentImages![0]!.images[0]!.bytes)
+    .toBe(large.length)
   // Another management route keeps the 128 KiB limit.
-  const comment = await h.api('POST', `local/issues/${(accepted.body.issue as { id: string }).id}/comments`, { text: 'x'.repeat(200 * 1024) })
-  expect(comment.status).toBe(400)
-  expect(comment.body).toMatchObject({ error: `Request exceeds ${128 * 1024} bytes` })
+  const alignment = await h.api('POST', `local/issues/${(accepted.body.issue as { id: string }).id}/alignment`,
+    { summary: 'x'.repeat(200 * 1024) })
+  expect(alignment.status).toBe(400)
+  expect(alignment.body).toMatchObject({ error: `Request exceeds ${128 * 1024} bytes` })
   // The create route itself refuses a body above the limit that holds four full-size images.
   const huge = await h.api('POST', 'local/issues', { title: 'Too much', project: project.id,
     images: [{ name: 'huge.png', mediaType: 'image/png', data: 'A'.repeat(REQUIREMENT_BODY_BYTES) }] })

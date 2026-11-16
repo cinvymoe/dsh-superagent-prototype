@@ -180,7 +180,9 @@ const PromptsQuery = z.object({ revision: count.optional(), offset: count.defaul
 const SourceBlock = z.templateLiteral(['source:', z.string().regex(/^[a-z][a-z0-9-]*$/)])
 const SettingsBlockSchema = z.union([z.enum(['policy', 'eval', 'executor', 'agents', 'projects']), SourceBlock])
 const SaveRequest = z.object({ value: z.unknown(), revision: z.number().int().nonnegative() })
-const QuestionRequest = z.object({ ticket: z.string().trim().min(1), text: z.string().trim().min(1).max(QUESTION_CHARS) })
+// A question may be images alone, so its text is optional while every image travels base64-encoded in the same body.
+const QuestionRequest = z.object({ ticket: z.string().trim().min(1), text: z.string().trim().max(QUESTION_CHARS).default(''),
+  images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional() })
 
 function routes(runtime: HttpHost): Routes {
   const { store } = runtime
@@ -322,8 +324,11 @@ function routes(runtime: HttpHost): Routes {
         thread, replies: runtime.store.receipts.thread('local', runtime.local.thread(issue.id)) }
     },
     'POST local/issues/:id/comments': async ({ params, body }) => {
-      const input = z.object({ text: z.string().trim().min(1).max(20_000) }).parse(await body())
-      const issue = runtime.local.comment(params.id, input.text)
+      // A comment may be images alone, and its images travel base64-encoded, so it reads the larger body limit.
+      const input = z.object({ text: z.string().max(20_000).optional().default(''),
+        images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional() })
+        .parse(await body(REQUIREMENT_BODY_BYTES))
+      const issue = runtime.local.comment(params.id, input.text, input.images ?? [])
       if (!issue) throw new RouteError(404, 'Local issue not found')
       return { issue: runtime.local.view(issue) }
     },
@@ -358,8 +363,8 @@ function routes(runtime: HttpHost): Routes {
     },
     // Asking records `asked` and returns at once; the answer lands on the requirement record in the background.
     'POST local/issues/:id/questions': async ({ params, body }) => {
-      const input = QuestionRequest.parse(await body())
-      const asked = runtime.localQuestions.ask(params.id, input.ticket, input.text)
+      const input = QuestionRequest.parse(await body(REQUIREMENT_BODY_BYTES))
+      const asked = runtime.localQuestions.ask(params.id, input.ticket, input.text, input.images ?? [])
       if (!asked) throw new RouteError(404, 'Local issue not found')
       return { issue: runtime.local.view(asked.issue), question: asked.question }
     },

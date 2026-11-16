@@ -117,6 +117,16 @@ export interface LocalQuestion {
   /** The dispatched Ticket the question is about. */
   ticket: string
   text: string
+  /**
+   * Images the question attached, stored under the requirement's directory; absent when it has none. They stay on the
+   * record whatever the answering model can read, so the timeline keeps showing them.
+   */
+  images?: LocalImage[]
+  /**
+   * Set when the answering model's `inputModalities` exclude `image`: the delivery sent these images' absolute paths as
+   * text instead of image content, and the panel says so. A model that can read images leaves it absent.
+   */
+  imagesAsText?: true
   status: 'asked' | 'answered' | 'failed'
   askedAt: string
   /** When the question reached this status; absent while it is still `asked`. */
@@ -228,6 +238,13 @@ export interface LocalDiscussion {
   handoff?: LocalHandoff
 }
 
+/** The images one human follow-up message attached, named by the Trigger that message became. */
+export interface LocalCommentImages {
+  /** The Thread Trigger of the follow-up message these images belong to. */
+  triggerId: string
+  images: LocalImage[]
+}
+
 /** A requirement submitted from the local web panel; its thread key is `local:<id>`. */
 export interface LocalIssue {
   id: string
@@ -243,6 +260,11 @@ export interface LocalIssue {
   discussionId?: string
   /** Images attached when the requirement was submitted; absent when there are none. */
   images?: LocalImage[]
+  /**
+   * The images attached to its human follow-up messages, oldest first and each naming the Trigger it belongs to. Absent when
+   * no follow-up attached one, so records written before follow-up images existed read fine and need no migration.
+   */
+  commentImages?: LocalCommentImages[]
   /**
    * The questions people asked about its dispatched Tickets, newest last. Absent when there are none, so records written
    * before questions existed read fine and need no migration.

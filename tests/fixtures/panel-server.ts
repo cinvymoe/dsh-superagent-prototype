@@ -25,7 +25,7 @@ import { feishuKind } from '../../src/sources/feishu.ts'
 import { githubKind } from '../../src/sources/github.ts'
 import type { Health } from '../../src/sources/host.ts'
 import type { SourceKind } from '../../src/sources/kind.ts'
-import type { LocalAnswer, LocalAsk, LocalDiscussion, LocalIssue } from '../../src/sources/local-format.ts'
+import type { LocalAnswer, LocalAsk, LocalDiscussion, LocalImage, LocalIssue } from '../../src/sources/local-format.ts'
 import { testDeployment } from './deployment.ts'
 
 export const MEMBER = 'ou_alice'
@@ -57,14 +57,20 @@ const localTrigger = (record: LocalIssue | LocalDiscussion): TriggerRow => ({ id
   actor: { source: 'local', id: record.author || 'local' }, human: true, at: record.createdAt, text: record.body || record.title,
   preview: record.body || record.title, url: undefined, threads: [`local:${record.id}`], actions: { requeue: false },
   disposition: { queued: false, evaluating: false, delivered: false, filtered: undefined, fanout: [], handbacks: [], decision: undefined } })
-/** A human message on a requirement's thread, as the panel's comment form posts it. */
-export const localComment = (issue: LocalIssue, text: string, at: string): TriggerRow =>
-  ({ ...localTrigger(issue), id: `local-comment-${at}`, at, text, preview: text })
+/** A human message on a requirement's thread, as the panel's comment form posts it, with its images' paths in the text. */
+export const localComment = (issue: LocalIssue, text: string, at: string, images: LocalImage[] = []): TriggerRow => {
+  // The host appends one absolute path per image to the message's Trigger text, and keeps them off the requirement itself.
+  const body = images.length
+    ? `${text ? `${text}\n\n` : ''}Images:\n${images.map(image =>
+      `- /srv/local-images/${issue.id}/${image.id} (${image.mediaType}, ${image.bytes} bytes)`).join('\n')}`
+    : text
+  return { ...localTrigger(issue), id: `local-comment-${at}`, at, text: body, preview: body }
+}
 /** A sent agent reply on a requirement's thread, as the outbox records it. */
 export const localReply = (issue: LocalIssue, text: string, sentAt: string): Receipt =>
   ({ id: `local-reply-${sentAt}`, channel: { source: 'local', thread: `local:${issue.id}`, address: { issue: issue.id } },
     text, kind: 'reply', status: 'sent', sentAt })
-const localThread = (issue: LocalIssue, extra: TriggerRow[] = [], dispatched = false): ThreadPageView => {
+export const localThread = (issue: LocalIssue, extra: TriggerRow[] = [], dispatched = false): ThreadPageView => {
   // The host appends one absolute path per image to the original requirement Trigger's text, as C2 does.
   const images = issue.images ?? []
   const base = issue.body || issue.title
@@ -169,6 +175,8 @@ worktreeRoot?: string; prepare?: string; blockedCommands?: string[]; cli?: strin
     createdAt: string; updatedAt: string }[]
   /** When set, the create-requirement route refuses with this JSON error (and creates nothing). */
   refuseIssueCreate?: { status: 400; error: string; code: string; values: Record<string, string> }
+  /** When set, the comment route refuses with this JSON error (and writes neither the record nor its images). */
+  refuseIssueComment?: { status: 400; error: string; code: string; values: Record<string, string> }
   /** When set, a project write naming this CLI is refused with the setup problem the host would report. */
   refuseProjectCli?: { cli: string; code: SetupCode; values: Record<string, string>; detail: string }
   /** When set, the create-project route refuses with this JSON error (and creates nothing). */
@@ -692,12 +700,29 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'POST local/issues/:id/comments': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
-    // The host only bumps updatedAt and receives one human Trigger; it never appends the comment to issue.body.
+    if (server.refuseIssueComment) {
+      const { status, error, code, values } = server.refuseIssueComment
+      return refuse(status, error, { code, values })
+    }
+    // The host only bumps updatedAt and receives one human Trigger; it never appends the comment to issue.body, and a
+    // message may be images alone. Each message's images are recorded against the Trigger it becomes.
     const posted = server.localComments[params.id] ?? []
     const at = new Date(Date.UTC(2026, 8, 24, 0, 0, posted.length)).toISOString()
-    const next = { ...issue, updatedAt: at }
+    const text = String(body.text ?? '').trim()
+    if (!text && !(body.images ?? []).length) {
+      return refuse(400, 'A requirement follow-up needs text or an image', { code: 'issueCommentText' })
+    }
+    // Echo the submitted images' metadata, naming each by the message that attached it.
+    const images: LocalImage[] = (body.images ?? []).map((image, index) => ({
+      id: `img-comment-${posted.length + 1}-${index + 1}`, name: image.name, mediaType: image.mediaType,
+      bytes: Buffer.from(image.data.replace(/^data:[^;,]*;base64,/i, ''), 'base64').length,
+    }))
+    const comment = localComment({ ...issue, updatedAt: at }, text, at, images)
+    const next = { ...issue, updatedAt: at, ...(images.length ? {
+      commentImages: [...(issue.commentImages ?? []), { triggerId: comment.id, images }],
+    } : {}) }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
-    server.localComments = { ...server.localComments, [params.id]: [...posted, localComment(next, String(body.text).trim(), at)] }
+    server.localComments = { ...server.localComments, [params.id]: [...posted, comment] }
     return { issue: issueView(next) }
   } },
   'POST local/issues/:id/alignment': { body: true, answer: ({ params, body }) => {
@@ -752,8 +777,10 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
   'POST local/issues/:id/questions': { body: true, answer: ({ params, body }) => {
     const issue = server.localIssues.find(item => item.id === params.id)
     if (!issue) return refuse(404, 'Local issue not found')
+    const images = ((body.images ?? []) as { name: string; mediaType: string }[]).map((image, index) => ({
+      id: `img-q${index + 1}`, name: image.name, mediaType: image.mediaType, bytes: PIXEL_PNG.length }))
     const question = { id: `qn-${String((issue.questions ?? []).length).padStart(8, '0')}`, ticket: body.ticket as string,
-      text: body.text as string, status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
+      text: body.text as string, ...(images.length ? { images } : {}), status: 'asked' as const, askedAt: '2026-09-23T00:00:00Z' }
     const next = { ...issue, questions: [...issue.questions ?? [], question] }
     server.localIssues = server.localIssues.map(item => item.id === params.id ? next : item)
     return { issue: issueView(next), question }
@@ -905,7 +932,10 @@ function imageReply(path: string): Response | undefined {
   const id = decodeURIComponent(segments[2]!)
   const imageId = decodeURIComponent(segments[4]!)
   if (segments[1] === 'issues') {
-    const image = server.localIssues.find(item => item.id === id)?.images?.find(item => item.id === imageId)
+    const issue = server.localIssues.find(item => item.id === id)
+    const image = [...issue?.images ?? [], ...(issue?.commentImages ?? []).flatMap(entry => entry.images),
+      ...(issue?.questions ?? []).flatMap(question => question.images ?? [])]
+      .find(item => item.id === imageId)
     return image ? new Response(PIXEL_PNG, { status: 200, headers: { 'content-type': image.mediaType } })
       : new Response(null, { status: 404 })
   }

@@ -1,9 +1,13 @@
 /** One-shot Ticket questions: a read-only answer from a Session forked off the Ticket's worker, and why it cannot be answered. */
+import { readFileSync } from 'node:fs'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
+import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { Ticket } from '../core/index.ts'
 import { workerSessionId } from '../executor/dsh.ts'
+import type { LocalImage } from '../sources/local-format.ts'
+import type { QuestionImage } from './local-questions.ts'
 import type { Sessions } from './sessions.ts'
 import type { Store } from './store.ts'
 
@@ -11,7 +15,7 @@ import type { Store } from './store.ts'
 export type QuestionFailureReason = 'no-session' | 'no-completed-turn' | 'fork-failed' | 'timeout' | 'empty-answer'
 
 /** One answer about a Ticket, or why the question could not be answered. */
-export type QuestionResult = { ok: true; answer: string } | { ok: false; reason: QuestionFailureReason; message: string }
+export type QuestionResult = { ok: true; answer: string; imagesAsText?: boolean } | { ok: false; reason: QuestionFailureReason; message: string }
 
 /** How long a forked Session has to answer before its turn is cancelled, unless the caller names its own limit. */
 export const QUESTION_TIMEOUT_MS = 120_000
@@ -23,6 +27,8 @@ export interface QuestionsHost {
   /** The Store `ticket` was read from; the port reads nothing from it and never writes it. */
   readonly store: Pick<Store, 'tickets'>
   readonly sessions: Pick<Sessions, 'answer' | 'prompt'>
+  /** Directory a question's stored images live under; the text fallback names their absolute paths there. */
+  readonly stateDir: string
   /** Host lifetime; a stop aborts a waiting question. */
   readonly lifetime?: AbortSignal
   /** Default wait for one answer, when `ask` names none. */
@@ -42,11 +48,13 @@ const messageOf = (error: unknown): string => error instanceof Error ? error.mes
 export class Questions {
   constructor(private readonly host: QuestionsHost) {}
   /**
-   * Answers `question` about `ticket`, waiting up to `options.timeoutMs` (else the host's, else 120 seconds). The forked
-   * Session is archived on every path that created it; an archive failure is logged and never changes the answer. A
-   * Session-domain failure other than `session/not-found` is raised, because the host cannot be asked at all.
+   * Answers `question` about `ticket`, waiting up to `options.timeoutMs` (else the host's, else 120 seconds). Attached
+   * images reach the forked Session as image content parts when the model reads images, and as their absolute paths in
+   * the text when it does not; either way the caller keeps the stored images. The forked Session is archived on every
+   * path that created it; an archive failure is logged and never changes the answer. A Session-domain failure other
+   * than `session/not-found` is raised, because the host cannot be asked at all.
    */
-  async ask(ticket: Ticket, question: string, options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<QuestionResult> {
+  async ask(ticket: Ticket, question: string, options: { timeoutMs?: number; signal?: AbortSignal; images?: readonly QuestionImage[] } = {}): Promise<QuestionResult> {
     const { context, sessions } = this.host
     const worker = workerSessionId(ticket.id) as SessionId
     const resolved = await context.sessionController.resolveAgent(worker)
@@ -69,8 +77,10 @@ export class Questions {
     catch (error) { return { ok: false, reason: 'fork-failed', message: `Could not fork Ticket ${ticket.id}'s worker Session: ${messageOf(error)}` } }
     try {
       const agent = await sessions.answer(forked, ticket)
+      const delivery = await this.delivery(agent, question, options.images ?? [], options.signal)
       // The forked id is unique, so the delivery's request id is too.
-      await sessions.prompt(forked, `question:${forked}`, question, 'queue')
+      await sessions.prompt(forked, `question:${forked}`, delivery.text, 'queue', undefined, undefined,
+        delivery.images.length ? delivery.images : undefined)
       const timeoutMs = options.timeoutMs ?? this.host.timeoutMs ?? QUESTION_TIMEOUT_MS
       if (!await this.untilIdle(agent, timeoutMs, options.signal)) {
         // The turn is abandoned: cancel it, and the `finally` archives the Session before the failure returns.
@@ -78,8 +88,48 @@ export class Questions {
         return { ok: false, reason: 'timeout', message: `The answer to Ticket ${ticket.id} did not end within ${timeoutMs}ms` }
       }
       const answer = this.answerOf((await context.sessionController.inspect(forked)).events, agent.session.inheritedEventCount)
-      return answer ? { ok: true, answer } : { ok: false, reason: 'empty-answer', message: `The answer to Ticket ${ticket.id} was empty` }
+      return answer ? { ok: true, answer, ...(delivery.asText ? { imagesAsText: true } : {}) }
+        : { ok: false, reason: 'empty-answer', message: `The answer to Ticket ${ticket.id} was empty` }
     } finally { await this.archive(forked) }
+  }
+
+  /**
+   * How a question and the images stored with it reach the forked Session: as durable image content parts when its model
+   * reads images, otherwise as one absolute path per image appended to the text. A missing attachment service, an
+   * unresolved route or a failed save degrades to the text form rather than failing the question, and `asText` says the
+   * panel should tell the person the model cannot see the image.
+   */
+  private async delivery(agent: Agent, question: string, images: readonly QuestionImage[], signal?: AbortSignal):
+    Promise<{ text: string; images: ImageAttachmentRef[]; asText: boolean }> {
+    if (!images.length) return { text: question, images: [], asText: false }
+    const attachments = agent.ctx.get('attachments')
+    const route = agent.session.requestHeader()?.config
+    const provider = route?.provider ?? agent.options.provider
+    const model = route?.model ?? agent.options.model
+    const llm = agent.ctx.get('llm')
+    let reads = false
+    if (provider && model && llm) {
+      try { reads = (await llm.resolveModelInfo(provider, model, signal))?.inputModalities?.includes('image') ?? false }
+      catch { reads = false }
+    }
+    if (reads && attachments) {
+      try {
+        const saved = await attachments.saveImages(images.map(image => ({ data: readFileSync(image.path),
+          mediaType: image.mediaType as ImageMediaType, name: image.name })))
+        signal?.throwIfAborted()
+        return { text: question, images: [...saved], asText: false }
+      } catch (error) {
+        // A refused or unreadable image falls back to its path instead of losing the question.
+        if (signal?.aborted) throw error
+      }
+    }
+    return { text: this.withImages(question, images), images: [], asText: true }
+  }
+
+  /** The question plus one absolute path per image, for a model that cannot read images. */
+  private withImages(question: string, images: readonly QuestionImage[]): string {
+    const lines = images.map(image => `- ${image.path} (${image.mediaType}, ${image.bytes} bytes)`)
+    return question ? `${question}\n\nImages:\n${lines.join('\n')}` : `Images:\n${lines.join('\n')}`
   }
   /** Whether `agent` reaches idle before `timeoutMs` passes or `signal`/the host lifetime aborts; a failed turn reads as idle. */
   private async untilIdle(agent: Agent, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
