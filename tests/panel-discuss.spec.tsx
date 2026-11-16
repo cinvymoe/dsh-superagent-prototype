@@ -4,7 +4,7 @@ import { act } from 'react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/locales.ts'
 import { usePanel, mount, remount, all, click, find, settle, type, text, at, tab } from './fixtures/panel.tsx'
-import { localComment, localIssue, localReply, server, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
+import { localComment, localIssue, localReply, localThread, server, threadSummary, ticketSummary } from './fixtures/panel-server.ts'
 
 usePanel()
 
@@ -59,6 +59,12 @@ const timelineSection = (): HTMLElement => {
 const commentButton = (): HTMLButtonElement => {
   const match = all('.dt-timeline-form button').find(button => button.textContent?.trim() === zh['discuss.comment'])
   if (!match) throw new Error('No comment button')
+  return match as HTMLButtonElement
+}
+/** The answer submit button of a waiting Ticket's box. */
+const answerButton = (): HTMLButtonElement => {
+  const match = all('button').find(button => button.textContent?.trim() === zh['discuss.answerSubmit'])
+  if (!match) throw new Error('No answer button')
   return match as HTMLButtonElement
 }
 /** The rendered messages of the message timeline, in the order they appear. */
@@ -545,6 +551,79 @@ it('renders the newest-first message timeline and its top follow-up box in Engli
   expect(all('.dt-timeline .dt-event')[0]!.textContent).toContain(en['discuss.agent'])
   // A missing locale key would render as its own key, so none may survive.
   expect(text()).not.toContain('discuss.')
+})
+
+it('pastes an image-only follow-up and shows it only on that message\'s timeline row', async () => {
+  server.localProjects = [PROJECT]
+  const issue = localIssue('Live requirement', 'The live description')
+  server.localIssues = [issue]
+  server.localComments = { 'q-fixture': [localComment(issue, 'Earlier follow-up', '2026-09-23T01:00:00Z')] }
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const box = area(zh['discuss.commentPlaceholder'])
+  await dispatchFiles(box, pasteEvent([imageFile('later.png')]))
+  // An image alone enables the comment button and shows its thumbnail before submitting.
+  expect(commentButton().disabled).toBe(false)
+  expect(all('.dt-image-thumb').map(image => image.getAttribute('alt'))).toEqual(['later.png'])
+  await click(commentButton())
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/comments' && request.method === 'POST')!
+  expect(posted).toMatchObject({ method: 'POST', body: { text: '',
+    images: [{ name: 'later.png', mediaType: 'image/png' }] } })
+  // The detail reads the stored image through the authenticated route and shows it under that message only.
+  expect(createObjectURL).toHaveBeenCalled()
+  const rows = all('.dt-timeline .dt-row')
+  expect(rows).toHaveLength(2)
+  expect(rows[0]!.querySelectorAll('.dt-image-gallery img')).toHaveLength(1)
+  expect(rows[0]!.querySelector('.dt-image-caption')?.textContent).toContain('later.png')
+  // The host's absolute-path block stays out of the visible message text; the thumbnails carry the images instead.
+  expect(rows[0]!.querySelector('.dt-md')?.textContent ?? '').not.toContain('Images:')
+  expect(rows[1]!.querySelectorAll('.dt-image-caption')).toHaveLength(0)
+  // The submitted box clears its text and its image selection.
+  expect(box.value).toBe('')
+  expect(all('.dt-image-choice')).toHaveLength(0)
+})
+
+it('pastes an image into the waiting-answer box and posts it through the same comment route', async () => {
+  server.localProjects = [PROJECT]
+  const issue = localIssue('Waiting requirement', 'The waiting description')
+  server.localIssues = [issue]
+  const waiting = ticketSummary({ id: 't-wait', title: '等待回答的工单', attention: { id: 'q1', question: '需要确认按钮颜色' } },
+    { stage: 'person', action: 'answer' })
+  // The fake thread keeps the posted answer in server.localComments, so the detail's reload sees the message it became.
+  server.threadPages = () => ({ ...localThread(issue, server.localComments['q-fixture'] ?? []), tickets: [waiting] })
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  expect(text()).toContain(zh['discuss.waitingAnswer'].replace('{title}', '等待回答的工单'))
+  await dispatchFiles(area(zh['discuss.answerPlaceholder']), pasteEvent([imageFile('waiting.png')]))
+  expect(answerButton().disabled).toBe(false)
+  await click(answerButton())
+  const posted = server.requests.find(request => request.path === 'local/issues/q-fixture/comments' && request.method === 'POST')!
+  expect(posted).toMatchObject({ method: 'POST', body: { text: '',
+    images: [{ name: 'waiting.png', mediaType: 'image/png' }] } })
+  // The answer's thumbnails stay on that message in the timeline, and the waiting card's selection clears.
+  const rows = all('.dt-timeline .dt-row')
+  expect(rows).toHaveLength(1)
+  expect(rows[0]!.querySelectorAll('.dt-image-gallery img')).toHaveLength(1)
+  expect(rows[0]!.querySelector('.dt-image-caption')?.textContent).toContain('waiting.png')
+  expect(all('.dt-image-choice')).toHaveLength(0)
+})
+
+it('keeps the follow-up text and image when the host refuses the image, showing the localized reason', async () => {
+  server.localProjects = [PROJECT]
+  const issue = localIssue('Live requirement', 'The live description')
+  server.localIssues = [issue]
+  server.refuseIssueComment = { status: 400, error: 'refused', code: 'issueImageType', values: { name: 'bad.png' } }
+  at({ page: 'requirements', id: 'q-fixture' })
+  await mount()
+  const box = area(zh['discuss.commentPlaceholder'])
+  await type(box, 'Look at this')
+  await dispatchFiles(box, pasteEvent([imageFile('bad.png')]))
+  await click(commentButton())
+  expect(document.querySelector('.dt-toast')?.textContent).toBe(zh['userError.issueImageType'].replace('{name}', 'bad.png'))
+  // Nothing is cleared before the request succeeds, and no message joined the timeline.
+  expect(box.value).toBe('Look at this')
+  expect(all('.dt-image-choice')).toHaveLength(1)
+  expect(server.localComments['q-fixture'] ?? []).toHaveLength(0)
 })
 
 it('opens a saved Discuss route on its matching requirement page after reload', async () => {

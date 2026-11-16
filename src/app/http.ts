@@ -322,8 +322,11 @@ function routes(runtime: HttpHost): Routes {
         thread, replies: runtime.store.receipts.thread('local', runtime.local.thread(issue.id)) }
     },
     'POST local/issues/:id/comments': async ({ params, body }) => {
-      const input = z.object({ text: z.string().trim().min(1).max(20_000) }).parse(await body())
-      const issue = runtime.local.comment(params.id, input.text)
+      // A comment may be images alone, and its images travel base64-encoded, so it reads the larger body limit.
+      const input = z.object({ text: z.string().max(20_000).optional().default(''),
+        images: z.array(z.object({ name: z.string(), mediaType: z.string(), data: z.string() })).optional() })
+        .parse(await body(REQUIREMENT_BODY_BYTES))
+      const issue = runtime.local.comment(params.id, input.text, input.images ?? [])
       if (!issue) throw new RouteError(404, 'Local issue not found')
       return { issue: runtime.local.view(issue) }
     },

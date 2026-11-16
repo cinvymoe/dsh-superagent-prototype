@@ -285,6 +285,7 @@ const TEXT = {
   'userError.chainIntakeTaken': ['接收 Issue 的仓库 {repository} 已被链路 {chain} 使用。', USER_ERRORS.chainIntakeTaken[1]],
   'userError.projectChainInUse': ['链路 {chain} 正被项目 {project} 使用；请通过项目表单修改该项目的链路，而不是删除或改名。', USER_ERRORS.projectChainInUse[1]],
   'userError.issueEmpty': ['需求需要填写描述。', 'A requirement needs a description.'],
+  'userError.issueCommentText': ['需求追评需要文字或图片。', USER_ERRORS.issueCommentText[1]],
   'userError.discussionEmpty': ['讨论需要填写正文。', 'A discussion needs a description.'],
   'userError.unknownDiscussion': ['讨论不存在。', 'Unknown local discussion.'],
   'userError.discussionLinked': ['讨论 {discussion} 已创建需求 {issue}，不能重复创建。', 'Discussion {discussion} already created requirement {issue}.'],
