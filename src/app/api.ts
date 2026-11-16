@@ -68,7 +68,8 @@ export interface Api {
   'POST local/issues/:id/alignment/decision': { body: { decision: 'confirm' | 'reject'; reason?: string; roundId?: string }; response: { issue: LocalIssueView; tickets: { id: string; title: string }[] } }
   'POST local/issues/:id/execution': { body: { mode: ExecutionMode }; response: { issue: LocalIssueView } }
   'POST local/issues/:id/close': { response: { issue: LocalIssueView } }
-  'POST local/issues/:id/questions': { body: { ticket: string; text: string }; response: { issue: LocalIssueView; question: LocalQuestion } }
+  /** A question may be images alone; its text and images travel together in one ask request. */
+  'POST local/issues/:id/questions': { body: { ticket: string; text?: string; images?: LocalImageInput[] }; response: { issue: LocalIssueView; question: LocalQuestion } }
   'POST local/issues/:id/questions/:questionId/retry': { response: { issue: LocalIssueView; question: LocalQuestion } }
   'POST tickets/:id/retry': { response: { retried: true } }
   'POST tickets/:id/stop': { response: { stopped: true } }

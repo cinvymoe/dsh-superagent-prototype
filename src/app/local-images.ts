@@ -122,3 +122,12 @@ export function storeIssueCommentImages(stateDir: string, issueId: string, trigg
   inputs: readonly LocalImageInput[]): LocalImage[] {
   return storeImages(requirementImagesDir(stateDir, issueId), ['issue-comment', issueId, triggerId], inputs)
 }
+
+/**
+ * Validate and store the images one question about a dispatched Ticket attached, under the requirement's own directory.
+ * `questionId` keeps different questions' images apart; nothing is written when one of the images is refused.
+ */
+export function storeQuestionImages(stateDir: string, issueId: string, questionId: string,
+  inputs: readonly LocalImageInput[]): LocalImage[] {
+  return storeImages(requirementImagesDir(stateDir, issueId), ['question', issueId, questionId], inputs)
+}

@@ -117,6 +117,16 @@ export interface LocalQuestion {
   /** The dispatched Ticket the question is about. */
   ticket: string
   text: string
+  /**
+   * Images the question attached, stored under the requirement's directory; absent when it has none. They stay on the
+   * record whatever the answering model can read, so the timeline keeps showing them.
+   */
+  images?: LocalImage[]
+  /**
+   * Set when the answering model's `inputModalities` exclude `image`: the delivery sent these images' absolute paths as
+   * text instead of image content, and the panel says so. A model that can read images leaves it absent.
+   */
+  imagesAsText?: true
   status: 'asked' | 'answered' | 'failed'
   askedAt: string
   /** When the question reached this status; absent while it is still `asked`. */

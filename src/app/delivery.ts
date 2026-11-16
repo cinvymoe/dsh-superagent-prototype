@@ -1,6 +1,7 @@
 /** Idempotent message delivery to DSH agents across Session restarts. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { freezeMessage, MessageId, type ContextFormed, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
@@ -62,9 +63,13 @@ export class AgentDelivery {
     const id = messageId(requestId)
     return (await this.history(agent)).ids.has(id) || [...agent.inbox.nextTurn, ...agent.inbox.nextStep].some(message => deliveryId(message) === id)
   }
-  /** Delivers once to the selected inbox, or injects into history without waking the agent, and flushes Session persistence before acknowledging the producer. */
-  async send(agent: Agent, requestId: string, text: string, mode: 'queue' | 'steer' | { inject: string }, signal: AbortSignal, authorize?: () => void,
-    accepted?: () => void): Promise<void> {
+  /**
+   * Delivers once to the selected inbox, or injects into history without waking the agent, and flushes Session persistence
+   * before acknowledging the producer. `images` joins the message as image content parts after its text, for a model that
+   * reads images; the caller degrades to text paths when its model does not.
+   */
+  async send(agent: Agent, requestId: string, text: string, mode: 'queue' | 'steer' | { inject: string }, signal: AbortSignal,
+    authorize?: () => void, accepted?: () => void, images: readonly ImageAttachmentRef[] = []): Promise<void> {
     signal.throwIfAborted()
     const seen = await this.history(agent)
     signal.throwIfAborted()
@@ -75,7 +80,11 @@ export class AgentDelivery {
     if (!seen.ids.has(id) && !pending) {
       const source = typeof mode === 'object' ? { kind: 'dsh-superagent' as const, form: 'notice' as const, summary: mode.inject }
         : { kind: 'dsh-superagent' as const, form: 'relay' as const }
-      const message = freezeMessage({ id, role: 'user' as const, content: [{ type: 'text' as const, text }], source })
+      const content = [
+        ...(text ? [{ type: 'text' as const, text }] : []),
+        ...images.map(attachment => ({ type: 'image' as const, attachment })),
+      ]
+      const message = freezeMessage({ id, role: 'user' as const, content, source })
       if (typeof mode === 'object') { agent.inject(message); seen.ids.add(id) }
       else if (mode === 'steer') agent.steer(message)
       else agent.followup(message)
