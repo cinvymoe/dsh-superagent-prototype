@@ -378,14 +378,16 @@ export class Evals extends EnginePart {
    * the discussion's conclusion into its briefing.
    */
   acceptAlignment(thread: Thread, input: { issueId: string; title: string; triggerIds: string[]; actor: ActorRef; scope?: string;
-    name?: string; note?: string; project?: string; at?: string }): Ticket {
+    name?: string; note?: string; project?: string; round?: number; dependsOn?: string[]; at?: string }): Ticket {
     if (!input.triggerIds.length) throw new UserError('planNeedsTriggers')
-    const ticketId = alignTicketId(input.issueId)
+    const round = input.round ?? 1
+    const ticketId = alignTicketId(input.issueId, round)
     const existing = this.repo.tickets.get(ticketId)
     if (existing && liveTicket(existing)) return existing
     const at = input.at ?? this.now()
     const policyVersion = this.policy().version
-    const evaluation: Evaluation = { id: key('evaluation', 'align', input.issueId), threadKey: thread.key,
+    const evaluation: Evaluation = { id: round > 1 ? key('evaluation', 'align', input.issueId, String(round))
+      : key('evaluation', 'align', input.issueId), threadKey: thread.key,
       triggerIds: input.triggerIds, primary: input.triggerIds[0], strength: 'explicit', actor: input.actor,
       basis: { via: 'addressed', addressed: 'direct', source: input.actor.source }, policyVersion, startedAt: at, deadline: at }
     const mandate: Mandate = { strength: 'explicit', policyVersion, basis: evaluation.basis, actor: input.actor,
@@ -393,7 +395,8 @@ export class Evals extends EnginePart {
     const decision = this.record(thread, evaluation, { kind: 'accept', reason: [{ code: 'explicitRouted' }], mandate, ticketId })
     this.tickets.create(ticketId, decision.id, mandate, evaluation, { kind: 'accept', title: input.title, scope: mandate.scope,
       reason: { code: 'explicitRouted' }, mode: 'align', name: input.name ?? alignName(input.title),
-      ...(input.note ? { note: input.note } : {}), ...(input.project === undefined ? {} : { project: input.project }) }, at)
+      ...(input.note ? { note: input.note } : {}), ...(input.project === undefined ? {} : { project: input.project }),
+      ...(input.dependsOn?.length ? { dependsOn: input.dependsOn } : {}) }, at)
     const created = this.repo.tickets.get(ticketId)
     if (!created) throw new Error('The aligner ticket was not created')
     return created

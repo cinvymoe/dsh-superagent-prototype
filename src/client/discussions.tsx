@@ -4,9 +4,10 @@
  */
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Receipt } from '../app/store.ts'
-import { projectRepositories, type LocalAnswer, type LocalDiscussion, type LocalImage } from '../sources/local-format.ts'
+import { discussionAlignments, projectRepositories, type LocalAnswer, type LocalDiscussion, type LocalHandoff,
+  type LocalImage } from '../sources/local-format.ts'
 import { discussionImage, usePoll } from './api.ts'
-import { Button, Icon, Modal, Tag } from './controls.tsx'
+import { Button, DisclosureRow, Icon, Modal, Tag } from './controls.tsx'
 import { PasteImageField, useImagePaste } from './image-paste.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
 import { RequirementDialog } from './requirement-dialog.tsx'
@@ -55,6 +56,10 @@ function DiscussionImages({ discussionId, images }: { discussionId: string; imag
     <figcaption className="dt-image-caption">{image.name}</figcaption>
   </figure>)}</div>
 }
+
+/** One bubble of the chat: a person's message on the right, an Answerer's reply on the left, and its state when pending. */
+type ChatMessage = { at: string; side: 'mine' | 'other'; text: string; images?: LocalImage[]
+  answerId?: string; state?: LocalAnswer['state'] }
 
 /** One message of a discussion with its answer, a reply an older discussion already recorded, or a message recorded before answers were. */
 type Exchange = { at: string; kind: 'answer'; answer: LocalAnswer } | { at: string; kind: 'reply'; reply: Receipt }
@@ -151,6 +156,41 @@ export function DiscussionList() {
  * made from it, hands the conclusion to the alignment worker, closes the discussion, or deletes one that is about no
  * requirement.
  */
+/** One alignment round of a discussion: the conclusion it handed over, its ticket, and where that ticket stands. */
+function AlignmentRound({ round, index }: { round: LocalHandoff; index: number }) {
+  const { t, call, navigate } = usePanel()
+  const { data, error } = usePoll(() => round.ticketId
+    ? call('GET tickets/:id', { id: round.ticketId })
+    : Promise.resolve(undefined), [round.ticketId])
+  const ticket = data && 'id' in data ? data : undefined
+  const label = ticket === undefined ? undefined
+    : ticket.stage === 'person' && ticket.action ? t(`stage.${ticket.action}`)
+    : ticket.stage === 'working' && ticket.action === 'queued' ? t('stage.queued')
+    : ticket.stage === 'ended' ? t('ticket.ended')
+    : t(`stage.${ticket.stage}`)
+  const waiting = ticket?.stage === 'working' && ticket.action === 'queued'
+  return <section className="dt-card" data-alignment={round.roundId}>
+    <div className="dt-card-head"><span className="dt-card-title">{t('discussion.roundTitle', { round: String(index) })}</span>
+      <When at={round.at} /></div>
+    <div className="dt-row-meta"><span className="dt-mono">{round.roundId}</span>
+      {round.ticketId && <span className="dt-mono">{round.ticketId}</span>}
+      {label && <Tag tone={ticket?.state === 'ended' ? 'success' : 'neutral'}>{label}</Tag>}</div>
+    <div className="dt-result"><MarkdownLite text={round.text} /></div>
+    {error && <p className="dt-error" role="alert">{error.message}</p>}
+    {waiting && <p className="dt-hint">{t('discussion.alignmentWaiting')}</p>}
+    {round.ticketId && <div className="dt-actions">
+      <Button variant="outline" size="sm" icon={<Icon name="inbox" size={14} />}
+        onClick={() => navigate({ page: 'execution', id: round.ticketId! })}>{t('discussion.openTicket')}</Button>
+    </div>}
+  </section>
+}
+
+/**
+ * One discussion, two columns under a tab for the conversation and one per alignment round: the exchange on the left as
+ * chat, the message box above it, and every round's conclusion on the right as a card that stays folded until opened. A
+ * message written after a round was handed over produces a new conclusion that can be handed over in turn, which starts
+ * the next round and its own tab.
+ */
 export function DiscussionDetail({ id }: { id: string }) {
   const { t, call, notify, navigate } = usePanel()
   const { data, error, reload } = usePoll(() => call('GET local/discussions/:id', { id }), [id])
@@ -160,6 +200,10 @@ export function DiscussionDetail({ id }: { id: string }) {
   const [creating, setCreating] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  // Every conclusion starts folded, so the right column lists the rounds without their full text.
+  const [opened, setOpened] = useState<Record<string, boolean>>({})
+  // The tab in view: the discussion itself, or one of its alignment rounds once a conclusion was handed over.
+  const [tab, setTab] = useState('discussion')
   const discussion = data?.discussion
   const act = async (work: () => Promise<unknown>) => {
     if (busy) return
@@ -196,122 +240,149 @@ export function DiscussionDetail({ id }: { id: string }) {
   })
   if (error) return <p className="dt-error" role="alert">{error.message}</p>
   if (!discussion) return <p className="dt-hint">{t('loading')}</p>
+/** One bubble of the chat: the person's message on the right, the Answerer's reply on the left. */
   const shown = exchange(discussion, data.replies, data.thread?.timeline ?? [])
-  // The newest answered message is the discussion's current conclusion; older ones stay in the timeline below.
-  const result = shown.find(item => item.kind === 'answer' && item.answer.state === 'answered')
-  const latest = [...(discussion.answers ?? [])].sort((a, b) => a.at.localeCompare(b.at)).at(-1)
+  // Chat reads oldest first; the conclusions stay newest first, as every new one is the current conclusion.
+  const chat: ChatMessage[] = []
+  for (const item of [...shown].reverse()) {
+    if (item.kind === 'trigger') chat.push({ at: item.at, side: 'mine', text: item.text })
+    else if (item.kind === 'reply') chat.push({ at: item.at, side: 'other', text: item.reply.text })
+    else {
+      // An answer is one exchange: the person's message and the Answerer's reply, each on its own side.
+      chat.push({ at: item.answer.at, side: 'mine', text: item.answer.text,
+        ...item.answer.images?.length ? { images: item.answer.images } : {} })
+      if (item.answer.answer !== undefined) {
+        chat.push({ at: item.answer.answeredAt ?? item.answer.at, side: 'other', text: item.answer.answer })
+      } else {
+        chat.push({ at: item.answer.at, side: 'other', text: item.answer.failure?.message ?? '',
+          answerId: item.answer.id, state: item.answer.state })
+      }
+    }
+  }
+  const conclusions = shown.filter((item): item is Exchange & { kind: 'answer' } =>
+    item.kind === 'answer' && item.answer.state === 'answered')
+  const rounds = discussionAlignments(discussion)
+  const handed = new Set(rounds.map(item => item.answerId))
+  const latestAnswer = [...(discussion.answers ?? [])].sort((a, b) => a.at.localeCompare(b.at)).at(-1)
+  const newest = conclusions[0]
+  // Hand over the newest conclusion unless a round already did, so a further message produces the next round.
+  const canHand = discussion.issueId !== undefined && newest !== undefined && !handed.has(newest.answer.id)
+  const handoff = () => act(async () => {
+    await call('POST local/discussions/:id/handoff', { id })
+    setTab(`al-${rounds.length + 1}`)
+  })
+  const round = rounds.find(item => item.roundId === tab)
   return <>
     <PageHead title={discussion.title} back={{ label: t('discussion.back'), onClick: () => navigate({ page: 'discussions' }, true) }}>
       <span className="dt-hint">{t('discussion.detail')}</span>{stateTag(t, discussion)}{linkTag(t, discussion)}
     </PageHead>
-    <div className="dt-discussion">
-      <div className="dt-discussion-main">
-        <section className="dt-card">
-          <div className="dt-card-head"><span className="dt-card-title">{t('discussion.body')}</span></div>
-          <div className="dt-row-meta"><span>{t('discuss.author')}：{discussion.author}</span><When at={discussion.createdAt} />
-            <span className="dt-mono">{discussion.id}</span>
-            {data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}</span>}</div>
-          <MarkdownLite text={discussion.body} />
-          <DiscussionImages discussionId={discussion.id} images={discussion.images} />
-        </section>
+    <div className="dt-subtabs" role="tablist" aria-label={t('discussion.tabs')}>
+      <button type="button" role="tab" className="dt-subtab" aria-selected={tab === 'discussion'}
+        onClick={() => setTab('discussion')}>{t('discussion.tabDiscussion')}</button>
+      {rounds.map((item, index) => <button key={item.roundId} type="button" role="tab" className="dt-subtab"
+        aria-selected={tab === item.roundId} onClick={() => setTab(item.roundId!)}>
+        {t('discussion.tabAlignment', { round: String(index + 1) })}</button>)}
+    </div>
+    {round
+      ? <AlignmentRound round={round} index={rounds.indexOf(round) + 1} />
+      : <div className="dt-discussion">
+        <div className="dt-discussion-main">
+          <section className="dt-card">
+            <div className="dt-card-head"><span className="dt-card-title">{t('discussion.body')}</span></div>
+            <div className="dt-row-meta"><span>{t('discuss.author')}：{discussion.author}</span><When at={discussion.createdAt} />
+              <span className="dt-mono">{discussion.id}</span>
+              {data.project && <span>{t('discuss.project')}：{data.project.name} · {projectRepositories(data.project)}</span>}</div>
+            <MarkdownLite text={discussion.body} />
+            <DiscussionImages discussionId={discussion.id} images={discussion.images} />
+          </section>
 
-        <Section title={t('discussion.messages')} count={shown.length}>
-          {ask && <section className="dt-card dt-ask-card">
-            <div className="dt-card-head"><span className="dt-card-title">{t('discussion.ask')}</span>
-              <Tag tone="neutral">{t('discussion.askOpen')}</Tag></div>
-            <p className="dt-hint">{t('discussion.askHint')}</p>
-            <ol className="dt-ask-list">
-              {ask.questions.map(question => <li key={question.id} className="dt-ask-item">
-                <p className="dt-ask-question">{question.question}</p>
-                {question.options?.length ? <div className="dt-actions">
-                  {question.options.map(option => <Button key={option} size="sm"
-                    variant={answers[question.id] === option ? 'primary' : 'outline'}
-                    onClick={() => setAnswers(current => ({ ...current, [question.id]: option }))}>{option}</Button>)}
-                </div> : null}
-                <input className="dt-text-input" value={answers[question.id] ?? ''} maxLength={2000}
-                  placeholder={question.options?.length ? t('discussion.askOther') : t('discussion.askOption')}
-                  aria-label={question.question}
-                  onChange={event => setAnswers(current => ({ ...current, [question.id]: event.target.value }))} />
-              </li>)}
-            </ol>
-            <div className="dt-actions">
-              <Button variant="primary" size="sm" icon={<Icon name="message" size={14} />}
-                disabled={busy || !ask.questions.every(question => (answers[question.id] ?? '').trim())}
-                onClick={() => { void sendAsk(ask) }}>{t('discussion.askSend')}</Button>
-            </div>
-          </section>}
-          {/* The box sits above the list, so a submitted message appears first, directly under it. */}
-          <form className="dt-form dt-timeline-form" onSubmit={event => { void submit(event) }}>
-            <PasteImageField state={paste} value={comment} onChange={setComment} maxLength={20000} rows={3}
-              placeholder={t('discussion.commentPlaceholder')} ariaLabel={t('discussion.commentPlaceholder')} disabled={busy} />
-            <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
-              disabled={busy || (!comment.trim() && !paste.images.length)}>{t('discussion.comment')}</Button></div>
-          </form>
-          <p className="dt-hint">{t('discussion.eachMessage')}</p>
-          {shown.length === 0 && <p className="dt-hint">{t('discussion.unanswered')}</p>}
-          <ul className="dt-list dt-timeline">{shown.map((item, index) => item.kind === 'trigger'
-            ? <li key={`trigger-${index}`} className="dt-row dt-event">
-              <div className="dt-row-main">
-                <div className="dt-row-meta">{t('discuss.person')}<When at={item.at} /><Tag tone="neutral">{t('discussion.unanswered')}</Tag></div>
-                <MarkdownLite text={item.text} />
+          <Section title={t('discussion.chat')} count={chat.length}>
+            {ask && <section className="dt-card dt-ask-card">
+              <div className="dt-card-head"><span className="dt-card-title">{t('discussion.ask')}</span>
+                <Tag tone="neutral">{t('discussion.askOpen')}</Tag></div>
+              <p className="dt-hint">{t('discussion.askHint')}</p>
+              <ol className="dt-ask-list">
+                {ask.questions.map(question => <li key={question.id} className="dt-ask-item">
+                  <p className="dt-ask-question">{question.question}</p>
+                  {question.options?.length ? <div className="dt-actions">
+                    {question.options.map(option => <Button key={option} size="sm"
+                      variant={answers[question.id] === option ? 'primary' : 'outline'}
+                      onClick={() => setAnswers(current => ({ ...current, [question.id]: option }))}>{option}</Button>)}
+                  </div> : null}
+                  <input className="dt-text-input" value={answers[question.id] ?? ''} maxLength={2000}
+                    placeholder={question.options?.length ? t('discussion.askOther') : t('discussion.askOption')}
+                    aria-label={question.question}
+                    onChange={event => setAnswers(current => ({ ...current, [question.id]: event.target.value }))} />
+                </li>)}
+              </ol>
+              <div className="dt-actions">
+                <Button variant="primary" size="sm" icon={<Icon name="message" size={14} />}
+                  disabled={busy || !ask.questions.every(question => (answers[question.id] ?? '').trim())}
+                  onClick={() => { void sendAsk(ask) }}>{t('discussion.askSend')}</Button>
               </div>
-            </li>
-            : item.kind === 'reply'
-            ? <li key={`reply-${index}`} className="dt-row dt-event">
-              <div className="dt-row-main">
-                <div className="dt-row-meta">{t('discuss.agent')}<When at={item.at} /><Tag tone="info">{t('discuss.agent')}</Tag></div>
-                <MarkdownLite text={item.reply.text} />
-              </div>
-            </li>
-            : <li key={item.answer.id} className="dt-row dt-event">
-              <div className="dt-row-main">
-                <div className="dt-row-meta">{t('discuss.person')}<When at={item.answer.at} />
-                  {item.answer.state === 'answered' ? <Tag tone="success">{t('discuss.agent')}</Tag>
-                    : item.answer.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
-                    : <Tag tone="neutral">{item.answer.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>}</div>
-                <MarkdownLite text={item.answer.text} />
-                <DiscussionImages discussionId={discussion.id} images={item.answer.images} />
-                {item.answer.answer !== undefined && <div className="dt-answer">
-                  <MarkdownLite text={item.answer.answer} /></div>}
-                {item.answer.state === 'failed' && <div className="dt-actions">
-                  <p className="dt-hint">{item.answer.failure?.message}</p>
+            </section>}
+            {/* The box sits above the chat, so a submitted message appears at its end, directly under it. */}
+            <form className="dt-form dt-timeline-form" onSubmit={event => { void submit(event) }}>
+              <PasteImageField state={paste} value={comment} onChange={setComment} maxLength={20000} rows={3}
+                placeholder={t('discussion.commentPlaceholder')} ariaLabel={t('discussion.commentPlaceholder')} disabled={busy} />
+              <div className="dt-actions"><Button type="submit" variant="outline" size="sm" icon={<Icon name="message" size={14} />}
+                disabled={busy || (!comment.trim() && !paste.images.length)}>{t('discussion.comment')}</Button></div>
+            </form>
+            <p className="dt-hint">{t('discussion.eachMessage')}</p>
+            {chat.length === 0 && <p className="dt-hint">{t('discussion.unanswered')}</p>}
+            <ul className="dt-chat">{chat.map((item, index) => <li key={`${item.side}-${index}`}
+              className="dt-chat-message" data-side={item.side}>
+              <div className="dt-chat-meta">{item.side === 'mine' ? t('discuss.person') : t('discuss.agent')}<When at={item.at} />
+                {item.state === 'failed' ? <Tag tone="danger">{t('discussion.answerFailed')}</Tag>
+                  : item.state === 'answered' || (item.side === 'other' && !item.state && item.text) ? <Tag tone="success">{t('discuss.agent')}</Tag>
+                  : item.state ? <Tag tone="neutral">{item.state === 'answering' ? t('discussion.answerAnswering') : t('discussion.answerQueued')}</Tag>
+                  : null}</div>
+              <div className="dt-chat-bubble">
+                {item.text ? <MarkdownLite text={item.text} /> : null}
+                <DiscussionImages discussionId={discussion.id} images={item.images} />
+                {item.state === 'failed' && item.answerId && <div className="dt-actions">
                   <Button variant="ghost" size="sm" disabled={busy}
-                    onClick={() => { void retry(item.answer.id) }}>{t('discussion.retry')}</Button></div>}
+                    onClick={() => { void retry(item.answerId!) }}>{t('discussion.retry')}</Button></div>}
               </div>
             </li>)}</ul>
-        </Section>
-      </div>
+          </Section>
+        </div>
 
-      <aside className="dt-discussion-side">
-        <section className="dt-card dt-result-panel">
-          <div className="dt-card-head"><span className="dt-card-title">{t('discussion.result')}</span>{answerTag(t, latest)}</div>
-          {result?.kind === 'answer' && result.answer.answer !== undefined
-            ? <div className="dt-result"><MarkdownLite text={result.answer.answer} /></div>
-            : <p className="dt-hint">{latest ? t('discussion.resultPending') : t('discussion.resultEmpty')}</p>}
-          <p className="dt-hint">{t('discussion.resultHint')}</p>
-          <div className="dt-actions dt-result-actions">
-            {discussion.issueId
-              ? <>
-                {discussion.handoff
-                  ? <Button variant="outline" size="sm" icon={<Icon name="review" size={14} />} disabled>{t('discussion.handedOff')}</Button>
-                  : <Button variant="primary" size="sm" disabled={busy || !result} title={t('discussion.handoffHint')}
-                    icon={<Icon name="review" size={14} />}
-                    onClick={() => { void act(() => call('POST local/discussions/:id/handoff', { id })) }}>{t('discussion.handoff')}</Button>}
-                <Button variant="outline" size="sm" icon={<Icon name="inbox" size={14} />}
-                  onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
-              </>
-              : <Button variant="primary" size="sm" disabled={busy}
-                icon={<Icon name="plus" size={14} />} onClick={() => setCreating(true)}>{t('discussion.sendIssue')}</Button>}
-            {discussion.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
-              onClick={() => { void act(() => call('POST local/discussions/:id/close', { id })) }}>{t('discussion.close')}</Button>}
-            {discussion.issueId === undefined && <Button variant="ghost" size="sm" disabled={busy}
-              onClick={() => setConfirming(true)}>{t('discussion.delete')}</Button>}
-          </div>
-          {discussion.handoff && <p className="dt-hint">
-            {t('discussion.handoffTo', { ticket: discussion.handoff.ticketId })}<When at={discussion.handoff.at} /></p>}
-        </section>
-      </aside>
-    </div>
+        <aside className="dt-discussion-side">
+          <section className="dt-card dt-result-panel">
+            <div className="dt-card-head"><span className="dt-card-title">{t('discussion.conclusions')}</span>{answerTag(t, latestAnswer)}</div>
+            {conclusions.length === 0 && <p className="dt-hint">{latestAnswer ? t('discussion.resultPending') : t('discussion.resultEmpty')}</p>}
+            {conclusions.map((item, index) => <DisclosureRow key={item.answer.id} icon={<Icon name="review" size={14} />}
+              open={opened[item.answer.id] ?? false}
+              onToggle={() => setOpened(current => ({ ...current, [item.answer.id]: !(current[item.answer.id] ?? false) }))}
+              title={t('discussion.roundTitle', { round: String(conclusions.length - index) })}
+              collapsedContent={<>{handed.has(item.answer.id) && <Tag tone="info">{t('discussion.handedOff')}</Tag>}
+                <When at={item.answer.at} /></>}>
+              <div className="dt-result"><MarkdownLite text={item.answer.answer!} /></div>
+            </DisclosureRow>)}
+            {conclusions.length > 0 && <p className="dt-hint">{t('discussion.resultHint')}</p>}
+            <div className="dt-actions dt-result-actions">
+              {discussion.issueId
+                ? <>
+                  <Button variant="primary" size="sm" disabled={busy || !canHand}
+                    title={canHand ? t('discussion.handoffHint') : t('discussion.handedOff')}
+                    icon={<Icon name="review" size={14} />} onClick={() => { void handoff() }}>{t('discussion.handoff')}</Button>
+                  <Button variant="outline" size="sm" icon={<Icon name="inbox" size={14} />}
+                    onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
+                </>
+                : <Button variant="primary" size="sm" disabled={busy}
+                  icon={<Icon name="plus" size={14} />} onClick={() => setCreating(true)}>{t('discussion.sendIssue')}</Button>}
+              {discussion.state === 'open' && <Button variant="ghost" size="sm" disabled={busy}
+                onClick={() => { void act(() => call('POST local/discussions/:id/close', { id })) }}>{t('discussion.close')}</Button>}
+              {discussion.issueId === undefined && <Button variant="ghost" size="sm" disabled={busy}
+                onClick={() => setConfirming(true)}>{t('discussion.delete')}</Button>}
+            </div>
+            {rounds.length > 0 && <p className="dt-hint">{t('discussion.roundsHint', { count: String(rounds.length) })}</p>}
+            {rounds.length > 0 && <p className="dt-hint">
+              {t('discussion.handoffTo', { ticket: rounds.at(-1)!.ticketId })}<When at={rounds.at(-1)!.at} /></p>}
+          </section>
+        </aside>
+      </div>}
     {creating && <RequirementDialog discussion={discussion.id} onClose={() => setCreating(false)} />}
     {confirming && <Modal className="dt-discussion-modal" open onClose={() => setConfirming(false)}
       title={t('discussion.delete')} closeLabel={t('close')}

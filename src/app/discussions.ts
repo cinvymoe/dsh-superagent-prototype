@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { key, UserError, type ReceiveResult, type Trigger } from '../core/index.ts'
 import { KV } from '../kv.ts'
 import { localThreadKey, localTrigger } from '../sources/local.ts'
-import { LOCAL_ACTOR, type LocalAsk, type LocalDiscussion, type LocalHandoff, type LocalImage,
+import { discussionAlignments, LOCAL_ACTOR, type LocalAsk, type LocalDiscussion, type LocalHandoff, type LocalImage,
   type LocalImageInput, type LocalReply } from '../sources/local-format.ts'
 import { discussionImagePath, discussionImagesDir, storeDiscussionImages } from './local-images.ts'
 import { requirementTitle } from './local.ts'
@@ -248,7 +248,9 @@ export class Discussions {
   handoff(id: string, handoff: LocalHandoff): LocalDiscussion | undefined {
     const discussion = this.get(id)
     if (!discussion) return undefined
-    const updated: LocalDiscussion = { ...discussion, handoff, updatedAt: handoff.at }
+    const rounds = discussionAlignments(discussion)
+    const round = { ...handoff, roundId: handoff.roundId ?? `al-${rounds.length + 1}` }
+    const updated: LocalDiscussion = { ...discussion, alignments: [...rounds, round], handoff: round, updatedAt: round.at }
     this.host.store.set(KV.local.discussion(id), updated)
     return updated
   }

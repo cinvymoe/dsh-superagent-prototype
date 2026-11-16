@@ -84,11 +84,31 @@ it('answers it read-only, then hands that conclusion to the Aligner as one align
       ticketId: ticket.id } })
   expect(body.discussion.handoff!.text).toBe('Split by host: discussions.ts keeps records, answers.ts runs the Answerer.')
 
-  // Handing over again returns the same alignment ticket instead of starting a second one.
+  // The same conclusion is not handed over twice: a new round starts from a new conclusion.
   const again = await h.api('POST', `local/discussions/${discussion.id}/handoff`)
-  expect(again.status).toBe(200)
-  expect((again.body as { ticket: { id: string } }).ticket.id).toBe(ticket.id)
+  expect(again.status).toBe(400)
+  expect(again.body).toMatchObject({ code: 'discussionHanded' })
   expect(h.runtime.store.tickets.list().filter(item => item.mode === 'align')).toHaveLength(1)
+})
+
+it('hands a later conclusion as its own alignment round, queued behind the round before it', async () => {
+  const { issue, discussion } = await talkedThrough()
+  await settle(discussion.id, 'Split by host.')
+  const first = await h.api('POST', `local/discussions/${discussion.id}/handoff`)
+  const firstTicket = (first.body as { ticket: { id: string } }).ticket
+
+  // Talking on after the hand-off makes a new conclusion, and that one is a round of its own.
+  await h.api('POST', `local/discussions/${discussion.id}/comments`, { text: 'One more question.' })
+  await settle(discussion.id, 'Split by host, then by module.')
+  const second = await h.api('POST', `local/discussions/${discussion.id}/handoff`)
+  expect(second.status).toBe(200)
+  const body = second.body as { ticket: { id: string }; discussion: LocalDiscussion }
+  expect(body.ticket.id).toBe(alignTicketId(issue.id, 2))
+  // One alignment runs at a time: the second round waits on the first round's ticket.
+  expect(h.runtime.store.tickets.get(body.ticket.id)!.dependsOn).toEqual([firstTicket.id])
+  expect(body.discussion.alignments?.map(round => round.roundId)).toEqual(['al-1', 'al-2'])
+  expect(body.discussion.handoff).toMatchObject({ roundId: 'al-2', ticketId: body.ticket.id,
+    text: 'Split by host, then by module.' })
 })
 
 it('refuses a discussion about no requirement, one with no answered message, or an unknown one', async () => {

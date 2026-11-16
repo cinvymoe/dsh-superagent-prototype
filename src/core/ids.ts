@@ -16,6 +16,7 @@ export function planTicketId(issueId: string, sliceId: string): string {
  * The stable id of the Ticket that aligns one local requirement: the discussion's Aligner. A requirement aligns once, so a
  * repeated handoff from the panel returns the same Ticket instead of starting a second Aligner.
  */
-export function alignTicketId(issueId: string): string {
-  return key('ticket', 'align', issueId)
+export function alignTicketId(issueId: string, round = 1): string {
+  // The first round keeps the key a requirement has always used; later sessions get their own Ticket, one round apart.
+  return round > 1 ? key('ticket', 'align', issueId, String(round)) : key('ticket', 'align', issueId)
 }

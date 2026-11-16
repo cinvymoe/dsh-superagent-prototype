@@ -166,6 +166,11 @@ export interface LocalAnswer {
  * requirement should become. The discussion stays open, so a person may keep asking after the handoff.
  */
 export interface LocalHandoff {
+  /**
+   * Round id `al-1`, `al-2`, …: which alignment session of the discussion this handoff started. A record written before
+   * rounds existed reads as the first round instead of being migrated.
+   */
+  roundId?: string
   /** The answered message whose text was handed over. */
   answerId: string
   /** That answer's text, kept so the panel shows what was handed over without reading the Answerer's record. */
@@ -234,8 +239,23 @@ export interface LocalDiscussion {
    * card to answer; asking creates no Trigger and no Ticket.
    */
   asks?: LocalAsk[]
-  /** Set once a person hands its conclusion to the Aligner; absent while the discussion is only being answered. */
+  /**
+   * Every handoff in order, oldest first; each one started an alignment session on its own Ticket, and the rounds run one
+   * after another. The last entry is mirrored in `handoff` for readers of records written before sessions existed.
+   */
+  alignments?: LocalHandoff[]
+  /** The newest handoff, mirrored for readers of records written before sessions existed; `alignments` is the truth. */
   handoff?: LocalHandoff
+}
+
+/**
+ * Every alignment session a discussion handed over, oldest first. A record written before sessions existed carries a
+ * single `handoff` slot, which reads as one round; a slot without a round id is normalized to the first round instead of
+ * migrating storage.
+ */
+export function discussionAlignments(discussion: Pick<LocalDiscussion, 'alignments' | 'handoff'>): LocalHandoff[] {
+  if (discussion.alignments?.length) return discussion.alignments
+  return discussion.handoff ? [{ ...discussion.handoff, roundId: discussion.handoff.roundId ?? 'al-1' }] : []
 }
 
 /** The images one human follow-up message attached, named by the Trigger that message became. */

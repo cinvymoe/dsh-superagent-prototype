@@ -79,6 +79,7 @@ export const USER_ERRORS = {
   discussionProject: ['refused', 'A requirement made from a discussion must stay in the discussion\'s project {project}'],
   discussionUnlinked: ['refused', 'Discussion {discussion} is not about a requirement yet; send it to a requirement first'],
   discussionUnanswered: ['refused', 'Discussion {discussion} has no answered message to hand over yet'],
+  discussionHanded: ['refused', 'Discussion {discussion} already handed this conclusion to the Aligner'],
   discussionRequirement: ['refused', 'Discussion {discussion} created requirement {issue}; keep it or remove that requirement first'],
   discussionAsking: ['refused', 'Discussion {discussion} already has an unanswered ask {ask}; answer it before asking again'],
   discussionAskEmpty: ['refused', 'A discussion ask needs at least one question'],

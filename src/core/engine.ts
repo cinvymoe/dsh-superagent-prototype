@@ -109,7 +109,7 @@ export class Engine {
    * ticket it started.
    */
   acceptAlignment(thread: ThreadRef, input: { issueId: string; title: string; triggerIds: string[]; actor: ActorRef; scope?: string;
-    name?: string; note?: string; project?: string }): Ticket {
+    name?: string; note?: string; project?: string; round?: number; dependsOn?: string[] }): Ticket {
     return this.repo.atomic(() => {
       const stored = this.repo.threads.get(threadKey(thread))
       if (!stored) throw new UserError('unknownTrigger')

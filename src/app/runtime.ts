@@ -40,7 +40,7 @@ import { Answerer, discussionWorkspace } from './answerer.ts'
 import { LocalQuestions } from './local-questions.ts'
 import { Questions } from './questions.ts'
 import { Projects } from './projects.ts'
-import { currentAlignment, type LocalDiscussion, type LocalProject } from '../sources/local-format.ts'
+import { currentAlignment, discussionAlignments, type LocalDiscussion, type LocalProject } from '../sources/local-format.ts'
 import type { LinkTarget } from './views/records.ts'
 import { candidateCard, repliedTo, sourceLink, type LinkHost } from './links.ts'
 import { eventNotice, followupNotice } from './notices.ts'
@@ -342,11 +342,19 @@ export class Runtime extends Service implements SourceHost {
     const answered = [...(discussion.answers ?? [])].reverse().find(answer => answer.state === 'answered' && answer.answer)
     if (!answered?.answer) throw new UserError('discussionUnanswered', { discussion: id })
     if (currentAlignment(issue)?.status === 'confirmed') throw new UserError('alignmentConfirmed')
+    const rounds = discussionAlignments(discussion)
+    // The same conclusion is one session: a repeated click must not queue a second Aligner behind the first.
+    const previous = rounds.at(-1)
+    if (previous?.answerId === answered.id) throw new UserError('discussionHanded', { discussion: id })
     const ticket = this.engine.acceptAlignment({ source: 'local', id: issue.id }, { issueId: issue.id, title: issue.title,
       triggerIds: this.local.humanTriggers(issue.id), actor: { source: 'local', id: discussion.author },
       scope: `align · ${issue.title}`, note: `Discussion ${discussion.id}, concluded in panel:\n${answered.answer}`,
+      round: rounds.length + 1,
+      // Sessions run one after another: a new round waits for the alignment ticket the previous one started.
+      ...(previous ? { dependsOn: [previous.ticketId] } : {}),
       ...(issue.project === undefined ? {} : { project: issue.project }) })
-    this.discussions.handoff(id, { answerId: answered.id, text: answered.answer, ticketId: ticket.id, at: now() })
+    this.discussions.handoff(id, { roundId: `al-${rounds.length + 1}`, answerId: answered.id, text: answered.answer,
+      ticketId: ticket.id, at: now() })
     return ticket
   }
   /**

@@ -73,7 +73,6 @@
 .dt-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .dt-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .dt-timeline-form { margin-bottom: 8px; }
-.dt-answer { padding: 10px 12px; border-left: 3px solid var(--dsw-alias-border-l4); border-radius: 0 12px 12px 0; background: var(--dsw-alias-bg-layer-2); }
 .dt-event { padding: 12px 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .dt-event:last-child { border-bottom: 0; }
 .dt-event.dt-highlight { background: var(--dsw-alias-interactive-bg-hover); border-radius: 8px; padding-inline: 8px; margin-inline: -8px; }
@@ -102,8 +101,6 @@
 .dt-detail { margin-top: 2px; color: var(--dsw-alias-label-secondary); }
 .dt-savebar .dt-error { white-space: pre-line; }
 .dt-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 36px; font-size: 13px; }
-.dt-project-override { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; border-top: 0.5px solid var(--dsw-alias-border-l3); }
-.dt-project-override:first-of-type { border-top: 0; padding-top: 0; }
 .dt-subhead-actions { display: inline-flex; align-items: center; gap: 4px; }
 .dt-btn-busy .dt-btn-icon svg { animation: dt-spin 1s linear infinite; }
 .dt-subhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; line-height: 20px; color: var(--dsw-alias-label-secondary); }
@@ -146,6 +143,13 @@ div.dt-preview-head { color: var(--dsw-alias-label-secondary); }
 .dt-card-head .dt-row-main { flex: 1 1 0; min-width: 64px; }
 .dt-card-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* A discussion reads as two columns: its exchange on the left, its result panel sticky on the right. */
+.dt-chat { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.dt-chat-message { display: flex; flex-direction: column; gap: 4px; max-width: 84%; }
+.dt-chat-message[data-side='mine'] { align-self: flex-end; align-items: flex-end; }
+.dt-chat-message[data-side='other'] { align-self: flex-start; align-items: flex-start; }
+.dt-chat-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.dt-chat-bubble { padding: 10px 12px; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); font-size: 14px; line-height: 1.7; min-width: 0; overflow-wrap: anywhere; }
+.dt-chat-message[data-side='mine'] .dt-chat-bubble { background: var(--dsw-alias-interactive-bg-hover); }
 .dt-discussion { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; max-width: 1200px; margin: 0 auto; padding-bottom: 48px; }
 .dt-discussion-main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .dt-discussion-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }

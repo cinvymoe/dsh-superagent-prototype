@@ -24,7 +24,9 @@ const button = (label: string): HTMLButtonElement => {
   return match as HTMLButtonElement
 }
 /** The rendered markdown messages of a discussion detail, in the order they appear. */
-const messages = (): (string | null)[] => all('.dt-timeline .dt-md').map(node => node.textContent)
+const messages = (): (string | null)[] => all('.dt-chat .dt-md').map(node => node.textContent)
+/** The conclusion cards of the right column, in the order they render (newest first). */
+const conclusionTitles = (): (string | null)[] => all('.dt-result-panel .dt-disclosure-title').map(node => node.textContent)
 /** Whether `first` renders before `second` in the document. */
 const precedes = (first: Element, second: Element) => !!(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
 
@@ -90,15 +92,21 @@ it('reads one discussion with its messages newest first, the follow-up box above
   expect(document.querySelector('.dt-page-title h2')?.textContent).toBe('Layout talk')
   expect(text()).toContain('The body of the talk')
   expect(text()).toContain(zh['discussion.detail'])
-  // Each message carries the Answerer's reply under it, newest exchange first.
-  expect(messages()).toEqual(['Second remark', 'Answer to Second remark', 'First remark', 'Answer to First remark'])
-  // The follow-up box sits above the list, so a submitted comment lands first, directly under it.
-  expect(precedes(area(zh['discussion.commentPlaceholder']), all('.dt-timeline')[0]!)).toBe(true)
+  // Chat reads oldest first, each message carrying the Answerer's reply under it.
+  expect(messages()).toEqual(['First remark', 'Answer to First remark', 'Second remark', 'Answer to Second remark'])
+  expect(all('.dt-chat-message').map(item => item.getAttribute('data-side'))).toEqual(['mine', 'other', 'mine', 'other'])
+  // The conclusions stay folded in the right column, newest first.
+  expect(conclusionTitles()).toEqual([zh['discussion.roundTitle'].replace('{round}', '2'),
+    zh['discussion.roundTitle'].replace('{round}', '1')])
+  expect(all('.dt-result-panel .dt-disclosure[data-open]')).toHaveLength(0)
+  // The follow-up box sits above the chat, so a submitted comment lands at its end, directly under it.
+  expect(precedes(area(zh['discussion.commentPlaceholder']), all('.dt-chat')[0]!)).toBe(true)
   await type(area(zh['discussion.commentPlaceholder']), 'A third remark')
   await click(button(zh['discussion.comment']))
   const posted = server.requests.find(request => request.path === 'local/discussions/d-talk/comments' && request.method === 'POST')!
   expect(posted.body).toEqual({ text: 'A third remark' })
-  expect(messages()[0]).toBe('A third remark')
+  expect(messages()).toContain('A third remark')
+  expect(all('.dt-chat-message[data-side="mine"] .dt-md').at(-1)?.textContent).toBe('A third remark')
   expect((area(zh['discussion.commentPlaceholder']) as HTMLTextAreaElement).value).toBe('')
 })
 
@@ -124,10 +132,16 @@ it('hands a requirement\'s discussion conclusion to the Aligner from its result 
   await click(button(zh['discussion.handoff']))
   const posted = server.requests.find(request => request.path === 'local/discussions/d-handoff/handoff')
   expect(posted?.method).toBe('POST')
-  // The panel shows the alignment ticket it started and never offers a second hand-off.
-  expect(text()).toContain(zh['discussion.handoffTo'].replace('{ticket}', 't-align-d-handoff'))
-  expect(all('button').some(item => item.textContent?.trim() === zh['discussion.handoff'])).toBe(false)
-  expect(all('button').some(item => item.textContent?.trim() === zh['discussion.handedOff'])).toBe(true)
+  // The hand-off opens its own tab on the round it started, with the alignment ticket behind it.
+  const tabs = all('.dt-subtab')
+  expect(tabs.map(item => item.textContent)).toEqual([zh['discussion.tabDiscussion'],
+    zh['discussion.tabAlignment'].replace('{round}', '1')])
+  expect(tabs[1]!.getAttribute('aria-selected')).toBe('true')
+  expect(document.querySelector('[data-alignment="al-1"]')?.textContent).toContain('t-align-d-handoff')
+  // Back on the discussion, the conclusion is handed over and no button offers a second hand-off.
+  await click(all('.dt-subtab')[0]!)
+  expect(button(zh['discussion.handoff']).disabled).toBe(true)
+  expect(text()).toContain(zh['discussion.handedOff'])
 })
 
 it("puts the Answerer's questions on one card and sends the person's answers back as one message", async () => {
@@ -252,7 +266,8 @@ it('shows the discussion pages in English as well', async () => {
   expect(text()).toContain(en['discussion.unlinked'])
   await click(all('.dt-cards .dt-row-title button')[0]!)
   expect(text()).toContain(en['discussion.detail'])
-  expect(text()).toContain(en['discussion.messages'])
+  expect(text()).toContain(en['discussion.chat'])
+  expect(text()).toContain(en['discussion.conclusions'])
   expect(all('#dt-page button').some(item => item.textContent?.trim() === en['discussion.sendIssue'])).toBe(true)
   expect(all('#dt-page button').some(item => item.textContent?.trim() === en['discussion.delete'])).toBe(true)
 })
@@ -264,8 +279,9 @@ it('still shows a message written before answers were recorded', async () => {
   server.localDiscussionComments = { 'd-old': [localDiscussionComment(base, 'An older remark', '2026-09-19T00:00:00Z')] }
   at({ page: 'discussions', id: 'd-old' })
   await mount()
-  // The body is shown once above the timeline; the message recorded before answers existed still shows there.
+  // The body is shown once above the chat; the message recorded before answers existed still shows there.
   expect(messages()).toEqual(['An older remark'])
+  expect(all('.dt-chat-message[data-side="mine"]')).toHaveLength(1)
 })
 
 // jsdom implements neither object-URL call; a discussion gallery creates one blob URL per image and revokes it on unmount.
@@ -331,11 +347,13 @@ it('pastes an image-only follow-up and shows it only on that message\'s timeline
   const posted = server.requests.find(request => request.path === 'local/discussions/d-talk/comments' && request.method === 'POST')!
   expect(posted.body).toMatchObject({ text: '', images: [{ name: 'later.png', mediaType: 'image/png' }] })
   // Only the newest message carries the image; the older remark and the body stay without one.
-  const rows = all('.dt-timeline .dt-row')
-  expect(rows).toHaveLength(2)
-  expect(rows[0]!.querySelectorAll('.dt-image-caption')).toHaveLength(1)
-  expect(rows[0]!.querySelector('.dt-image-caption')?.textContent).toBe('later.png')
-  expect(rows[1]!.querySelectorAll('.dt-image-caption')).toHaveLength(0)
+  const rows = all('.dt-chat-message')
+  expect(rows).toHaveLength(4)
+  // The image sits on the person's own message, not on either Answerer reply.
+  expect(rows[2]!.querySelectorAll('.dt-image-caption')).toHaveLength(1)
+  expect(rows[2]!.querySelector('.dt-image-caption')?.textContent).toBe('later.png')
+  expect(rows[0]!.querySelectorAll('.dt-image-caption')).toHaveLength(0)
+  expect(rows[3]!.querySelectorAll('.dt-image-caption')).toHaveLength(0)
   // The submitted box clears its text and its image selection.
   expect((area(zh['discussion.commentPlaceholder']) as HTMLTextAreaElement).value).toBe('')
   expect(all('.dt-image-choice')).toHaveLength(0)
