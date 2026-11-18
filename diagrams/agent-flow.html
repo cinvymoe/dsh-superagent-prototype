@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent 工作流程 · dsh-superagent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+    }
+    .container { max-width: 1360px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; max-width: 960px; }
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.9rem, 3.2vw + 0.8rem, 2.6rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.12;
+      margin-bottom: 0.65rem;
+    }
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 82ch;
+    }
+    .diagram-container {
+      width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+    .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+    .d-sub { font-family: var(--font-sans); font-size: 11px; }
+    .d-row { font-family: var(--font-sans); font-size: 11px; }
+    .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.02em; }
+    .d-eyebrow { font-family: var(--font-mono); font-size: 8px; font-weight: 500; letter-spacing: 0.12em; }
+    .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+    .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 13px; }
+    .cards {
+      display: grid;
+      grid-template-columns: 1.05fr 1fr 0.95fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 1100px) { .cards { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid var(--color-rule);
+      border-radius: 6px;
+      padding: 1.15rem;
+    }
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.52rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.55rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08);
+    }
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+    .card-dot.coral { background: var(--color-accent); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.ink { background: var(--color-ink); }
+    .card h3 { font-size: 0.9rem; font-weight: 600; letter-spacing: -0.005em; }
+    .card p { color: var(--color-muted); font-size: 0.82rem; line-height: 1.55; margin-bottom: 0.6rem; }
+    .card ul { color: var(--color-muted); font-size: 0.82rem; line-height: 1.6; list-style: none; }
+    .card li { margin-bottom: 0.32rem; padding-left: 0.9rem; position: relative; }
+    .card li::before { content: '—'; position: absolute; left: 0; color: rgba(45,49,66,0.25); font-size: 0.75rem; }
+    .card code {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--color-ink);
+      background: rgba(45,49,66,0.04);
+      padding: 0.05rem 0.2rem;
+      border-radius: 2px;
+    }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      letter-spacing: 0.04em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    @media print {
+      .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+      svg { min-width: 0; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <p class="header-eyebrow">DSH Superagent · 007 Architecture · agent flow</p>
+      <h1>提示不是启动时灌进去的</h1>
+      <p class="subtitle">一个 Session 从被建出来到交回最后一句话，中间只经过一件事：每来一次模型请求，宿主把当前该给它看的东西重新拼一遍，交给模型。这张图画的是那条流程，以及拼装发生在哪三个时刻——建立时一次、每次请求一次、每次回报之后一次。</p>
+    </header>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 720" role="img" aria-labelledby="agent-flow-title agent-flow-desc">
+        <title id="agent-flow-title">Agent 工作流程：一次建立、每轮重拼、收工后落地</title>
+        <desc id="agent-flow-desc">三段流程：Trigger 进来由主 Session 决策建单，一个 Session 建立后进入请求循环，每次请求重拼提示与工具结果写回 store，最后由 report 收工并按策略落地；下方标出建立时、每次请求、每次回报三个注入时刻。</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <text x="64" y="74" class="d-eyebrow" fill="#5a6580">ONE SESSION · FROM TRIGGER TO LANDING</text>
+        <text x="1216" y="74" class="d-eyebrow" fill="#5a6580" text-anchor="end">2026-11-18 · 每次请求都重拼一次</text>
+
+        <!-- band 1 label -->
+        <text x="64" y="96" class="d-eyebrow" fill="#5a6580">① 进入与决策 · WHAT ARRIVES</text>
+
+        <!-- band 1: three stages -->
+        <line x1="416" y1="152" x2="460" y2="152" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+        <line x1="812" y1="152" x2="856" y2="152" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+        <rect x="64" y="112" width="352" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="80" y="142" class="d-name" fill="#2d3142">Trigger</text>
+        <text x="80" y="162" class="d-mono" fill="#5a6580">面板 · GitHub · 飞书 · 定时</text>
+        <text x="80" y="180" class="d-row" fill="#4f5d75">人说的话落成一条 Trigger</text>
+
+        <rect x="460" y="112" width="352" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="476" y="142" class="d-name" fill="#2d3142">Decision</text>
+        <text x="476" y="162" class="d-mono" fill="#5a6580">Router 的一次请求</text>
+        <text x="476" y="180" class="d-row" fill="#4f5d75">accept / discuss / align / ignore</text>
+
+        <rect x="856" y="112" width="352" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="872" y="142" class="d-name" fill="#2d3142">Ticket</text>
+        <text x="872" y="162" class="d-mono" fill="#5a6580">work · align · discuss</text>
+        <text x="872" y="180" class="d-row" fill="#4f5d75">装上 Mandate，选执行环境</text>
+
+        <!-- band 2 label -->
+        <text x="64" y="220" class="d-eyebrow" fill="#5a6580">② 一个 Session 的一生 · ONE SESSION</text>
+
+        <!-- band1 -> band2 -->
+        <line x1="636" y1="192" x2="636" y2="236" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+        <!-- band 2 arrows -->
+        <line x1="332" y1="290" x2="356" y2="290" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+        <line x1="624" y1="290" x2="648" y2="290" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+        <line x1="916" y1="290" x2="940" y2="290" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+        <!-- loop back -->
+        <path d="M 1050 344 V 372 H 490 V 344" fill="none" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+        <rect x="692" y="358" width="76" height="13" fill="#f5f5f5"/>
+        <text x="700" y="368" class="d-arrow" fill="#5a6580">下一轮请求</text>
+        <!-- to band 3 -->
+        <line x1="1100" y1="344" x2="1100" y2="426" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+        <rect x="64" y="236" width="268" height="108" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="80" y="264" class="d-name" fill="#2d3142">Session 建立</text>
+        <text x="80" y="284" class="d-mono" fill="#5a6580">sessions.ensure</text>
+        <text x="80" y="306" class="d-row" fill="#4f5d75">定 cwd、角色、项目模型；</text>
+        <text x="80" y="324" class="d-row" fill="#4f5d75">注册工具与技能，挂上回调。</text>
+
+        <rect x="356" y="236" width="268" height="108" rx="6" fill="#ffffff" stroke="#bf4520"/>
+        <text x="372" y="264" class="d-name" fill="#2d3142">拼提示</text>
+        <text x="372" y="284" class="d-mono" fill="#bf4520">text(context)</text>
+        <text x="372" y="306" class="d-row" fill="#4f5d75">按当前 revision 重拼各段，</text>
+        <text x="372" y="324" class="d-row" fill="#4f5d75">末尾追加这一单的 mandate。</text>
+
+        <rect x="648" y="236" width="268" height="108" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="664" y="264" class="d-name" fill="#2d3142">模型请求</text>
+        <text x="664" y="284" class="d-mono" fill="#5a6580">每次请求拼一次</text>
+        <text x="664" y="306" class="d-row" fill="#4f5d75">模型只看到这一份文本，</text>
+        <text x="664" y="324" class="d-row" fill="#4f5d75">没有第二处注入。</text>
+
+        <rect x="940" y="236" width="268" height="108" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="956" y="264" class="d-name" fill="#2d3142">工具与写回</text>
+        <text x="956" y="284" class="d-mono" fill="#5a6580">report · route · align</text>
+        <text x="956" y="306" class="d-row" fill="#4f5d75">结果写进 store，入队 effect：</text>
+        <text x="956" y="324" class="d-row" fill="#4f5d75">reply / notice / launch / deploy</text>
+
+        <!-- band 3 -->
+        <text x="64" y="418" class="d-eyebrow" fill="#5a6580">③ 收束 · THE END OF A TICKET</text>
+
+        <line x1="940" y1="466" x2="916" y2="466" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+
+        <rect x="940" y="426" width="268" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="956" y="456" class="d-name" fill="#2d3142">收工</text>
+        <text x="956" y="476" class="d-mono" fill="#5a6580">report ready · blocked</text>
+        <text x="956" y="494" class="d-row" fill="#4f5d75">工单结束；PR 合并即 merged</text>
+
+        <rect x="648" y="426" width="268" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
+        <text x="664" y="456" class="d-name" fill="#2d3142">落地</text>
+        <text x="664" y="476" class="d-mono" fill="#5a6580">deploy · policy.delivery</text>
+        <text x="664" y="494" class="d-row" fill="#4f5d75">拉取重建，由宿主重启服务</text>
+
+        <text x="64" y="450" class="d-mono" fill="#bf4520">ONE PROCESS · ONE STORE</text>
+        <text x="64" y="474" class="d-row" fill="#4f5d75">提示不是启动时灌一次——每次请求都重拼，</text>
+        <text x="64" y="494" class="d-row" fill="#4f5d75">所以改设置、改规则，下一句话就生效。</text>
+
+        <!-- injection ribbon -->
+        <line x1="64" y1="516" x2="1208" y2="516" stroke="#2d3142" stroke-opacity="0.12" stroke-width="1"/>
+        <text x="64" y="540" class="d-eyebrow" fill="#5a6580">三个注入时刻 · WHERE THE PROMPT COMES FROM</text>
+
+        <text x="64" y="566" class="d-sub" fill="#2d3142" font-weight="600">① 建立时 · 一次</text>
+        <text x="64" y="586" class="d-row" fill="#4f5d75">挂 systemPrompt.section（order 9999），</text>
+        <text x="64" y="604" class="d-row" fill="#4f5d75">注册 tools 与 skills（feishu / github / 团队）。</text>
+
+        <text x="448" y="566" class="d-sub" fill="#bf4520" font-weight="600">② 每次请求 · 每次都重拼</text>
+        <text x="448" y="586" class="d-row" fill="#4f5d75">首行 [dsh-superagent prompt revision N]，</text>
+        <text x="448" y="604" class="d-row" fill="#4f5d75">各段按固定顺序拼，worker 末尾加 mandate。</text>
+
+        <text x="832" y="566" class="d-sub" fill="#2d3142" font-weight="600">③ 每次回报 · 写回之后</text>
+        <text x="832" y="586" class="d-row" fill="#4f5d75">report → store → effects（reply / notice / launch），</text>
+        <text x="832" y="604" class="d-row" fill="#4f5d75">主 Session 下一轮读到的就是新状态。</text>
+
+        <!-- legend -->
+        <rect x="64" y="672" width="14" height="9" rx="2" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+        <text x="88" y="681" class="d-row" fill="#4f5d75">一步</text>
+        <rect x="176" y="672" width="14" height="9" rx="2" fill="#ffffff" stroke="#bf4520" stroke-width="1"/>
+        <text x="200" y="681" class="d-row" fill="#4f5d75">注入时刻</text>
+        <line x1="320" y1="677" x2="352" y2="677" stroke="#4f5d75" stroke-width="1" marker-end="url(#arrow)"/>
+        <text x="364" y="681" class="d-row" fill="#4f5d75">下一轮 / 收束</text>
+        <rect x="512" y="672" width="14" height="9" rx="2" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22" stroke-width="1"/>
+        <text x="536" y="681" class="d-row" fill="#4f5d75">所有 Session 共用同一份 store</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <p class="eyebrow">读这张图的方式</p>
+        <div class="card-header"><span class="card-dot coral"></span><h3>三段，一个循环</h3></div>
+        <p>① 是进门：Trigger 被主 Session 读一次，落成 Decision 与 Ticket。② 是这一单的一生：Session 建好之后就在「拼提示 → 请求 → 写回」之间转圈，转多少圈由这一单要做多少事决定。③ 是离场：report 收工，PR 合并后按策略落地。</p>
+        <ul>
+          <li>coral 的两处不是流程步骤，而是<b>提示被写进上下文的位置</b>。</li>
+          <li>回到「拼提示」的那条线就是「下一轮请求」——它每次都重来，不是缓存。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">注入的到底是哪几样</p>
+        <div class="card-header"><span class="card-dot ink"></span><h3>三样东西，一个入口</h3></div>
+        <ul>
+          <li><b>能力</b>：<code>tools</code> 按角色决定（主 Session 有 <code>orchestrator_route</code>，aligner 才有 <code>orchestrator_align</code>），<code>skills</code> 由设置与团队决定。</li>
+          <li><b>人格与规则</b>：<code>prompts/shared.md</code> + 角色段 + 团队三段（Communication / Ticket scope / Delivery），改「设置 → 提示词」立即影响下一次请求。</li>
+          <li><b>这一单的活</b>：<code>mandate</code> 追加在末尾，只有 worker 与 aligner 有。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">为什么每次都重拼</p>
+        <div class="card-header"><span class="card-dot muted"></span><h3>改了就要能立刻生效</h3></div>
+        <p>提示词版本、策略规则、环境变量、mandate 都会在执行中途变化。若启动时固化一次，这些改动要等这一单结束才生效。代价是每次请求多一次拼装——实测一个角色的系统提示在 27K–32K 字符之间。</p>
+        <ul>
+          <li>首行的 <code>[dsh-superagent prompt revision N]</code> 是给模型与排查用的版本锚点。</li>
+        </ul>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <span>源码：src/app/sessions.ts:316-325 · src/app/prompts.ts:110-144 · src/app/tools/*.ts</span>
+      <span>2026-11-18 · doc-wide 1280×720</span>
+    </footer>
+  </div>
+</body>
+</html>

@@ -30,6 +30,8 @@ dsh-superagent is a DeepSeek Harness bundle: it reads Triggers from Sources, eva
 | `docs/007-architecture.md` § Persistence, `src/app/store.ts` tables or generated columns | `diagrams/schema-core.html` and `diagrams/schema-queues.html` |
 | § Dependency rules, a new module or a changed import direction | `diagrams/module-dependencies.html` |
 | `docs/008-cookbook.md` § Add a Source | `diagrams/source-onboarding.html` |
+| Session roles: which prompt parts each one reads, which tools it holds, what it writes (`compose*`, `src/app/sessions.ts`) | `diagrams/agent-view.html` |
+| Prompt injection timing, the per-request recompose, or the Router → Worker launch path (`launch`, `reserve`, effects) | `diagrams/agent-flow.html` |
 | Roles, routing and the accepted pipeline as a whole | `diagrams/current-architecture.html` |
 
 **Rule.** When a change alters a behaviour one of those figures draws, update the figure in the same change. If the change adds a new subsystem that no figure covers, add a figure rather than stretching an existing one past its budget.

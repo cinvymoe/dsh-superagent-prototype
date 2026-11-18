@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="agent-view-title agent-view-desc" id="agent-view-root">
+        <title id="agent-view-title">Agent 视角：五类 Session 各自看到什么、能做什么、留下什么</title>
+        <desc id="agent-view-desc">三个入口的 Trigger 进入唯一的主 Session，它按 Decision 把工作交给讨论 Answerer、对齐 Aligner 或切片 Worker；三类 Session 各自读取拼好的提示、持有自己的工具并写回状态，三层之下是所有 Session 共用的提示词版本、store 与环境出口。</desc>
+        <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #agent-view-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
+      --color-ink: #2d3142; --color-muted: #4f5d75; --color-soft: #5a6580;
+      --color-rule: rgba(45,49,66,0.12);
+      --color-accent: #bf4520; --color-accent-tint: rgba(191,69,32,0.08);
+      --color-link: #2e5aa8;
+      --font-sans: 'Geist', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif SC', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace; }
+      #agent-view-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #agent-view-root .container { max-width: 1360px; margin: 0 auto; }
+      #agent-view-root .header-eyebrow { font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem; }
+      #agent-view-root .subtitle { font-size: 1rem;
+      line-height: 1.6;
+      color: var(--color-muted);
+      max-width: 82ch; }
+      #agent-view-root .diagram-container { width: 100%;
+      overflow-x: auto;
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      border-radius: 8px;
+      padding: 1.25rem; }
+      #agent-view-root .d-tag { font-family: var(--font-mono); font-size: 7px; font-weight: 500; letter-spacing: 0.08em; }
+      #agent-view-root .d-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; }
+      #agent-view-root .d-sub { font-family: var(--font-sans); font-size: 11px; }
+      #agent-view-root .d-row { font-family: var(--font-sans); font-size: 11px; }
+      #agent-view-root .d-mono { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.02em; }
+      #agent-view-root .d-eyebrow { font-family: var(--font-mono); font-size: 8px; font-weight: 500; letter-spacing: 0.12em; }
+      #agent-view-root .d-arrow { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.06em; }
+      #agent-view-root .d-annot { font-family: var(--font-serif); font-style: italic; font-size: 13px; }
+      #agent-view-root .card-header { display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.8rem;
+      border-bottom: 1px solid rgba(45,49,66,0.08); }
+      #agent-view-root .card-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+      #agent-view-root .card-dot.coral { background: var(--color-accent); }
+      #agent-view-root .card-dot.muted { background: var(--color-muted); }
+      #agent-view-root .card-dot.ink { background: var(--color-ink); }
+      @media print {
+#agent-view-root .diagram-container { overflow-x: visible; background: transparent; border: 0; padding: 0; }
+}</style>
+          <marker id="agent-view-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+          </marker>
+          <marker id="agent-view-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#bf4520"/>
+          </marker>
+        </defs>
+
+        <rect width="1280" height="720" fill="#f5f5f5"/>
+
+        <text x="64" y="74" class="d-eyebrow" fill="#5a6580">WHO IS RUNNING · 2026-11-18</text>
+        <text x="1216" y="74" class="d-eyebrow" fill="#5a6580" text-anchor="end">ONE PROCESS · ONE STORE · FIVE KINDS OF SESSION</text>
+
+        <!-- connectors first -->
+        <line x1="244" y1="156" x2="244" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#agent-view-arrow)"/>
+        <line x1="628" y1="156" x2="628" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#agent-view-arrow)"/>
+        <line x1="1012" y1="156" x2="1012" y2="200" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#agent-view-arrow)"/>
+
+        <line x1="244" y1="348" x2="244" y2="404" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#agent-view-arrow)"/>
+        <line x1="628" y1="348" x2="628" y2="404" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#agent-view-arrow)"/>
+        <line x1="1012" y1="348" x2="1012" y2="404" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#agent-view-arrow)"/>
+        <rect x="256" y="370" width="62" height="14" fill="#f5f5f5"/>
+        <text x="262" y="380" class="d-arrow" fill="#4f5d75">DECISION discuss</text>
+        <rect x="640" y="370" width="52" height="14" fill="#f5f5f5"/>
+        <text x="646" y="380" class="d-arrow" fill="#4f5d75">DECISION align</text>
+        <rect x="1024" y="370" width="56" height="14" fill="#f5f5f5"/>
+        <text x="1030" y="380" class="d-arrow" fill="#4f5d75">DECISION work</text>
+
+        <!-- inputs -->
+        <rect x="64" y="96" width="360" height="60" rx="2" fill="#fbfbfb" stroke="#2d3142" stroke-width="1" stroke-opacity="0.2"/>
+        <text x="80" y="122" class="d-name" fill="#2d3142">面板提交</text>
+        <text x="80" y="141" class="d-mono" fill="#5a6580">local: 讨论 · 需求 · 对齐确认</text>
+
+        <rect x="448" y="96" width="360" height="60" rx="2" fill="#fbfbfb" stroke="#2d3142" stroke-width="1" stroke-opacity="0.2"/>
+        <text x="464" y="122" class="d-name" fill="#2d3142">GitHub</text>
+        <text x="464" y="141" class="d-mono" fill="#5a6580">issue · pull request · ci · comment</text>
+
+        <rect x="832" y="96" width="360" height="60" rx="2" fill="#fbfbfb" stroke="#2d3142" stroke-width="1" stroke-opacity="0.2"/>
+        <text x="848" y="122" class="d-name" fill="#2d3142">飞书</text>
+        <text x="848" y="141" class="d-mono" fill="#5a6580">群消息 · 单聊 · 回复</text>
+
+        <!-- router -->
+        <rect x="64" y="200" width="1128" height="148" rx="6" fill="#ffffff" stroke="#bf4520" stroke-width="1.4"/>
+        <text x="80" y="228" class="d-name" fill="#2d3142">主 Session · Router</text>
+        <text x="1176" y="228" class="d-mono" fill="#bf4520" text-anchor="end">orchestrator · 一个进程只有这一个，替所有项目路由</text>
+
+        <text x="80" y="262" class="d-eyebrow" fill="#5a6580">PROMPT</text>
+        <text x="152" y="262" class="d-row" fill="#4f5d75">shared → orchestrator → 团队三段 → dispatch → admission → handoff → environment → policy（末段，唯一完整覆盖的系统提示）</text>
+
+        <text x="80" y="296" class="d-eyebrow" fill="#5a6580">TOOLS</text>
+        <text x="152" y="296" class="d-row" fill="#4f5d75">orchestrator_route（accept / attach / ignore / stop）· eval 三件套 · settings_save · prompts_save · reply</text>
+
+        <text x="80" y="330" class="d-eyebrow" fill="#5a6580">WRITES</text>
+        <text x="152" y="330" class="d-row" fill="#4f5d75">Decision（含 discuss）· Ticket + Mandate · 本地讨论 · 对齐确认后按 slice 派发</text>
+
+        <!-- discussion answerer -->
+        <rect x="64" y="404" width="360" height="184" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="80" y="430" class="d-name" fill="#2d3142">讨论 Answerer</text>
+        <text x="408" y="430" class="d-mono" fill="#5a6580" text-anchor="end">discuss</text>
+        <text x="80" y="462" class="d-eyebrow" fill="#5a6580">PROMPT</text>
+        <text x="136" y="462" class="d-row" fill="#4f5d75">worker 基座 − worker/work，末尾 discuss.md</text>
+        <text x="80" y="494" class="d-eyebrow" fill="#5a6580">TOOLS</text>
+        <text x="136" y="494" class="d-row" fill="#4f5d75">read / glob / grep（只读）· discussion_ask</text>
+        <text x="80" y="526" class="d-eyebrow" fill="#5a6580">WRITES</text>
+        <text x="136" y="526" class="d-row" fill="#4f5d75">讨论回复与待答问题；不建 Ticket</text>
+        <text x="80" y="558" class="d-eyebrow" fill="#5a6580">RETURNS</text>
+        <text x="136" y="558" class="d-row" fill="#4f5d75">结论文本回面板，人点「交给对齐」</text>
+
+        <!-- aligner -->
+        <rect x="448" y="404" width="360" height="184" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="464" y="430" class="d-name" fill="#2d3142">对齐 Aligner</text>
+        <text x="792" y="430" class="d-mono" fill="#5a6580" text-anchor="end">ticket · mode=align</text>
+        <text x="464" y="462" class="d-eyebrow" fill="#5a6580">PROMPT</text>
+        <text x="520" y="462" class="d-row" fill="#4f5d75">worker 基座 − worker/work，末尾 align.md</text>
+        <text x="464" y="494" class="d-eyebrow" fill="#5a6580">TOOLS</text>
+        <text x="520" y="494" class="d-row" fill="#4f5d75">read · orchestrator_report · orchestrator_align</text>
+        <text x="464" y="526" class="d-eyebrow" fill="#5a6580">WRITES</text>
+        <text x="520" y="526" class="d-row" fill="#4f5d75">一轮 Alignment：summary / slices / acceptance</text>
+        <text x="464" y="558" class="d-eyebrow" fill="#5a6580">RETURNS</text>
+        <text x="520" y="558" class="d-row" fill="#4f5d75">人确认后，路由按 slice 各建一单</text>
+
+        <!-- worker -->
+        <rect x="832" y="404" width="360" height="184" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="848" y="430" class="d-name" fill="#2d3142">切片 Worker</text>
+        <text x="1176" y="430" class="d-mono" fill="#5a6580" text-anchor="end">ticket · 每片一单</text>
+        <text x="848" y="462" class="d-eyebrow" fill="#5a6580">PROMPT</text>
+        <text x="904" y="462" class="d-row" fill="#4f5d75">worker 全量 + execute.md，末尾追加 mandate</text>
+        <text x="848" y="494" class="d-eyebrow" fill="#5a6580">TOOLS</text>
+        <text x="904" y="494" class="d-row" fill="#4f5d75">工作工具（bash / edit）· orchestrator_report</text>
+        <text x="848" y="526" class="d-eyebrow" fill="#5a6580">WRITES</text>
+        <text x="904" y="526" class="d-row" fill="#4f5d75">Session 事件 · commit · PR（链仓库 + worktree）</text>
+        <text x="848" y="558" class="d-eyebrow" fill="#5a6580">RETURNS</text>
+        <text x="904" y="558" class="d-row" fill="#4f5d75">合并 → ticket.ended(merged) → deploy</text>
+
+        <!-- shared floor -->
+        <rect x="64" y="604" width="1128" height="72" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1" stroke-opacity="0.16"/>
+        <line x1="437" y1="612" x2="437" y2="668" stroke="#2d3142" stroke-width="1" stroke-opacity="0.12"/>
+        <line x1="819" y1="612" x2="819" y2="668" stroke="#2d3142" stroke-width="1" stroke-opacity="0.12"/>
+
+        <text x="80" y="626" class="d-eyebrow" fill="#5a6580">PROMPT &amp; VERSION</text>
+        <text x="80" y="646" class="d-row" fill="#4f5d75">首行 revision，每次模型请求按当前设置重拼</text>
+        <text x="80" y="664" class="d-mono" fill="#bf4520">[dsh-superagent prompt revision N]</text>
+
+        <text x="453" y="626" class="d-eyebrow" fill="#5a6580">STATE</text>
+        <text x="453" y="646" class="d-row" fill="#4f5d75">store.sqlite：Ticket · Decision · Discussion</text>
+        <text x="453" y="664" class="d-mono" fill="#5a6580">Mandate · Effect · Assignment</text>
+
+        <text x="835" y="626" class="d-eyebrow" fill="#5a6580">ENVIRONMENT &amp; EXIT</text>
+        <text x="835" y="646" class="d-row" fill="#4f5d75">设置里的变量 · skills（feishu / github / 团队）</text>
+        <text x="835" y="664" class="d-mono" fill="#5a6580">合并 → deploy：拉取、重建、systemd 重启</text>
+
+        <!-- legend -->
+        <rect x="64" y="690" width="14" height="9" rx="1" fill="#fbfbfb" stroke="#2d3142" stroke-width="1" stroke-opacity="0.24"/>
+        <text x="88" y="699" class="d-row" fill="#4f5d75">输入 / Trigger</text>
+        <rect x="232" y="690" width="14" height="9" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <text x="256" y="699" class="d-row" fill="#4f5d75">Agent Session</text>
+        <rect x="400" y="690" width="14" height="9" fill="#bf4520"/>
+        <text x="424" y="699" class="d-row" fill="#4f5d75">本图焦点</text>
+        <rect x="520" y="690" width="14" height="9" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1" stroke-opacity="0.16"/>
+        <text x="544" y="699" class="d-row" fill="#4f5d75">所有 Session 共用的底座</text>
+      </svg>

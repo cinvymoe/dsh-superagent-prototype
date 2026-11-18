@@ -1,6 +1,6 @@
 # dsh-superagent 设计图
 
-> 对应源码版本：`/data/project/dsh-superagent`（截至 2026-11-15，含工作区中未提交的 agents / capabilities 改动）。
+> 对应源码版本：`/data/project/dsh-superagent`（截至 2026-11-18，`main` @ `dc4ae61` 之后）。
 > Router 在代码与提示词里叫 **主 Session / `orchestrator`**；Worker 叫 **Executor Session / `worker`**。
 
 ## 文档 → 图（先看这张表）
@@ -8,6 +8,7 @@
 | 文档 | 图 | 讲什么 |
 | --- | --- | --- |
 | [007 架构总览](../docs/007-architecture.md) | [current-architecture](./current-architecture.html) · [router-worker](./router-worker-architecture.html) · [agent-dispatch](./agent-dispatch-worker.html) | 当前实现的角色与链路；两张早期 Router/Worker 视角 |
+| [009 Agent 运行时](../docs/009-agent-runtime.md) | [agent-view](./agent-view.html) · [agent-flow](./agent-flow.html) | 五类 Session 各自看见什么；提示在三个时刻注入、一个 Session 从建立到落地 |
 | [001 领域模型](../docs/001-domain.md) | [domain-model](./domain-model.html) | 七个概念、八条关系，授权链只有一处出口 |
 | [002 授权](../docs/002-authorization.md) | [authorization-flow](./authorization-flow.html) · [paired-decisions](./paired-decisions.html) | 一条 Trigger 的两种去向；两条请求为何一个接单一个忽略 |
 | [003 执行 · 阶段](../docs/003-execution.md) | [ticket-state](./ticket-state.html) | 七个阶段与恢复；Assignment 平行时间线 |
@@ -25,6 +26,24 @@
 
 > 全部图都是自包含 HTML（内联 SVG + 内联 CSS + Google Fonts），同名 `.svg` / `.png`（@2x）为导出件。
 > 根目录 `AGENTS.md` 里有一张「改动落在哪 → 要改哪张图」的映射表，与这张表同源；改图要同时重导出。
+
+## 图 0f：Agent 视角（2026-11-18）
+
+[![五类 Session：各自看见什么、能做什么、留下什么](./agent-view.png)](./agent-view.html)
+
+- 单文件 HTML：[`agent-view.html`](./agent-view.html)（内联 SVG + 三张说明卡）。
+- 从 Agent 的位置看当前实现：Trigger 进来 → 唯一的主 Session 决策 → 讨论 Answerer / 对齐 Aligner / 切片 Worker。每张卡写四行：**PROMPT**（它读到的提示段）、**TOOLS**（它挂着的工具）、**WRITES**（它写回哪里）、**RETURNS**（它留下什么、怎么回到人）。
+- 底条是三样所有 Session 共用的东西：提示词版本、`store.sqlite`、环境与出口（skills、deploy）。
+- coral 只标两处：主 Session 一个进程只有它一个（替所有项目路由），以及首行的 revision——每请求重拼。
+
+## 图 0g：一个 Session 的一生（2026-11-18）
+
+[![三段：进入与决策、一个 Session 的一生、收束](./agent-flow.png)](./agent-flow.html)
+
+- 单文件 HTML：[`agent-flow.html`](./agent-flow.html)。
+- 三段流程：① Trigger → Decision → Ticket；② Session 建立 → 拼提示 → 模型请求 → 工具与写回，再回到「拼提示」；③ 收工 → 落地。
+- 下沿那条 ribbon 是**三个注入时刻**：建立时一次（挂 `systemPrompt.section`、注册 tools/skills）、每次请求一次（按 revision 重拼各段、末尾加 mandate）、每次回报之后一次（report → store → effects）。
+- 详细文字解析见 [`docs/009-agent-runtime.md`](../docs/009-agent-runtime.md)：注入时间线与「主 Session 调 Worker 的九个动作」。
 
 ## 图 0d：讨论的路由（2026-11-15）
 
