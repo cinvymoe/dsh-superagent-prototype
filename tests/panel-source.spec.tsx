@@ -152,6 +152,42 @@ it('edits repository chain rows and stores only the explicit chains with no lega
   expect(saved).not.toHaveProperty('codeRepository')
 })
 
+it('shows only the current project\'s chain and saves it without touching another project\'s chain', async () => {
+  server.localProjects = [
+    { id: 'p-1', name: '一号', chain: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets',
+      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+    { id: 'p-2', name: '二号', chain: 'tools', intakeRepository: 'acme/tools', codeRepository: 'acme/tools',
+      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' },
+  ]
+  server.settings.sources.github = { enabled: true, config: { cli: 'gh-agent', chains: [
+    { id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets', cli: '' },
+    { id: 'tools', intakeRepository: 'acme/tools', codeRepository: 'acme/tools', cli: 'gh-tools' },
+  ] } }
+  await mount()
+  await click(tab(zh['tab.settings']))
+  const github = () => all('.dt-card')[1]!
+  // The first project is current until another is picked, so its chain alone is on the card.
+  expect(all('.dt-project-tab').map(item => item.getAttribute('aria-selected'))).toEqual(['true', 'false'])
+  expect(github().querySelectorAll('.dt-rows-item')).toHaveLength(1)
+  expect(github().querySelector('.dt-rows-item')?.textContent).toContain('default')
+  expect(github().textContent).not.toContain('acme/tools')
+  // An edit to that row saves the whole list with the other project's row carried through untouched.
+  await type(field<HTMLInputElement>('执行代码的仓库'), 'acme/widgets-next')
+  await act(async () => { github().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
+  expect(server.settings.sources.github!.config.chains).toEqual([
+    { id: 'default', intakeRepository: 'acme/intake', codeRepository: 'acme/widgets-next', cli: '' },
+    { id: 'tools', intakeRepository: 'acme/tools', codeRepository: 'acme/tools', cli: 'gh-tools' },
+  ])
+  expect(field<HTMLInputElement>('执行代码的仓库').value).toBe('acme/widgets-next')
+  // The other project's page shows its own chain, and never the first project's.
+  await mount(zh, { url: '/?panel=dsh-superagent&page=settings&group=source&project=p-2' })
+  const other = all('.dt-card')[1]!
+  expect(other.querySelectorAll('.dt-rows-item')).toHaveLength(1)
+  expect(field<HTMLInputElement>('执行代码的仓库').value).toBe('acme/tools')
+  expect(field<HTMLInputElement>('该链路的 GitHub CLI').value).toBe('gh-tools')
+  expect(other.textContent).not.toContain('acme/widgets-next')
+})
+
 it('reads an old single-chain configuration as the default chain and saves it once as chains only', async () => {
   server.settings.sources.github = { enabled: true, config: { repository: 'acme/widgets', intakeRepository: 'acme/intake',
     codeRepository: 'acme/widgets', cli: 'gh-agent', pollSeconds: 120 } }

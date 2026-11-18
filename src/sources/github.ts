@@ -38,8 +38,8 @@ export const githubKind: SourceKind<GithubConfig> = {
   schema: GithubConfigSchema,
   normalizeConfig: normalizeGithubConfig,
   fields: [
-    { key: 'chains', type: 'rows', label: { zh: '仓库链路（一个 Issue 仓库 → 一个执行仓库）', en: 'Repository chains (one intake repository → one code repository)' },
-      hint: { zh: '至少配置一条链路。每行一个链路：id 用 lowercase-kebab-case，id 与执行代码的仓库必填，接收 Issue 的仓库留空即使用同一个执行仓库；该链路的 GitHub CLI 留空时用本卡的 CLI。每个链路独立轮询、独立执行，启动时按链路校验 CLI、账号与仓库权限。', en: 'Configure at least one chain. One row per chain: id is lowercase-kebab-case, id and code repository are required, an empty intake repository uses the same code repository, and an empty chain CLI uses this card\'s CLI. Each chain polls and executes independently; setup checks every chain\'s CLI, account, and repository access.' },
+    { key: 'chains', type: 'rows', scoped: 'project', label: { zh: '仓库链路（一个 Issue 仓库 → 一个执行仓库）', en: 'Repository chains (one intake repository → one code repository)' },
+      hint: { zh: '只显示当前项目自己的链路；其他项目的链路分别在各项目的设置页维护。id 用 lowercase-kebab-case，id 与执行代码的仓库必填，接收 Issue 的仓库留空即使用同一个执行仓库；该链路的 GitHub CLI 留空时用本卡的 CLI。每个链路独立轮询、独立执行，启动时按链路校验 CLI、账号与仓库权限。', en: 'Only the current project\'s chain is shown; another project\'s chain is maintained on its own settings page. id is lowercase-kebab-case, id and code repository are required, an empty intake repository uses the same code repository, and an empty chain CLI uses this card\'s CLI. Each chain polls and executes independently; setup checks every chain\'s CLI, account, and repository access.' },
       columns: [
         { key: 'id', type: 'text', label: { zh: '链路 ID', en: 'Chain id' }, pattern: '[a-z][a-z0-9-]*' },
         { key: 'intakeRepository', type: 'text', label: { zh: '接收 Issue 的仓库', en: 'Intake repository' }, pattern: '[A-Za-z0-9_.\\-]+/[A-Za-z0-9_.\\-]+', optional: true },

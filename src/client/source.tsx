@@ -1,6 +1,7 @@
 /** Source status view (health, filtered Triggers, dropped replies) and Source settings cards. */
 import { useEffect, useState } from 'react'
 import type { FieldSpec } from '../sources/kind.ts'
+import type { LocalProjectView } from '../sources/local-format.ts'
 import { usePoll, type DroppedReply, type SourceStatusRow, type SourceView } from './api.ts'
 import { DisclosureRow, Dot, Icon, InfoTip, Switch, Tag } from './controls.tsx'
 import { SaveBar } from './draft.tsx'
@@ -11,9 +12,34 @@ import { ConfigHistory, Fields, SourceField, useBlockDraft, useSettings } from '
 import { actorName, healthText, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
 import { CheckSetupButton, Hint, LabelValue, LoadState, SetupMessage, StatusHead, When } from './widgets.tsx'
 
+type ChainRow = Record<string, string>
+/** The chain a project owns; a project without one owns the Source's shared `default` chain. */
+const chainOf = (project: LocalProjectView) => project.chain ?? 'default'
+/**
+ * Repository chains are project configuration: the card shows the current project's chain plus any chain no project
+ * owns, and every other row is carried through a save untouched so one project never rewrites another's.
+ */
+function chainScope(field: FieldSpec, config: unknown, saved: unknown, projects: LocalProjectView[], current?: LocalProjectView) {
+  if (field.type !== 'rows') return undefined
+  const column = field.columns[0]!.key
+  const rows = (input: unknown) => (Array.isArray(input) ? input as ChainRow[] : [])
+  const elsewhere = (row: ChainRow) => projects.some(project => chainOf(project) === row[column] && project.id !== current?.id)
+  /** Swap the visible rows back into place, leaving another project's rows exactly where they are. */
+  const merge = (next: unknown): ChainRow[] => {
+    const edited = rows(next)
+    const kept = rows(config).flatMap(row => {
+      if (elsewhere(row)) return [row]
+      const replacement = edited.shift()
+      return replacement ? [replacement] : []
+    })
+    return [...kept, ...edited]
+  }
+  return { value: rows(config).filter(row => !elsewhere(row)), saved: rows(saved).filter(row => !elsewhere(row)), merge }
+}
+
 function SourceCard({ source }: { source: SourceView }) {
-  const { t, call } = usePanel()
-  const { running } = usePanelData()
+  const { t, call, project } = usePanel()
+  const { running, projects } = usePanelData()
   const { reload } = useSettings()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const refreshLabels = async () => { const { added } = await call('POST sources/:id/labels',
@@ -25,11 +51,20 @@ function SourceCard({ source }: { source: SourceView }) {
   // Saving a modified setup-sensitive field restarts dsh-superagent, interrupting running Assignments.
   const restarts = draft.dirty && source.restarts.some(changed)
   const description = localized(t, source.description)
+  // The project bar shows its first project until another is picked, so a scoped field follows the same rule.
+  const current = projects.find(item => item.id === project) ?? projects[0]
   // Hide derived facts for unsaved field edits until the new value is saved.
-  const field = (spec: FieldSpec) => <SourceField key={spec.key} field={spec} value={value.config[spec.key]} saved={saved.config[spec.key]}
-    labels={source.labels}
-    refreshLabels={refreshLabels} fact={spec.type === 'fact' || !changed(spec.key) ? source.facts[spec.key] : undefined}
-    onChange={next => draft.edit({ ...value, config: { ...value.config, [spec.key]: next } })} />
+  const field = (spec: FieldSpec) => {
+    const scope = spec.scoped === 'project' ? chainScope(spec, value.config[spec.key], saved.config[spec.key], projects,
+      current) : undefined
+    const write = scope
+      ? (next: unknown) => draft.edit({ ...value, config: { ...value.config, [spec.key]: scope.merge(next) } })
+      : (next: unknown) => draft.edit({ ...value, config: { ...value.config, [spec.key]: next } })
+    return <SourceField key={spec.key} field={spec} value={scope ? scope.value : value.config[spec.key]}
+      saved={scope ? scope.saved : saved.config[spec.key]} labels={source.labels}
+      refreshLabels={refreshLabels} fact={spec.type === 'fact' || !changed(spec.key) ? source.facts[spec.key] : undefined}
+      onChange={write} />
+  }
   const advanced = source.fields.filter(spec => spec.advanced)
   return <form id={`dt-source-${source.id}`} className="dt-card" onSubmit={event => { void draft.submit(event) }}>
     <Fields disabled={draft.busy}>

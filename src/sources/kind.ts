@@ -7,8 +7,11 @@ import type { Commands } from '../infra/commands.ts'
 import type { SourceContext, SourceHost } from './host.ts'
 
 export interface Localized { zh: string; en: string }
-/** `advanced` folds a rarely changed field (such as a polling tunable) behind the card's Advanced section. */
-interface FieldBase { key: string; label: Localized; hint?: Localized; advanced?: true }
+/**
+ * `advanced` folds a rarely changed field (such as a polling tunable) behind the card's Advanced section; `scoped`
+ * narrows a `rows` field to the rows the panel's current project owns, leaving other projects' rows to their own pages.
+ */
+interface FieldBase { key: string; label: Localized; hint?: Localized; advanced?: true; scoped?: 'project' }
 /**
  * Configuration field specification; `rows` edits a list of records keyed by its first column, `choose` picks from
  * resolved source labels, and `fact` displays a read-only value from `facts`.
