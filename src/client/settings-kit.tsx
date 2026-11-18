@@ -6,7 +6,7 @@ import type { FieldSpec, Localized } from '../sources/kind.ts'
 import { usePoll, type HistoryView, type Settings, type SettingsView, type SourceView } from './api.ts'
 import { Button, DisclosureRow, Icon, InfoTip, Input, SegmentedControl, Switch } from './controls.tsx'
 import { useDraft } from './draft.tsx'
-import { useAction, usePanel, usePanelData } from './provider.tsx'
+import { useAction, useCurrentProject, usePanel, usePanelData } from './provider.tsx'
 import { settingsRoute } from './route.ts'
 import { errorText, localized, valueLabel, when, type T } from './text.ts'
 import { Hint, LoadState } from './widgets.tsx'
@@ -23,7 +23,10 @@ export function useSettings(): SettingsData {
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const { call } = usePanel()
   const { restarts } = usePanelData()
-  const { data, error, reload } = usePoll(() => call('GET settings'), [call, restarts])
+  // A view read for the current project reports that project's chain alone, so switching projects refetches it.
+  const current = useCurrentProject()
+  const { data, error, reload } = usePoll(() => call('GET settings', { query: { project: current?.id } }),
+    [call, restarts, current?.id])
   if (!data) return <LoadState error={error} loading />
   return <SettingsContext.Provider value={{ settings: data, reload }}>
     {error && <LoadState error={error} loading={false} />}

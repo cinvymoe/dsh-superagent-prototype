@@ -112,9 +112,13 @@ export const githubKind: SourceKind<GithubConfig> = {
         DSH_SUPERAGENT_GITHUB_PR_HEAD: number && trigger?.meta.isPr === true ? `refs/pull/${number}/head` : '' }
     },
   },
-  facts: (deployment): Record<string, Localized | string> => {
+  // A project's card speaks only for its own chain: every other chain belongs to another project, whose own page reports it.
+  facts: (deployment, scope): Record<string, Localized | string> => {
     if (!deployment) return {}
-    const chains = deployment.chains ? Object.values(deployment.chains) : [{ ...deployment, chain: 'default' }]
+    const everything = deployment.chains ? Object.values(deployment.chains) : [{ ...deployment, chain: 'default' }]
+    const chains = scope?.chain === undefined ? everything : everything.filter(item => (item.chain ?? 'default') === scope.chain)
+    // A chain this setup has not resolved yet reports nothing rather than standing in another chain's account.
+    if (!chains.length) return {}
     const accounts = chains.map(item => `${item.chain ?? 'default'}: @${item.github.login}`)
     const logins = [...new Set(chains.map(item => item.github.login))]
     return {

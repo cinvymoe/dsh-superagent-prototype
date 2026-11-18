@@ -226,7 +226,6 @@ const TEXT = {
   'discuss.projectChainMissing': ['GitHub 链路 {chain} 不在来源配置里，工单会回退到默认链路的身份。请到「来源 → GitHub」补回这条链路。', 'GitHub chain {chain} is not in the Source configuration, so its Tickets fall back to the default chain\'s identity. Add the chain back under Sources → GitHub.'],
   'discuss.projectChainMissingShort': ['链路 {chain} 缺失', 'Chain {chain} missing'],
   'discuss.projectSaved': ['项目已保存', 'Project saved'],
-  'projectsSettingsHint': ['每个项目有自己的页面：项目的仓库与执行环境，以及它自己覆盖的暂停与执行器模型。', 'Each project has its own page: its repositories and execution environment, plus the pause and executor model it overrides for itself.'],
   'projectsSettingsEmpty': ['还没有项目，先在需求页新建一个。', 'No projects yet. Create one from the requirements page.'],
   'discuss.createProject': ['创建项目', 'Create project'],
   'discuss.editProject': ['编辑项目', 'Edit project'],

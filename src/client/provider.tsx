@@ -43,6 +43,12 @@ export function usePanelData(): PanelData {
   if (!value) throw new Error('dsh-superagent page rendered outside its panel')
   return value
 }
+/** The project the panel shows: the one its route names, or the first until one is picked. */
+export function useCurrentProject(): LocalProjectView | undefined {
+  const { project } = usePanel()
+  const { projects } = usePanelData()
+  return projects.find(item => item.id === project) ?? projects[0]
+}
 /** Wrap an async action with re-entrancy protection, busy state, optional reload, and error toast reporting. */
 export function useAction<A extends unknown[]>(action: (...args: A) => Promise<unknown>,
   { reload }: { reload?: () => Promise<unknown> } = {}) {

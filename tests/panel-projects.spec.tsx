@@ -346,18 +346,24 @@ it('keeps the edit page and its values when the update is refused, then clears a
   expect(text()).not.toContain('/srv/worktrees')
 })
 
-it('leaves the project page from its back link without a request', async () => {
+it('keeps the Projects settings group to one project\'s own page rather than listing every project', async () => {
   server.localProjects = [WIDGETS, OTHER]
-  at({ page: 'settings', id: 'p-widgets', query: { group: 'projects' } })
+  // The group opens without a project, so it lands on the one the project bar has selected.
+  at({ page: 'settings', query: { group: 'projects' } })
   await mount()
-  await type(field(zh['discuss.projectName']), 'Discarded')
-  // The back link returns to the project list and writes nothing.
-  await click(all('.dt-textlink').find(item => item.textContent?.trim() === zh['settingsGroup.projects'])!)
+  const meta = () => document.querySelector('.dt-row-meta')?.textContent ?? ''
+  expect(document.querySelector('.dt-card-title')?.textContent).toBe('Widgets')
+  expect(meta()).toContain('acme/intake → acme/widgets')
+  // Nothing of the other project's repositories reaches the page or its inputs.
+  expect(meta()).not.toContain('acme/other')
+  expect(values()).toEqual(['Widgets', 'acme/intake', 'acme/widgets', '/srv/worktrees', '', '', ''])
+  // Switching the project bar moves to that project's own page, and no edit of this one is written.
+  await click(tab('Other'))
+  expect(document.querySelector('.dt-card-title')?.textContent).toBe('Other')
+  expect(meta()).toContain('acme/intake → acme/other')
+  expect(values()).toEqual(['Other', 'acme/intake', 'acme/other', '', '', '', ''])
   expect(putRequests()).toHaveLength(0)
   expect(server.localProjects.find(item => item.id === 'p-widgets')).toMatchObject({ name: 'Widgets' })
-  // Reopening the project shows its stored name rather than the discarded edit.
-  await click(all('.dt-textlink').find(item => item.textContent?.trim() === 'Widgets')!)
-  expect(field(zh['discuss.projectName']).value).toBe('Widgets')
 })
 
 it('shows each project\'s own bot account in the page head and the More menu, switching with the project', async () => {

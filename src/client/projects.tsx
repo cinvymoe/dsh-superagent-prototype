@@ -1,7 +1,7 @@
 /** Project bar above the page tabs and the standalone page that creates a local project. */
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Button, Icon } from './controls.tsx'
-import { usePanel, usePanelData } from './provider.tsx'
+import { useCurrentProject, usePanel, usePanelData } from './provider.tsx'
 import { settingsRoute, type Route } from './route.ts'
 import { projectRepositories, type LocalProjectView } from '../sources/local-format.ts'
 import { LIMITS } from '../limits.ts'
@@ -13,14 +13,14 @@ import { PageHead } from './widgets.tsx'
  * and the New project button that opens the standalone creation page.
  */
 export function ProjectBar({ route }: { route: Route }) {
-  const { t, navigate, project, setProject } = usePanel()
+  const { t, navigate, setProject } = usePanel()
   const { projects } = usePanelData()
   const [open, setOpen] = useState(false)
   const [overflow, setOverflow] = useState(false)
   const strip = useRef<HTMLDivElement>(null)
   const more = useRef<HTMLDivElement>(null)
   // The first project is the current one until a tab or a created project names another.
-  const current = (projects.find(item => item.id === project) ?? projects[0])?.id
+  const current = useCurrentProject()?.id
   const measure = useCallback(() => {
     const element = strip.current
     if (!element) { setOverflow(false); return }

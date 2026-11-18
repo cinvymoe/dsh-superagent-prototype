@@ -201,8 +201,8 @@ function routes(runtime: HttpHost): Routes {
       executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem, runtime.projects.missingChains()),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),
     'GET sources': () => sourcesStatus(views(runtime), runtime.health, setupState(runtime)),
-    'GET settings': () => settingsView(store, runtime.sources, runtime.health, setupState(runtime), runtime.machine.stateDir,
-      runtime.settings.catalog()),
+    'GET settings': ({ query }) => settingsView(store, runtime.sources, runtime.health, setupState(runtime), runtime.machine.stateDir,
+      runtime.settings.catalog(), typeof query?.project === 'string' && query.project ? query.project : undefined),
     'POST sources/:id/labels': ({ params }) => runtime.settings.refreshLabels(params.id),
     'GET threads': ({ query }) => {
       const { filter, offset, limit } = ThreadsQuery.parse(query)

@@ -25,7 +25,7 @@ import { feishuKind } from '../../src/sources/feishu.ts'
 import { githubKind } from '../../src/sources/github.ts'
 import type { Health } from '../../src/sources/host.ts'
 import type { SourceKind } from '../../src/sources/kind.ts'
-import type { LocalAnswer, LocalAsk, LocalDiscussion, LocalImage, LocalIssue } from '../../src/sources/local-format.ts'
+import { projectChain, type LocalAnswer, type LocalAsk, type LocalDiscussion, type LocalImage, type LocalIssue } from '../../src/sources/local-format.ts'
 import { testDeployment } from './deployment.ts'
 
 export const MEMBER = 'ou_alice'
@@ -237,7 +237,9 @@ function healthOf(name: string): Health {
     detail: 'socket closed' }
 }
 const problemOf_ = (id: string) => [server.setup.problem, server.setup.feishuProblem].find(item => item?.place === id) ?? undefined
-function sourceSettings(): SourceView[] {
+function sourceSettings(project?: string): SourceView[] {
+  // A view read for one project reports that project's chain only, as the host narrows it.
+  const chain = project === undefined ? undefined : projectChain(server.localProjects.find(item => item.id === project) ?? {})
   return KINDS.map(kind => {
     const raw = server.settings.sources[kind.kind]?.config ?? {}
     // Read stored configuration the way the host does: normalize a legacy shape before validating it.
@@ -251,7 +253,7 @@ function sourceSettings(): SourceView[] {
     return { id: kind.kind, kind: kind.kind, title: kind.title, description: kind.description, installed: true,
       value: { enabled: server.settings.sources[kind.kind]?.enabled ?? true, config },
         revision: server.revisions[`source:${kind.kind}`] ?? 0,
-      restarts: SETUP_FIELDS[kind.kind] ?? [], fields: kind.fields, facts: kind.facts?.(resolved()) ?? {},
+      restarts: SETUP_FIELDS[kind.kind] ?? [], fields: kind.fields, facts: kind.facts?.(resolved(), chain === undefined ? undefined : { chain }) ?? {},
       labels: kind.kind === 'feishu' ? { oc_team: '团队群', oc_other: '另一个群', ...server.joined } : {}, ...problem ? { problem } : {},
       ...policy ? { policy } : {} }
   })
@@ -277,7 +279,7 @@ const stateView = (): StateView => ({
   // The panel does not read health; the service script does.
   health: {},
 })
-const settingsView = (): ApiResponse<'GET settings'> => ({
+const settingsView = (project?: string): ApiResponse<'GET settings'> => ({
   policyVersion: 'abcdef1234567890',
   blocks: { policy: { value: server.settings.policy, revision: server.revisions.policy ?? 0 },
     eval: { value: server.settings.eval, revision: server.revisions.eval ?? 0 },
@@ -286,7 +288,7 @@ const settingsView = (): ApiResponse<'GET settings'> => ({
     projects: { value: server.settings.projects, revision: server.revisions.projects ?? 0 } },
   // The catalog the Agents page offers, as the host's own catalog defines it.
   agents: agentCatalog(server.settings.agents, server.registeredTools),
-  sources: sourceSettings(),
+  sources: sourceSettings(project),
   environment: { root: '/srv/dsh-superagent/work', variables: [
     { owner: 'executor', enabled: true, variables: [{ key: 'DSH_SUPERAGENT_DIR', description: { zh: '工单的执行目录',
       en: 'The ticket directory' } },
@@ -471,7 +473,7 @@ const ROUTES: { [K in keyof Api]: Route<K> } = {
     return { tickets: [], threads: server.search.threads, items: server.search.items.filter(item => item.preview.includes(q)) }
   } },
   'GET sources': { answer: sourceStatuses },
-  'GET settings': { answer: settingsView },
+  'GET settings': { query: ['project'], answer: ({ query }) => settingsView(query.project) },
   'POST sources/:id/labels': { answer: () => {
     // Label refresh failures come from the bot CLI and are returned verbatim.
     if (server.joinError) return refuse(500, server.joinError)

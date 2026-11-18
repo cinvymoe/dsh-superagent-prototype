@@ -171,6 +171,8 @@ it('shows only the current project\'s chain and saves it without touching anothe
   expect(github().querySelectorAll('.dt-rows-item')).toHaveLength(1)
   expect(github().querySelector('.dt-rows-item')?.textContent).toContain('default')
   expect(github().textContent).not.toContain('acme/tools')
+  // The settings view is read for that project as well, so its Source facts speak only for its chain.
+  expect(server.requests.some(request => request.path === 'settings?project=p-1')).toBe(true)
   // An edit to that row saves the whole list with the other project's row carried through untouched.
   await type(field<HTMLInputElement>('执行代码的仓库'), 'acme/widgets-next')
   await act(async () => { github().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })) }); await settle()
@@ -186,6 +188,7 @@ it('shows only the current project\'s chain and saves it without touching anothe
   expect(field<HTMLInputElement>('执行代码的仓库').value).toBe('acme/tools')
   expect(field<HTMLInputElement>('该链路的 GitHub CLI').value).toBe('gh-tools')
   expect(other.textContent).not.toContain('acme/widgets-next')
+  expect(server.requests.some(request => request.path === 'settings?project=p-2')).toBe(true)
 })
 
 it('reads an old single-chain configuration as the default chain and saves it once as chains only', async () => {

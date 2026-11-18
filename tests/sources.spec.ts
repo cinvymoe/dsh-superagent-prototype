@@ -1106,6 +1106,13 @@ it('shows each chain\'s own account in the GitHub Source facts', () => {
   const facts = githubKind.facts!(deployment)
   expect(facts.accounts).toMatchObject({ zh: 'alpha: @Alpha-Bot；beta: @Beta-Bot' })
   expect(facts.cli).toMatchObject({ zh: '每条链路使用各自的账号：@Alpha-Bot、@Beta-Bot' })
+  // A project's own view narrows the facts to its chain, so no other project's account is named beside its own.
+  const scoped = githubKind.facts!(deployment, { chain: 'beta' })
+  expect(scoped.accounts).toMatchObject({ zh: 'beta: @Beta-Bot' })
+  expect(scoped.cli).toMatchObject({ zh: '当前账号 @Beta-Bot' })
+  expect(scoped.chains).toMatchObject({ zh: 'beta: acme/code-b → acme/code-b (@Beta-Bot)' })
+  // A chain setup has not resolved reports nothing rather than borrowing another chain's account.
+  expect(githubKind.facts!(deployment, { chain: 'gamma' })).toEqual({})
   // A blank per-chain CLI is filled by the schema and falls back to the Source CLI at setup.
   expect(GithubConfigSchema.parse({ chains: [{ id: 'alpha', codeRepository: 'acme/widgets' }] }).chains[0]!.cli).toBe('')
 })

@@ -14,6 +14,8 @@ import { droppedReplies, sourcesStatus } from '../src/app/views/sources.ts'
 import { overview } from '../src/app/views/overview.ts'
 import { markdown, plain } from '../src/app/views/text.ts'
 import { policyHistory } from '../src/app/settings-history.ts'
+import { settingsView } from '../src/app/views/settings.ts'
+import { testDeployment } from './fixtures/deployment.ts'
 import { KV } from '../src/kv.ts'
 import { feishuLink } from '../src/sources/feishu-channel.ts'
 import { feishuChannel, feishuTriggerId } from '../src/sources/feishu-trigger.ts'
@@ -65,6 +67,26 @@ const live = (id: string) => store.tickets.save({ id, title: id, decisionId: 'd'
   origin: { triggerId: 'e0', triggerIds: ['e0'] }, assignments: [], inputs: [] })
 const message = (id: string, actor: { source: string; id: string }, human = true) => ({ id, source: actor.source,
   threads: [{ source: 'feishu', id: 'oc_1:om_root' }], actor, human, at, text: `message ${id}`, meta: {} })
+
+it('reports Source facts for one project\'s own chain when the panel reads the settings for that project', () => {
+  const { store, sources } = views()
+  const base = testDeployment()
+  const target = (chain: string, login: string) => ({ ...base, chain, repository: `acme/${chain}`, intakeRepository: `acme/${chain}`,
+    github: { cli: `/bin/${login}`, login, noreply: '' } })
+  const deployment = testDeployment({ chains: { alpha: target('alpha', 'Alpha-Bot'), beta: target('beta', 'Beta-Bot') } })
+  store.set(KV.local.project('p-beta'), { id: 'p-beta', name: 'Beta', chain: 'beta', intakeRepository: 'acme/beta',
+    codeRepository: 'acme/beta', createdAt: at, updatedAt: at })
+  const facts = (project?: string) => settingsView(store, sources, {}, { deployment }, directory, undefined, project)
+    .sources.find(source => source.id === 'github')!.facts
+  // The whole instance names every chain's account, which is what an unscoped read reports.
+  expect(facts().accounts).toMatchObject({ zh: 'alpha: @Alpha-Bot；beta: @Beta-Bot' })
+  // A read for one project reports its chain alone.
+  expect(facts('p-beta').accounts).toMatchObject({ zh: 'beta: @Beta-Bot' })
+  expect(facts('p-beta').cli).toMatchObject({ zh: '当前账号 @Beta-Bot' })
+  // A project that names no chain owns the default one, which this deployment lacks: it reports nothing rather than a stranger's account.
+  store.set(KV.local.project('p-default'), { id: 'p-default', name: 'Default', createdAt: at, updatedAt: at })
+  expect(facts('p-default')).toEqual({})
+})
 
 it('names each sender as the Policy lists it, by its id where the id is readable, and as its kind names one it does not list', () => {
   const view = snapshot(views())

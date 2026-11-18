@@ -1,4 +1,7 @@
-/** Settings → Projects: the list of projects, and each project's own page holding its record and the Execution settings it may override. */
+/**
+ * Settings → Projects: the page of the project the project bar has selected, holding its record and the Execution settings
+ * it may override. Every project is its own page, so this group never lists what another project owns.
+ */
 import { useState, type FormEvent } from 'react'
 import { projectRepositories, type LocalProjectView } from '../sources/local-format.ts'
 import { Button, InfoTip, Switch } from './controls.tsx'
@@ -6,40 +9,23 @@ import type { SettingsView } from './api.ts'
 import { SaveBar } from './draft.tsx'
 import { ProjectFields, projectBody, projectDraft, projectReady, type ProjectDraft } from './projects.tsx'
 import { usePanel, usePanelData } from './provider.tsx'
-import { settingsRoute } from './route.ts'
 import { ModelField, useBlockDraft, useSettings } from './settings-kit.tsx'
 import { errorText } from './text.ts'
 import { Hint, Section } from './widgets.tsx'
 
-/** The project settings group: its index, or the page of the project the route names. */
+/** The project settings group: the page of the project the bar has selected, never a list of every project. */
 export function ProjectsSettings({ project }: { project?: string }) {
-  const { t } = usePanel()
+  const { t, project: selected } = usePanel()
   const { projects } = usePanelData()
-  const current = project === undefined ? undefined : projects.find(item => item.id === project)
-  if (project === undefined) return <ProjectsIndex />
-  // A project named by a bookmark may be gone; the list is still the page to land on rather than an error.
-  return current ? <ProjectSettings key={current.id} project={current} /> : <Hint>{t('loading')}</Hint>
-}
-
-/** One row per project; each row opens that project's own page. */
-function ProjectsIndex() {
-  const { t, navigate } = usePanel()
-  const { projects } = usePanelData()
-  if (!projects.length) return <Hint>{t('projectsSettingsEmpty')}</Hint>
-  return <div className="dt-form dt-block">
-    <p className="dt-hint">{t('projectsSettingsHint')}</p>
-    <ul className="dt-list">{projects.map(item => <li key={item.id} className="dt-row-meta" data-project={item.id}>
-      <button type="button" className="dt-textlink" onClick={() => navigate(settingsRoute('projects', { project: item.id }), true)}>
-        {item.name}</button>
-      <span className="dt-hint dt-mono">{projectRepositories(item)}</span>
-      {item.missingChain && <span className="dt-hint">{t('discuss.projectChainMissing', { chain: item.missingChain })}</span>}
-    </li>)}</ul>
-  </div>
+  // A route naming a project wins so a bookmark opens it; the bar's selection is next, and its first project until one is picked.
+  const current = projects.find(item => item.id === (project ?? selected)) ?? projects[0]
+  if (!current) return <Hint>{t('projectsSettingsEmpty')}</Hint>
+  return <ProjectSettings key={current.id} project={current} />
 }
 
 /** One project's own page: its stored record, then the Execution settings it overrides for itself. */
 function ProjectSettings({ project }: { project: LocalProjectView }) {
-  const { t, call, notify, navigate } = usePanel()
+  const { t, call, notify } = usePanel()
   const { reloadProjects } = usePanelData()
   const [draft, setDraft] = useState<ProjectDraft>(() => projectDraft(project))
   const [busy, setBusy] = useState(false)
@@ -59,8 +45,6 @@ function ProjectSettings({ project }: { project: LocalProjectView }) {
   }
   return <>
     <div className="dt-row-meta">
-      <button type="button" className="dt-textlink" onClick={() => navigate(settingsRoute('projects'), true)}>
-        {t('settingsGroup.projects')}</button>
       <span className="dt-hint dt-mono">{projectRepositories(project)}</span>
     </div>
     {project.missingChain && <p className="dt-error dt-project-missing-chain">{t('discuss.projectChainMissing',

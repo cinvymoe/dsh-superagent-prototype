@@ -1,20 +1,18 @@
 /** Source status view (health, filtered Triggers, dropped replies) and Source settings cards. */
 import { useEffect, useState } from 'react'
 import type { FieldSpec } from '../sources/kind.ts'
-import type { LocalProjectView } from '../sources/local-format.ts'
+import { projectChain, type LocalProjectView } from '../sources/local-format.ts'
 import { usePoll, type DroppedReply, type SourceStatusRow, type SourceView } from './api.ts'
 import { DisclosureRow, Dot, Icon, InfoTip, Switch, Tag } from './controls.tsx'
 import { SaveBar } from './draft.tsx'
 import { sourceMark } from './marks.ts'
-import { usePanel, usePanelData } from './provider.tsx'
+import { useCurrentProject, usePanel, usePanelData } from './provider.tsx'
 import { setupPage, settingsRoute, type Route } from './route.ts'
 import { ConfigHistory, Fields, SourceField, useBlockDraft, useSettings } from './settings-kit.tsx'
 import { actorName, healthText, localized, readableMarkers, reasonLabel, valueLabel, when } from './text.ts'
 import { CheckSetupButton, Hint, LabelValue, LoadState, SetupMessage, StatusHead, When } from './widgets.tsx'
 
 type ChainRow = Record<string, string>
-/** The chain a project owns; a project without one owns the Source's shared `default` chain. */
-const chainOf = (project: LocalProjectView) => project.chain ?? 'default'
 /**
  * Repository chains are project configuration: the card shows the current project's chain plus any chain no project
  * owns, and every other row is carried through a save untouched so one project never rewrites another's.
@@ -23,7 +21,7 @@ function chainScope(field: FieldSpec, config: unknown, saved: unknown, projects:
   if (field.type !== 'rows') return undefined
   const column = field.columns[0]!.key
   const rows = (input: unknown) => (Array.isArray(input) ? input as ChainRow[] : [])
-  const elsewhere = (row: ChainRow) => projects.some(project => chainOf(project) === row[column] && project.id !== current?.id)
+  const elsewhere = (row: ChainRow) => projects.some(project => projectChain(project) === row[column] && project.id !== current?.id)
   /** Swap the visible rows back into place, leaving another project's rows exactly where they are. */
   const merge = (next: unknown): ChainRow[] => {
     const edited = rows(next)
@@ -38,8 +36,9 @@ function chainScope(field: FieldSpec, config: unknown, saved: unknown, projects:
 }
 
 function SourceCard({ source }: { source: SourceView }) {
-  const { t, call, project } = usePanel()
+  const { t, call } = usePanel()
   const { running, projects } = usePanelData()
+  const current = useCurrentProject()
   const { reload } = useSettings()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const refreshLabels = async () => { const { added } = await call('POST sources/:id/labels',
@@ -51,8 +50,6 @@ function SourceCard({ source }: { source: SourceView }) {
   // Saving a modified setup-sensitive field restarts dsh-superagent, interrupting running Assignments.
   const restarts = draft.dirty && source.restarts.some(changed)
   const description = localized(t, source.description)
-  // The project bar shows its first project until another is picked, so a scoped field follows the same rule.
-  const current = projects.find(item => item.id === project) ?? projects[0]
   // Hide derived facts for unsaved field edits until the new value is saved.
   const field = (spec: FieldSpec) => {
     const scope = spec.scoped === 'project' ? chainScope(spec, value.config[spec.key], saved.config[spec.key], projects,

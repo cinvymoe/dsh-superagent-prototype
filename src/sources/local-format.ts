@@ -41,6 +41,9 @@ export function projectRepositories(project: Pick<LocalProject, 'repository' | '
     : project.repository ?? ''
 }
 
+/** The chain a project executes through: the one it names, or the Source's shared `default` chain for a legacy record. */
+export function projectChain(project: Pick<LocalProject, 'chain'>): string { return project.chain ?? 'default' }
+
 /**
  * A project as the panel receives it: the stored record plus two values derived from its GitHub chain. Neither is
  * stored on the project, because the chain row is the one place a bot is configured.

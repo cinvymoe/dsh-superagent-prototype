@@ -92,8 +92,12 @@ export interface SourceKind<C extends Record<string, unknown> = Record<string, u
   kind: string
   title: Localized
   description: Localized
-  /** Read-only status facts derived from `deployment` (undefined while waiting for setup), keyed by field key. */
-  facts?(deployment: Deployment | undefined): Record<string, Localized | string>
+  /**
+   * Read-only status facts derived from `deployment` (undefined while waiting for setup), keyed by field key. A `chain`
+   * scope narrows facts a repository chain owns to the one chain the panel's project owns, so a project's card never
+   * reports another project's chain.
+   */
+  facts?(deployment: Deployment | undefined, scope?: { chain?: string }): Record<string, Localized | string>
   /** Validates stored and submitted configuration and fills defaults. */
   schema: z.ZodType<C>
   /**

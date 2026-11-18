@@ -2,7 +2,7 @@
 import { UserError } from '../core/index.ts'
 import { GithubConfigSchema, normalizeGithubConfig, type Deployment, type GithubChain, type GithubConfig } from '../deployment.ts'
 import { KV } from '../kv.ts'
-import type { LocalProject, LocalProjectView } from '../sources/local-format.ts'
+import { projectChain, type LocalProject, type LocalProjectView } from '../sources/local-format.ts'
 import type { LocalIssues, LocalProjectFields } from './local.ts'
 import type { Settings } from './settings.ts'
 import type { Store } from './store.ts'
@@ -140,7 +140,7 @@ export class Projects {
   }
 
   /** The chain a project executes through: its own chain, or `default` for a legacy record without one. */
-  private chainOf(project: LocalProject): string { return project.chain ?? 'default' }
+  private chainOf(project: LocalProject): string { return projectChain(project) }
 
   /** The account a chain's CLI is signed in to, once setup has resolved it; absent while setup is incomplete. */
   private account(chain: string): string | undefined {
