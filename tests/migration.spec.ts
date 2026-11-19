@@ -275,7 +275,7 @@ it('upgrades a schema 12 Agent block: the old aligner becomes the answerer and t
   expect(agents.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-executor'])
   expect(agents.main.enabledPlugins).toEqual(['image', 'billion-context', 'imported-executor'])
   // Schema 14 gives the aligner its own role again; an upgraded block starts it enabled on its defaults, not on `answerer`.
-  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'] })
+  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   // billion-context is seeded back because the main Session still enables it.
   expect(agents.plugins).toEqual(expect.arrayContaining([
     { id: 'imported-executor', name: 'Imported executor tools', tools: ['plugin_lint'], roles: ['worker'] }]))
@@ -283,7 +283,7 @@ it('upgrades a schema 12 Agent block: the old aligner becomes the answerer and t
   const history = migrated.settingsHistory()[0]!.settings.agents
   expect(history).not.toHaveProperty('executor')
   expect(history.answerer.enabledPlugins).toEqual(['image', 'web'])
-  expect(history.aligner).toEqual({ model: null, enabledPlugins: ['image'] })
+  expect(history.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   expect(history.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-executor'])
   migrated.close()
 })
@@ -301,7 +301,7 @@ it('renames an old aligner entry even when a sibling role carried the only per-t
   const store = new Store(path)
   const agents = store.settings().agents
   expect(agents.answerer.model).toEqual({ provider: 'old', model: 'answerer-model' })
-  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'] })
+  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   store.close()
 })
 
@@ -329,12 +329,12 @@ it('adds the aligner to a schema 13 Agent block and leaves the answerer exactly 
   const agents = migrated.settings().agents
   // The answerer keeps its model and plugins: the step that renamed old roles never runs for a schema 13 database.
   expect(agents.answerer).toMatchObject({ model: answererModel, enabledPlugins: ['image', 'imported-answerer'] })
-  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'] })
+  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   expect(agents.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-answerer'])
   // The stored history reads the same way, and the plugin scope of the answerer is untouched.
   const history = migrated.settingsHistory()[0]!.settings.agents
   expect(history.answerer.enabledPlugins).toEqual(['image', 'imported-answerer'])
-  expect(history.aligner).toEqual({ model: null, enabledPlugins: ['image'] })
+  expect(history.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   expect(history.plugins).toEqual(expect.arrayContaining([
     { id: 'imported-answerer', name: 'Imported answerer tools', tools: ['plugin_lint'], roles: ['answerer'] }]))
   migrated.close()

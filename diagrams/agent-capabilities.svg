@@ -131,7 +131,7 @@
         <text x="868" y="347" class="d-tag" fill="#5a6580" text-anchor="middle">ALIGNER</text>
         <text x="840" y="364" class="d-name" fill="#2d3142">aligner · worker-&lt;ticketId&gt;</text>
         <text x="840" y="384" class="d-sub" fill="#4f5d75">read / read_image / glob / grep · orchestrator_read/align/report</text>
-        <text x="840" y="404" class="d-mono" fill="#5a6580">image 是唯一可关的插件；不占 worker 槽</text>
+        <text x="840" y="404" class="d-mono" fill="#5a6580">唯一可关的角色；image 是唯一可关插件；不占 worker 槽</text>
 
         <rect x="824" y="424" width="416" height="88" rx="6" fill="#f5f5f5"/>
         <rect x="824" y="424" width="416" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
@@ -149,6 +149,7 @@
         <!-- annotation -->
         <text x="64" y="528" class="d-annot" fill="#bf4520">保存 agents 后，运行中的 Session 在下一个 step 重装 allow list。</text>
         <text x="64" y="552" class="d-annot" fill="#5a6580">宿主没注册的工具被过滤；进行中的 step 保持它开始时的工具。</text>
+        <text x="64" y="576" class="d-annot" fill="#5a6580">角色闸门：只有 aligner 可关；关后 launch 先失败 roleDisabled，交结论 409。</text>
 
         <!-- ============ legend strip ============ -->
         <line x1="40" y1="644" x2="1240" y2="644" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.12"/>

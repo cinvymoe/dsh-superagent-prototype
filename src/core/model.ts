@@ -241,7 +241,11 @@ export interface Assignment {
   startedAt?: string
   endedAt?: string
   endedReason?: string
-  report?: { state: ReportState; summary: string; at: string }
+  /**
+   * The latest report: its state and English summary, and a reason code when the Executor's own failure has one (such as
+   * `roleDisabled`), which the panel localizes instead of showing only the summary.
+   */
+  report?: { state: ReportState; summary: string; at: string; reason?: Reason }
   /** When Inputs last reached the worker; one at or after `report.at` means the worker has been busy with Inputs since that report. */
   deliveredAt?: string
   /**

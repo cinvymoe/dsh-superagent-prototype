@@ -6,14 +6,14 @@ import { constants } from 'node:fs'
 import { access, mkdir, mkdtemp, rmdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { key, latestAssignment, latestReport, liveTicket, runningAssignment, threadKey, waitsForPerson } from '../core/index.ts'
-import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Executor, Mandate, PolicyEffect, Ticket, TicketInput, Trigger }
+import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Executor, Mandate, PolicyEffect, Reason, Ticket, TicketInput, Trigger }
   from '../core/index.ts'
 import type { Deployment, Machine } from '../deployment.ts'
 import { runAsWorker, verifyDirectory } from '../infra/environment.ts'
-import { settingsFor, type Settings } from '../policy.ts'
+import { settingsFor, type AgentRole, type Settings } from '../policy.ts'
 import type { Store } from '../app/store.ts'
 import { Later, type Effects } from '../app/effects.ts'
-import { alignerSlotLimit, workerSlotLimit } from '../app/agent-specs.ts'
+import { alignerSlotLimit, roleEnabled, ticketRole, workerSlotLimit } from '../app/agent-specs.ts'
 import { resolvedExecutionRoot, type Variable } from '../app/execution-environment.ts'
 import type { Sessions } from '../app/sessions.ts'
 import { WorktreeNameSchema } from '../app/assessment.ts'
@@ -356,6 +356,11 @@ export class DshExecutor implements Executor {
     if (waiting?.length) throw new Later()
     // A paused project holds its own tickets' launches; the effect retries until the pause ends, as a paused process does.
     if (settingsFor(this.host.store.settings(), ticket.project).paused) throw new Later()
+    // A role a person turned off cannot start a Session. The Ticket fails here, before it takes a slot of its pool, with the
+    // reason code the panel words; an automatic retry would only fail again, so it waits for a person's retry after the role
+    // is on again (see `resumeAligners` for the Inputs a running Session kept waiting meanwhile).
+    const role = ticketRole(ticket)
+    if (!roleEnabled(this.host.store.settings(), role)) { this.launchRefused(ticketId, assignmentId, role); return }
     this.pool(ticket).reserve(ticketId, 'launch')
     try { await this.launch(ticket, assignment); this.transient.delete(`launch:${assignmentId}`) }
     catch (error) {
@@ -378,6 +383,8 @@ export class DshExecutor implements Executor {
     const first = this.host.store.tickets.get(ticketId)
     const target = first && liveTicket(first) ? runningAssignment(first) : undefined
     if (!first || !target || !first.undelivered.length) return
+    // A role turned off takes no new Input: what waits stays in `undelivered` until a save turns the role back on.
+    if (!roleEnabled(this.host.store.settings(), ticketRole(first))) return
     let woken = false
     try {
       for (;;) {
@@ -502,12 +509,32 @@ export class DshExecutor implements Executor {
     if (!ticket || !liveTicket(ticket) || latestAssignment(ticket)?.id !== assignmentId) return
     this.failed(ticketId, String(error))
   }
-  /** Records a `failed` report on the ticket and relays the failure to the main Session in one transaction. */
-  private failed(ticketId: string, summary: string): void {
+  /**
+   * Marks a queued launch failed because its role is turned off, with the reason code the panel words. The caller checks the
+   * ticket is still the latest and live; the ticket then waits for a person, and a retry after the role is enabled starts it.
+   */
+  private launchRefused(ticketId: string, assignmentId: string, role: AgentRole): void {
+    const ticket = this.host.store.tickets.get(ticketId)
+    if (!ticket || !liveTicket(ticket) || latestAssignment(ticket)?.id !== assignmentId) return
+    this.failed(ticketId, `The ${role} Agent is turned off in the Agent settings`, { code: 'roleDisabled', values: { role } })
+  }
+  /** Records a `failed` report on the ticket, with an optional reason code, and relays the failure to the main Session in one transaction. */
+  private failed(ticketId: string, summary: string, reason?: Reason): void {
     this.host.store.atomic(() => {
-      const updated = this.host.engine.report(ticketId, { state: 'failed', summary })
+      const updated = this.host.engine.report(ticketId, { state: 'failed', summary, ...(reason ? { reason } : {}) })
       this.relay(resultRelay(updated, 'failed', summary))
     })
+  }
+  /**
+   * After a saved `agents` block turns a role back on, queues delivery for the Inputs its open Tickets kept waiting while it
+   * was off: a running pair of aligner slots resumes, and a Ticket that failed its launch still needs a person's retry.
+   */
+  resumeAligners(): void {
+    for (const ticket of this.host.store.tickets.open()) {
+      if (!ticket.undelivered.length || !roleEnabled(this.host.store.settings(), ticketRole(ticket))) continue
+      const running = runningAssignment(ticket)
+      if (running) this.deliver(ticket, running)
+    }
   }
   private relay({ id, text }: { id: string; text: string }): void { this.host.sessions.relay(id, text) }
   private async launch(ticket: Ticket, assignment: Assignment): Promise<void> {

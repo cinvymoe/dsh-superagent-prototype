@@ -57,6 +57,11 @@ export interface AgentSpec {
   tools: AgentToolInstaller
   /** The concurrency pool a Session of this role holds, or null for the one main Session. */
   slot: AgentSlot | null
+  /**
+   * Whether a person may turn the role off: the panel offers the switch only for a switchable role, and a save refuses
+   * `enabled: false` for any other, so the infrastructure roles are always on.
+   */
+  switchable: boolean
 }
 /** The main Session's required core tools: the shell, reading and jobs it uses to route and watch. */
 const MAIN_REQUIRED = ['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'] as const
@@ -84,25 +89,37 @@ export const AGENT_SPECS: Readonly<Record<AgentRole, AgentSpec>> = {
   main: { id: 'main', preset: ROUTER_PRESET, required: MAIN_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.main,
     model: settings => roleModel(settings, 'main'),
     prompt: (prompts, { config, environment }) => prompts.compose(config, 'orchestrator', environment),
-    tools: 'main', slot: null },
+    tools: 'main', slot: null, switchable: false },
   worker: { id: 'worker', preset: WORKER_PRESET, required: WORK_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.worker,
     model: settings => roleModel(settings, 'worker'),
     // An execution Ticket reads the worker rules, or, when its plan pinned a strategy, that strategy's execution guide.
     prompt: (prompts, { config, strategy, environment }) => strategy
       ? prompts.composeExecute(config, strategy.mode, environment) : prompts.compose(config, 'worker', environment),
-    tools: 'work', slot: { pool: 'worker', limit: workerSlotLimit } },
+    tools: 'work', slot: { pool: 'worker', limit: workerSlotLimit }, switchable: false },
   aligner: { id: 'aligner', preset: WORKER_PRESET, required: ALIGN_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.aligner,
     model: settings => roleModel(settings, 'aligner'),
     // An alignment Ticket reads the shared rules and the alignment guide only: it proposes an alignment and implements
     // nothing, so it never reads the worker mandate, its handoff or the replies an execution Ticket owns.
     prompt: (prompts, { config, environment }) => prompts.composeAlign(config, environment),
-    tools: 'align', slot: { pool: 'aligner', limit: alignerSlotLimit } },
+    tools: 'align', slot: { pool: 'aligner', limit: alignerSlotLimit }, switchable: true },
   answerer: { id: 'answerer', preset: WORKER_PRESET, required: WORK_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.answerer,
     model: settings => roleModel(settings, 'answerer'),
     // A discussion Answerer never works a Ticket, so it reads the discussion guide without a Ticket environment.
     prompt: (prompts, { config }) => prompts.composeDiscuss(config, []),
-    tools: 'answer', slot: { pool: 'answerer', limit: answerSlotLimit } },
+    tools: 'answer', slot: { pool: 'answerer', limit: answerSlotLimit }, switchable: false },
 }
 
 /** The spec of one role; every consumer indexes the registry through this helper so a lookup reads as a role. */
 export function agentSpec(role: AgentRole): AgentSpec { return AGENT_SPECS[role] }
+/**
+ * The role a Ticket's Session runs: an alignment Ticket's aligner, every other Ticket's worker. Both run per Ticket, so a
+ * caller that creates or delivers a Ticket Session names the role from its mode rather than from a stored flag.
+ */
+export const ticketRole = (ticket: Pick<Ticket, 'mode'>): AgentRole => ticket.mode === 'align' ? 'aligner' : 'worker'
+/**
+ * Whether `role` may start or continue work under `settings`: a switchable role follows its saved `enabled` flag, and a role
+ * the panel cannot switch off is always on, even if a record written elsewhere says otherwise. The gate reads this; the save
+ * validation (`agentsRoleRequired`) is what keeps a non-switchable role from being stored off in the first place.
+ */
+export const roleEnabled = (settings: Pick<Settings, 'agents'>, role: AgentRole): boolean =>
+  !agentSpec(role).switchable || settings.agents[role].enabled !== false

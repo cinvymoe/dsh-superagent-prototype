@@ -105,9 +105,13 @@ export interface AgentPluginCatalog extends AgentPlugin {
   /** Where a built-in group's tools come from; a stored plugin has none. */
   providedBy?: 'preset' | 'host' | 'mount'
 }
-/** One role's catalog as `GET settings` offers it: the required tools, the applicable plugins, and the enabled ones. */
+/** One role's catalog as `GET settings` offers it: the required tools, the applicable plugins, the enabled ones, and its switch. */
 export interface AgentRoleCatalog {
   role: AgentRole; preset: string; required: string[]; plugins: string[]; enabledPlugins: string[]
+  /** Whether the saved block turns the role on; a role the panel cannot switch off reads as on. */
+  enabled: boolean
+  /** Whether the panel offers the role's switch at all; the infrastructure roles have none. */
+  switchable: boolean
 }
 /** One group of host tools the panel offers to save as a plugin: an MCP server's tools or a shared tool-name prefix. */
 export interface PluginSuggestion {
@@ -319,10 +323,22 @@ export function agentCatalog(agents: AgentsConfig, registered: readonly Register
     plugins,
     roles: AGENT_ROLES.map(role => ({ role, preset: AGENT_SPECS[role].preset, required: [...AGENT_SPECS[role].required],
       plugins: plugins.filter(plugin => plugin.roles.includes(role)).map(plugin => plugin.id),
-      enabledPlugins: [...agents[role].enabledPlugins] })),
+      enabledPlugins: [...agents[role].enabledPlugins], enabled: agents[role].enabled !== false,
+      switchable: AGENT_SPECS[role].switchable })),
     suggestions,
     ungroupedTools,
     availableTools: [...available].sort(),
+  }
+}
+/**
+ * Refuse a save that turns off a role the registry does not let a person switch: `main`, `worker` and `answerer` are
+ * infrastructure every Ticket needs, so their `enabled` is always on and only a role with `switchable: true` (the Aligner
+ * today) may be stored as false. Reading stays lenient; this runs on the `agents` block's save only.
+ * @throws UserError (`agentsRoleRequired`) naming the first role stored off.
+ */
+export function validateAgentRoles(agents: AgentsConfig): void {
+  for (const role of AGENT_ROLES) {
+    if (!AGENT_SPECS[role].switchable && agents[role].enabled === false) throw new UserError('agentsRoleRequired', { role })
   }
 }
 /**

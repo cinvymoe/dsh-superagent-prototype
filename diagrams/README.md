@@ -14,7 +14,7 @@
 | [003 执行 · 阶段](../docs/003-execution.md) | [ticket-state](./ticket-state.html) | 七个阶段与恢复；Assignment 平行时间线 |
 | [003 执行 · 失败](../docs/003-execution.md) | [failure-recovery](./failure-recovery.html) | 过路性重试 / 挂起 / 恢复，以及四条横切规则 |
 | [003 执行 · 并发](../docs/003-execution.md) | [concurrency-queue](./concurrency-queue.html) | 三类来源、有限槽位、人的插队槽 |
-| [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | [agent-capabilities](./agent-capabilities.html) | 四个角色的工具集怎么按插件拼出来 |
+| [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | [agent-capabilities](./agent-capabilities.html) | 四个角色的工具集怎么按插件拼出来，以及唯一可关的角色闸门 |
 | [004 提示词](../docs/004-prompts.md) | [prompt-assembly](./prompt-assembly.html) | 团队段 → 内置段 → 技能 → 角色组装 → 版本 |
 | [005 面板](../docs/005-panel.md) | [panel-ia](./panel-ia.html) · [requirement-lifecycle](./requirement-lifecycle.html) · [discussion-to-requirement](./discussion-to-requirement.html) · [discussion-routing](./discussion-routing.html) | 四层漏斗；需求的状态；讨论如何变成需求；Router 的 discuss 决策与交给对齐 |
 | [006 部署](../docs/006-deployment.md) | [deployment-topology](./deployment-topology.html) · [trust-boundaries](./trust-boundaries.html) | 一个进程与一个状态目录；唯一授权路径与被拒绝的旁路 |

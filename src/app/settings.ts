@@ -8,7 +8,7 @@ import type { SourceHost } from '../sources/host.ts'
 import type { HealthBoard, HealthEntry } from '../infra/health.ts'
 import type { SourceRegistry } from '../sources/registry.ts'
 import type {} from '@deepseek-ai/dsh-tools'
-import { agentCatalog, closeAgentsPlugins, validateAgentPlugins, type AgentsCatalog, type RegisteredTool } from './agent-tools.ts'
+import { agentCatalog, closeAgentsPlugins, validateAgentPlugins, validateAgentRoles, type AgentsCatalog, type RegisteredTool } from './agent-tools.ts'
 import { resolveRoleModel } from './role-models.ts'
 import { changedPaths, settingsNotice } from './notices.ts'
 import type { Sessions } from './sessions.ts'
@@ -58,7 +58,7 @@ const BLOCKS: Record<'policy' | 'eval' | 'executor' | 'agents' | 'projects' | 's
     // Reading stays lenient; a save is checked against the built-in plugin catalog and each role's scope, so a stored plugin
     // cannot repeat an id or declare a forbidden or required tool, and a role cannot enable an unknown or inapplicable one.
     // A saved block is closed over each plugin's `requires` first, so enabling one capability also enables its dependencies.
-    parse: value => { const agents = closeAgentsPlugins(AgentsConfigSchema.parse(value)); validateAgentPlugins(agents); return agents },
+    parse: value => { const agents = closeAgentsPlugins(AgentsConfigSchema.parse(value)); validateAgentPlugins(agents); validateAgentRoles(agents); return agents },
     merge: (settings, value) => ({ ...settings, agents: value as SettingsValue['agents'] }),
     // A model or tool change reaches running Sessions, so only the management panel may make one.
     guard: (current, candidate, origin) => {
@@ -94,6 +94,11 @@ export interface SettingsHost {
   readonly guardSource?: (id: string, current: SettingsValue, candidate: SettingsValue) => void
   /** Triggers an immediate pass so work newly allowed by a settings save runs right away. */
   requestPass(): void
+  /**
+   * Re-queues the Input deliveries an open Ticket kept waiting while its role was turned off, so a save that turns the role
+   * back on flushes the backlog. The Executor answers it; it is a callback because Settings is built before it.
+   */
+  resumeDeliveries(): void
 }
 
 /**
@@ -233,8 +238,9 @@ export class Settings {
       if (before !== after) engine.policyChanged(before, after, effects)
     })
     // A saved agents block reaches every running Session at its next step: its tool restriction is reinstalled here, while
-    // a model override waits for the next Session of its role, as a Session keeps the model it started with.
-    if (block === 'agents') sessions.agentsChanged()
+    // a model override waits for the next Session of its role, as a Session keeps the model it started with. A role the save
+    // turns back on also takes the Inputs its Tickets kept waiting while it was off; the Executor skips the roles still off.
+    if (block === 'agents') { sessions.agentsChanged(); this.host.resumeDeliveries() }
     // Rewrite worker command shims immediately when `blockedCommands` changes.
     const blocked = settings.executor.blockedCommands
     const changed = blocked.join(' ') !== old.executor.blockedCommands.join(' ')

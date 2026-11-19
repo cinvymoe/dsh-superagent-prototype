@@ -1933,8 +1933,8 @@ it('ignores an added tool the host stops providing, without admitting other tool
 it('keeps a stored plugin tool the host never registered out of every allow list, without throwing', async () => {
   const stored = { id: 'ghost', name: 'Ghost tools', tools: ['ghost_tool'] }
   const saved = runtime.store.settings()
-  const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'ghost'] },
-    worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ghost'] },
+  const value = { plugins: [stored], main: { ...saved.agents.main, model: null, enabledPlugins: ['image', 'billion-context', 'ghost'] },
+    worker: { ...saved.agents.worker, model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ghost'] },
     aligner: saved.agents.aligner, answerer: saved.agents.answerer }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   const running = await acceptedTicket()

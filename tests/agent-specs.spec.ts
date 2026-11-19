@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { alignPrompt, guides, workerPrompt } from '../src/app/context.ts'
 import { ALIGN_CONCURRENCY, AGENT_SPECS, ANSWER_CONCURRENCY, agentSpec } from '../src/app/agent-specs.ts'
 import { AGENT_TOOLS, ALIGN_TOOLS, REQUIRED_TOOLS, agentCatalog } from '../src/app/agent-tools.ts'

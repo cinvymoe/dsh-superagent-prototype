@@ -127,10 +127,15 @@ export const DEFAULT_AGENT_PLUGINS: readonly AgentPlugin[] = [
   { id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
     tools: [...COMPRESSION_TOOLS], roles: ['main', 'worker'] },
 ]
-/** One role's overrides: its model when set (null inherits the role's default model) and the plugins it enables. */
+/**
+ * One role's overrides: its model when set (null inherits the role's default model), the plugins it enables, and whether
+ * the role is on. `enabled` defaults to true, so a block stored before the field existed reads as every role being on; only
+ * a role the registry marks switchable may be saved as false (see `agent-tools.ts`), and the others read as on regardless.
+ */
 const agentRoleConfig = (role: AgentRole) => z.object({
   model: RoleModelSchema.nullable().default(null),
   enabledPlugins: z.array(AgentPluginIdSchema).default(() => [...DEFAULT_ENABLED_PLUGINS[role]]),
+  enabled: z.boolean().default(true),
 }).strict()
 /**
  * The four roles and the shared plugin catalog. Reading stays lenient about a stored plugin's tools, which the host may
