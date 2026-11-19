@@ -22,6 +22,7 @@ import { GithubConfigSchema, githubChains, normalizeGithubConfig, type Deploymen
 import { environmentOf, ticketEnvironment, type Variable } from './execution-environment.ts'
 import type { SetupProblem } from '../setup.ts'
 import { DshExecutor, sourceTrigger, triggerMessage, workerSessionId } from '../executor/dsh.ts'
+import { roleEnabled } from './agent-specs.ts'
 import { ticketCard } from './cards.ts'
 import { MasterAssessor } from './assessment.ts'
 import { KV } from '../kv.ts'
@@ -159,6 +160,8 @@ export class Runtime extends Service implements SourceHost {
       const policyChanged: EngineForSettings['policyChanged'] = (from, to, effects) => { this.engine.policyChanged(from, to, effects) }
       this.settings = new Settings({ store, sources, engine: { policyChanged }, health: board, context: ctx, lifetime: this.lifetime, sessions,
         sourceHost: this, setup, requestPass: () => { this.passes.request() },
+        // Built before the Executor, so the flush of a re-enabled role's backlog reads it when the save runs.
+        resumeDeliveries: () => { this.executor.resumeAligners() },
         // A save of the GitHub chains must keep every project's chain and every intake repository unique; `projects` is set below.
         guardSource: (id, current, candidate) => {
           if (id === 'github') this.projects.guardSource(current.sources.github?.config, candidate.sources.github?.config)
@@ -365,6 +368,9 @@ export class Runtime extends Service implements SourceHost {
     // The same conclusion is one session: a repeated click must not queue a second Aligner behind the first.
     const previous = rounds.at(-1)
     if (previous?.answerId === answered.id) throw new UserError('discussionHanded', { discussion: id })
+    // The Aligner is the one role a person may turn off: handing a conclusion over while it is off would start no session, so
+    // the panel is refused with `roleDisabled` (409) and the discussion stays open, with nothing created.
+    if (!roleEnabled(this.store.settings(), 'aligner')) throw new UserError('roleDisabled', { role: 'aligner' })
     const ticket = this.engine.acceptAlignment({ source: 'local', id: issue.id }, { issueId: issue.id, title: issue.title,
       triggerIds: this.local.humanTriggers(issue.id), actor: { source: 'local', id: discussion.author },
       scope: `align · ${issue.title}`, note: `Discussion ${discussion.id}, concluded in panel:\n${answered.answer}`,
@@ -416,7 +422,7 @@ export class Runtime extends Service implements SourceHost {
     }
     this.sessions.install()
     this.executor.install()
-    await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-superagent orchestrator', 'orchestrator')
+    await this.sessions.ensure(this.masterId, this.machine.stateDir, 'dsh-superagent orchestrator', 'main')
     for (const id of this.settings.syncable()) await this.settings.sync(id).catch(() => { /* sync() records its failure in health. */ })
     // If stop() was called while awaiting setup, session creation, or policy sync, do not start background loops.
     if (this.closing()) return

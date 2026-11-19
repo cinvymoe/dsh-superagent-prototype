@@ -12,11 +12,17 @@ import type { PromptConfig, Prompts } from './prompts.ts'
 
 /** The presets the bundle's patch defines: the main Session's, and the one every Ticket Session and discussion Answerer runs under. */
 export const ROUTER_PRESET = 'dsh-superagent-router', WORKER_PRESET = 'dsh-superagent-worker'
-/** How a role's tool surface is installed on its Session: the main Session's, a Ticket worker's, or a discussion Answerer's. */
-export type AgentToolInstaller = 'main' | 'work' | 'answer'
-/** A role's concurrency pool: Ticket workers share the executor's slots, while a discussion answer runs in its own. */
+/**
+ * How a role's tool surface is installed on its Session: the main Session's, an execution Ticket worker's, an alignment
+ * Ticket aligner's read-only set, or a discussion Answerer's.
+ */
+export type AgentToolInstaller = 'main' | 'work' | 'align' | 'answer'
+/**
+ * A role's concurrency pool: execution Tickets share the executor's slots, alignment Tickets hold their own fixed pool, and
+ * a discussion answer runs in its own, so none of the three waits behind another.
+ */
 export interface AgentSlot {
-  pool: 'worker' | 'answerer'
+  pool: 'worker' | 'aligner' | 'answerer'
   /** How many Sessions of this pool run at once; a worker's follows the saved Execution limit. */
   limit(settings: Pick<Settings, 'executor'>): number
 }
@@ -51,11 +57,22 @@ export interface AgentSpec {
   tools: AgentToolInstaller
   /** The concurrency pool a Session of this role holds, or null for the one main Session. */
   slot: AgentSlot | null
+  /**
+   * Whether a person may turn the role off: the panel offers the switch only for a switchable role, and a save refuses
+   * `enabled: false` for any other, so the infrastructure roles are always on.
+   */
+  switchable: boolean
 }
 /** The main Session's required core tools: the shell, reading and jobs it uses to route and watch. */
 const MAIN_REQUIRED = ['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'] as const
 /** The tools a Ticket Session always keeps: work tools that come from no plugin. */
 const WORK_REQUIRED = ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'] as const
+/** The tools an aligner always keeps: none of its reading tools comes from a plugin, so no switch can take one away. */
+const ALIGN_REQUIRED = ['read', 'glob', 'grep'] as const
+/** How many alignments are proposed at once; its own pool, so an aligner never waits for a worker slot. */
+export const ALIGN_CONCURRENCY = 2
+/** The aligner pool's fixed limit, which the registry states beside the worker pool. */
+export const alignerSlotLimit = (): number => ALIGN_CONCURRENCY
 /** How many discussions answer at once; separate from the worker slots, so a discussion never holds one. */
 export const ANSWER_CONCURRENCY = 2
 /** The answerer pool's fixed limit, which the registry states beside the worker pool. */
@@ -64,29 +81,45 @@ export const answerSlotLimit = (): number => ANSWER_CONCURRENCY
 export const workerSlotLimit = (settings: Pick<Settings, 'executor'>): number => settings.executor.maxWorkers
 
 /**
- * The three configured roles. Worker and Answerer run the same preset and keep the same required tools, but differ in
- * prompt, tool installer, default plugins and slot: alignment and execution Tickets are both workers, while a discussion's
- * Answerer runs its own read-only pool.
+ * The four configured roles. Worker, Aligner and Answerer run the same preset, but differ in prompt, tool installer,
+ * required tools, default plugins and slot: an execution Ticket runs a worker, an alignment Ticket an aligner that proposes
+ * an alignment through a read-only tool set, and a discussion's Answerer answers questions in its own read-only pool.
  */
 export const AGENT_SPECS: Readonly<Record<AgentRole, AgentSpec>> = {
   main: { id: 'main', preset: ROUTER_PRESET, required: MAIN_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.main,
     model: settings => roleModel(settings, 'main'),
     prompt: (prompts, { config, environment }) => prompts.compose(config, 'orchestrator', environment),
-    tools: 'main', slot: null },
+    tools: 'main', slot: null, switchable: false },
   worker: { id: 'worker', preset: WORKER_PRESET, required: WORK_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.worker,
     model: settings => roleModel(settings, 'worker'),
-    // An align Ticket still runs on the worker role: it reads the alignment guide, a planned slice reads its pinned
-    // execution strategy, and every other Ticket reads the worker rules.
-    prompt: (prompts, { config, ticket, strategy, environment }) => ticket?.mode === 'align'
-      ? prompts.composeAlign(config, environment)
-      : strategy ? prompts.composeExecute(config, strategy.mode, environment) : prompts.compose(config, 'worker', environment),
-    tools: 'work', slot: { pool: 'worker', limit: workerSlotLimit } },
+    // An execution Ticket reads the worker rules, or, when its plan pinned a strategy, that strategy's execution guide.
+    prompt: (prompts, { config, strategy, environment }) => strategy
+      ? prompts.composeExecute(config, strategy.mode, environment) : prompts.compose(config, 'worker', environment),
+    tools: 'work', slot: { pool: 'worker', limit: workerSlotLimit }, switchable: false },
+  aligner: { id: 'aligner', preset: WORKER_PRESET, required: ALIGN_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.aligner,
+    model: settings => roleModel(settings, 'aligner'),
+    // An alignment Ticket reads the shared rules and the alignment guide only: it proposes an alignment and implements
+    // nothing, so it never reads the worker mandate, its handoff or the replies an execution Ticket owns.
+    prompt: (prompts, { config, environment }) => prompts.composeAlign(config, environment),
+    tools: 'align', slot: { pool: 'aligner', limit: alignerSlotLimit }, switchable: true },
   answerer: { id: 'answerer', preset: WORKER_PRESET, required: WORK_REQUIRED, defaultPlugins: DEFAULT_ENABLED_PLUGINS.answerer,
     model: settings => roleModel(settings, 'answerer'),
     // A discussion Answerer never works a Ticket, so it reads the discussion guide without a Ticket environment.
     prompt: (prompts, { config }) => prompts.composeDiscuss(config, []),
-    tools: 'answer', slot: { pool: 'answerer', limit: answerSlotLimit } },
+    tools: 'answer', slot: { pool: 'answerer', limit: answerSlotLimit }, switchable: false },
 }
 
 /** The spec of one role; every consumer indexes the registry through this helper so a lookup reads as a role. */
 export function agentSpec(role: AgentRole): AgentSpec { return AGENT_SPECS[role] }
+/**
+ * The role a Ticket's Session runs: an alignment Ticket's aligner, every other Ticket's worker. Both run per Ticket, so a
+ * caller that creates or delivers a Ticket Session names the role from its mode rather than from a stored flag.
+ */
+export const ticketRole = (ticket: Pick<Ticket, 'mode'>): AgentRole => ticket.mode === 'align' ? 'aligner' : 'worker'
+/**
+ * Whether `role` may start or continue work under `settings`: a switchable role follows its saved `enabled` flag, and a role
+ * the panel cannot switch off is always on, even if a record written elsewhere says otherwise. The gate reads this; the save
+ * validation (`agentsRoleRequired`) is what keeps a non-switchable role from being stored off in the first place.
+ */
+export const roleEnabled = (settings: Pick<Settings, 'agents'>, role: AgentRole): boolean =>
+  !agentSpec(role).switchable || settings.agents[role].enabled !== false

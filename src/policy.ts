@@ -71,10 +71,11 @@ export const RoleModelSchema = z.object({ provider: z.string().trim().min(1), mo
 export type RoleModel = z.infer<typeof RoleModelSchema>
 
 /**
- * The three Agent roles a person configures: the main Session, a Ticket's worker (alignment and execution alike), and a
- * discussion's Answerer. A worker's subagents inherit its tools.
+ * The four Agent roles a person configures: the main Session, an execution Ticket's worker, an alignment Ticket's aligner,
+ * and a discussion's Answerer. A worker's subagents inherit its tools. An aligner is a role of its own, not a worker: it
+ * proposes an alignment read-only and holds a separate pool, so it never takes a worker slot.
  */
-export const AGENT_ROLES = ['main', 'worker', 'answerer'] as const
+export const AGENT_ROLES = ['main', 'worker', 'aligner', 'answerer'] as const
 export type AgentRole = typeof AGENT_ROLES[number]
 /** A plugin's id: a stable lower-case slug shared by the built-in catalog and stored plugins. */
 export const AgentPluginIdSchema = z.string().trim().regex(/^[a-z][a-z0-9-]{0,63}$/)
@@ -106,6 +107,9 @@ export type AgentPlugin = z.infer<typeof AgentPluginSchema>
 export const DEFAULT_ENABLED_PLUGINS: Readonly<Record<AgentRole, readonly string[]>> = {
   main: ['image', 'billion-context'],
   worker: ['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'],
+  // The aligner proposes an alignment from the repository it reads; reading an image is the one capability it enables by
+  // default, and no other built-in plugin applies to it, so its tool surface stays the seven read-only tools it holds.
+  aligner: ['image'],
   answerer: ['image', 'web', 'skills', 'todo', 'subagents'],
 }
 /**
@@ -123,19 +127,25 @@ export const DEFAULT_AGENT_PLUGINS: readonly AgentPlugin[] = [
   { id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
     tools: [...COMPRESSION_TOOLS], roles: ['main', 'worker'] },
 ]
-/** One role's overrides: its model when set (null inherits the role's default model) and the plugins it enables. */
+/**
+ * One role's overrides: its model when set (null inherits the role's default model), the plugins it enables, and whether
+ * the role is on. `enabled` defaults to true, so a block stored before the field existed reads as every role being on; only
+ * a role the registry marks switchable may be saved as false (see `agent-tools.ts`), and the others read as on regardless.
+ */
 const agentRoleConfig = (role: AgentRole) => z.object({
   model: RoleModelSchema.nullable().default(null),
   enabledPlugins: z.array(AgentPluginIdSchema).default(() => [...DEFAULT_ENABLED_PLUGINS[role]]),
+  enabled: z.boolean().default(true),
 }).strict()
 /**
- * The three roles and the shared plugin catalog. Reading stays lenient about a stored plugin's tools, which the host may
+ * The four roles and the shared plugin catalog. Reading stays lenient about a stored plugin's tools, which the host may
  * no longer register; a save checks the whole block against the built-in catalog and the role scopes.
  */
 const agentsConfig = z.object({
   plugins: z.array(AgentPluginSchema).default(() => DEFAULT_AGENT_PLUGINS.map(plugin => ({ ...plugin, tools: [...plugin.tools] }))),
   main: agentRoleConfig('main').default(() => agentRoleConfig('main').parse({})),
   worker: agentRoleConfig('worker').default(() => agentRoleConfig('worker').parse({})),
+  aligner: agentRoleConfig('aligner').default(() => agentRoleConfig('aligner').parse({})),
   answerer: agentRoleConfig('answerer').default(() => agentRoleConfig('answerer').parse({})),
 }).strict()
 /**

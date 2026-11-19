@@ -157,7 +157,8 @@ export function TicketPage({ id }: { id: string }) {
       </div>}</div>}
     {/* Ordinary progress stays in the Session/Channels; only a report that halted work (blocked/failed) is shown here. */}
     {data.actions.retry && data.summary && <p className={`dt-banner${failed ? ' dt-danger' : ''}${failedText ? ' dt-mono' : ''}`}>
-      <span className="dt-banner-label">{t(failed ? 'failedPrefix' : 'blockedPrefix')}</span>{data.summary}
+      <span className="dt-banner-label">{t(failed ? 'failedPrefix' : 'blockedPrefix')}</span>{data.reportReason
+        ? reasonLabel(t, data.reportReason) : data.summary}
     </p>}
     {data.deliveryError && <p className="dt-banner dt-danger dt-mono">
       <span className="dt-banner-label">{t('deliveryFailedPrefix')}</span>{data.deliveryError}

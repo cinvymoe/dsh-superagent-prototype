@@ -1237,7 +1237,7 @@ it('blocks a command only in the project that adds it, gives every ticket the un
   ], cli: AGENT() } })
   await runtime.ready
   // The fake host keeps its agents by id across a restart, so tell the new runtime to decorate the master Session again.
-  await runtime.sessions.ensure(runtime.masterId, directory, 'dsh-superagent orchestrator', 'orchestrator')
+  await runtime.sessions.ensure(runtime.masterId, directory, 'dsh-superagent orchestrator', 'main')
   runtime.sources.register(feishuKind); runtime.sources.register(githubKind); runtime.sources.register(localKind)
   runtime.store.saveSettings({ ...runtime.store.settings(), executor: { ...runtime.store.settings().executor, prepare: 'true' } })
   // The deployment's command sits in each project's chain directory, and the project's own only in its project directory.
@@ -1933,9 +1933,9 @@ it('ignores an added tool the host stops providing, without admitting other tool
 it('keeps a stored plugin tool the host never registered out of every allow list, without throwing', async () => {
   const stored = { id: 'ghost', name: 'Ghost tools', tools: ['ghost_tool'] }
   const saved = runtime.store.settings()
-  const value = { plugins: [stored], main: { model: null, enabledPlugins: ['image', 'billion-context', 'ghost'] },
-    worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ghost'] },
-    answerer: saved.agents.answerer }
+  const value = { plugins: [stored], main: { ...saved.agents.main, model: null, enabledPlugins: ['image', 'billion-context', 'ghost'] },
+    worker: { ...saved.agents.worker, model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ghost'] },
+    aligner: saved.agents.aligner, answerer: saved.agents.answerer }
   await runtime.settings.save('agents', value, runtime.store.blockRevision('agents'), 'panel')
   const running = await acceptedTicket()
   const workerTools = ['read', 'read_image', 'grep', 'bash', 'job_output', 'job_list', 'job_kill', 'web_search', 'skill']

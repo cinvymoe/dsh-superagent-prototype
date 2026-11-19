@@ -242,5 +242,5 @@
         <text x="552" y="668" class="d-mono" fill="#5a6580">generated column, indexed when set</text>
         <text x="836" y="668" class="d-sub" fill="#4f5d75">NN</text>
         <text x="864" y="668" class="d-mono" fill="#5a6580">not null</text>
-        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">schema 13 · src/app/store.ts</text>
+        <text x="1240" y="668" class="d-mono" fill="#5a6580" text-anchor="end">schema 14 · src/app/store.ts</text>
       </svg>

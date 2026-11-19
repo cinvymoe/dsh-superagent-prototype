@@ -277,3 +277,17 @@ it('overrides a project\'s pause and its executor model on the project\'s own se
   await click(zh.save)
   expect(server.settings.projects).toEqual({})
 })
+
+it('words a failed report that carries a reason code in the interface language, not only its English summary', async () => {
+  const t1 = server.ticketDetails.t1!
+  const reason = { code: 'roleDisabled', values: { role: 'aligner' } }
+  server.ticketDetails.t1 = { ...t1, stage: 'person', action: 'failed', actions: { retry: true, stop: true },
+    summary: 'The aligner Agent is turned off in the Agent settings', reportReason: reason }
+  at({ page: 'execution', id: 't1' })
+  await mount()
+  expect(document.querySelector('.dt-banner.dt-danger')?.textContent)
+    .toBe(`${zh.failedPrefix}${zh['reason.roleDisabled'].replace('{role}', 'aligner')}`)
+  await remount(en)
+  expect(document.querySelector('.dt-banner.dt-danger')?.textContent)
+    .toBe(`${en.failedPrefix}${en['reason.roleDisabled'].replace('{role}', 'aligner')}`)
+})

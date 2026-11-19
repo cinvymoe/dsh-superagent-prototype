@@ -13,7 +13,9 @@ export function TicketLine({ ticket, question, onChanged, context }: {
   const { t, call, navigate } = usePanel()
   const status = ticketMark(t, ticket)
   const after = async (request: Promise<unknown>) => { await request; await onChanged?.() }
-  const note = question && ticket.note && { ...ticket.note, text: readableMarkers(t, ticket.note.text) }
+  // A failed or blocked report that carries a reason code is worded by the panel, not by its English summary.
+  const note = question && ticket.note && { ...ticket.note,
+    text: ticket.note.reason ? reasonLabel(t, ticket.note.reason) : readableMarkers(t, ticket.note.text) }
   const answer = ticket.reply && ticket.stage === 'person' && ticket.action === 'answer' ? ticket.reply : undefined
   // A local Ticket has no external URL; its answer surface is the requirement page that owns the thread.
   const localIssue = answer?.source === 'local'

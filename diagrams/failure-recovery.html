@@ -202,7 +202,7 @@
         <text x="496" y="167" class="d-tag" fill="#5a6580" text-anchor="middle">AUTO RETRY</text>
         <text x="472" y="192" class="d-name" fill="#2d3142">自动重试 ×3</text>
         <text x="472" y="214" class="d-sub" fill="#4f5d75">重跑 launch · 让 turn 继续</text>
-        <text x="472" y="232" class="d-sub" fill="#4f5d75">prepare 失败不重试</text>
+        <text x="472" y="232" class="d-sub" fill="#4f5d75">prepare / 角色关闭 不重试</text>
         <text x="472" y="248" class="d-mono" fill="#5a6580">3 次仍失败 → 挂起</text>
 
         <!-- held -->
@@ -221,7 +221,7 @@
         <rect x="1016" y="158" width="60" height="12" rx="2" fill="transparent" stroke="rgba(191,69,32,0.50)" stroke-width="0.8"/>
         <text x="1046" y="167" class="d-tag" fill="#bf4520" text-anchor="middle">RECOVER</text>
         <text x="1024" y="192" class="d-name" fill="#2d3142">恢复</text>
-        <text x="1024" y="214" class="d-sub" fill="#4f5d75">人的消息 · Retry</text>
+        <text x="1024" y="214" class="d-sub" fill="#4f5d75">人的消息 · Retry（角色先启用）</text>
         <text x="1024" y="232" class="d-sub" fill="#4f5d75">新的非失败 Report</text>
         <text x="1024" y="248" class="d-mono" fill="#4f5d75">→ 新 Assignment</text>
 
@@ -247,6 +247,7 @@
         <text x="1012" y="468" class="d-sub" fill="#4f5d75">才成为系统问题</text>
 
         <text x="640" y="556" class="d-annot" fill="#bf4520" text-anchor="middle">挂起只停自动输入，不停工具；恢复总要付出一个新的 Assignment。</text>
+        <text x="640" y="578" class="d-annot" fill="#4f5d75" text-anchor="middle">角色关闭：launch 立即失败并记 roleDisabled；Input 保持 undelivered，重新启用并保存后投递。</text>
 
         <!-- ============ legend strip ============ -->
         <line x1="40" y1="644" x2="1240" y2="644" stroke="rgba(45,49,66,0.12)" stroke-width="0.8"/>

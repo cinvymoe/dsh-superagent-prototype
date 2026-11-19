@@ -120,7 +120,8 @@ function failure(error: unknown): [number, Record<string, unknown>] {
   }
   if (error instanceof SetupError) return [400, { error: error.message, setup: error.problem }]
   if (error instanceof RouteError) return [error.status, { error: error.message }]
-  if (error instanceof UserError) return [error.missing ? 404 : 400, { error: error.message, code: error.code, values: error.values }]
+  if (error instanceof UserError) return [error.missing ? 404 : error.conflict ? 409 : 400,
+    { error: error.message, code: error.code, values: error.values }]
   if (error instanceof SettingsConflict || error instanceof PromptConflict) return [409, { error: error.message }]
   return [500, { error: error instanceof Error ? error.message : String(error) }]
 }

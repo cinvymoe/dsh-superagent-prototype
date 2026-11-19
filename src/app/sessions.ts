@@ -11,7 +11,7 @@ import { key, liveTicket, type Ticket } from '../core/index.ts'
 import { mandateInstructions, ticketOfSession } from '../executor/dsh.ts'
 import type { HealthEntry } from '../infra/health.ts'
 import { agentSpec } from './agent-specs.ts'
-import { MAIN_TOOLS, roleTools } from './agent-tools.ts'
+import { ALIGN_TOOLS, MAIN_TOOLS, roleTools } from './agent-tools.ts'
 import { Capabilities } from './capabilities.ts'
 import { AgentDelivery, messageId } from './delivery.ts'
 import type { Effects } from './effects.ts'
@@ -81,6 +81,8 @@ const ANSWER_TOOLS = ['read', 'read_image', 'glob', 'grep']
  * no answering slot.
  */
 const DISCUSSION_TOOLS = [...ANSWER_TOOLS, 'discussion_ask']
+/** The orchestrator tools an alignment Ticket's Session is given, which its read-only surface names beside its reader tools. */
+const ALIGN_ORCHESTRATOR_TOOLS = ['orchestrator_read', 'orchestrator_align', 'orchestrator_report']
 /** What the main Session is told when it would wait: what it waits for comes to it, and a waiting step holds back the next. */
 const NO_WAIT = 'Reports, follow_up notices, new candidates and a background job\'s end with its output arrive by themselves as messages; '
   + 'end the turn instead of waiting for them.'
@@ -147,10 +149,11 @@ export class Sessions {
     ctx.inject(['agentPresets'], child => {
       child.on('agent-preset/selected', (sessionId, preset) => {
         const ticketId = ticketOfSession(sessionId), agent = ctx.agents.get(sessionId as SessionId)
+        const ticket = ticketId === undefined ? undefined : this.host.store.tickets.get(ticketId)
         // The registry names the preset each Session role runs under, so this check cannot drift from creation.
         const role: AgentRole | undefined = sessionId === this.host.masterId ? 'main'
           : this.answerers.has(sessionId) ? 'answerer'
-          : ticketId !== undefined && this.host.store.tickets.get(ticketId) ? 'worker' : undefined
+          : ticket ? (ticket.mode === 'align' ? 'aligner' : 'worker') : undefined
         const ours = role === undefined ? undefined : agentSpec(role).preset
         if (!ours || preset === ours || !agent) return
         const presets = child.get('agentPresets') as { select(agent: Agent, preset: string): Promise<string> }
@@ -162,15 +165,14 @@ export class Sessions {
     })
   }
   /**
-   * Resolves or creates session `id` in workspace `cwd`, initializes its role model, decorates it with prompts/skills/tools,
-   * sets `danger-full-access` permissions, and renames it to `title`. An `answerer` marks the Session as a discussion's own
-   * Answerer, which is decorated read-only and never holds a Ticket.
+   * Resolves or creates session `id` in workspace `cwd` under the preset and model of `role`, decorates it with that role's
+   * prompt/skills/tools, sets `danger-full-access` permissions, and renames it to `title`. An `answerer` also marks the
+   * Session as a discussion's own Answerer, so its decoration reads that discussion's prompt.
    */
-  async ensure(id: string, cwd: string, title: string, role: 'orchestrator' | 'worker', answerer?: LocalDiscussion,
-    project?: string): Promise<Agent> {
+  async ensure(id: string, cwd: string, title: string, role: AgentRole, answerer?: LocalDiscussion, project?: string): Promise<Agent> {
     const ctx = this.ctx
-    const spec = agentSpec(role === 'orchestrator' ? 'main' : answerer ? 'answerer' : 'worker')
-    if (answerer) this.answerers.set(id, answerer)
+    const spec = agentSpec(role)
+    if (role === 'answerer' && answerer) this.answerers.set(id, answerer)
     let result = await ctx.sessionController.resolveAgent(id as SessionId)
     if ('error' in result && result.error.code === 'session/not-found') {
       const workspace = await ctx.workspaceRegistry.create(cwd)
@@ -188,7 +190,7 @@ export class Sessions {
   }
   /** Resolves or creates one discussion's Answerer Session in its own workspace, decorated read-only under the discussion's prompt. */
   async ensureAnswerer(id: string, cwd: string, title: string, discussion: LocalDiscussion): Promise<Agent> {
-    return await this.ensure(id, cwd, title, 'worker', discussion)
+    return await this.ensure(id, cwd, title, 'answerer', discussion)
   }
   /**
    * Decorates a Session forked from a Ticket's worker Session so it answers one question about that Ticket: the answer
@@ -308,7 +310,8 @@ export class Sessions {
     const discussion = master ? undefined : this.answerers.get(agent.id)
     if (!master && !ticket && !discussion) { await this.limitSubagent(agent); return }
     // The registry says how this role's prompt and tools are chosen, so decoration no longer branches on the role name.
-    const spec = agentSpec(master ? 'main' : discussion ? 'answerer' : 'worker')
+    // An alignment Ticket runs the aligner role, its own role beside the worker's; every other Ticket runs a worker.
+    const spec = agentSpec(master ? 'main' : discussion ? 'answerer' : ticket!.mode === 'align' ? 'aligner' : 'worker')
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     // The role's mounted capabilities come from this Session's own scope: enabled ones are loaded now, and the tool refresh
@@ -323,8 +326,6 @@ export class Sessions {
       const current = ticket && host.store.tickets.get(ticket.id)
       // A slice worker is told to run the execution strategy its Ticket pinned; any other worker implements directly.
       const strategy = current?.plan && resolveExecutionStrategy(current.plan, this.executionServices())
-      // An align Ticket runs on the worker role: its spec still reads the alignment guide, while a slice reads its pinned
-      // execution strategy and every other worker Ticket the worker rules.
       const composed = spec.prompt(host.prompts, { config: version.config,
         ...(current ? { ticket: current, environment: host.environment(current) } : {}), ...(strategy ? { strategy } : {}) })
       return `[dsh-superagent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
@@ -359,6 +360,10 @@ export class Sessions {
       case 'work':
         // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
         binding.disposers.push(...this.workOnly(agent, ticket!, binding))
+        break
+      case 'align':
+        // An aligner reads the repository and publishes an alignment; it holds no tool that writes, runs or asks.
+        binding.disposers.push(...this.alignOnly(agent, binding))
         break
     }
     // The first turn must see the capabilities the role enables, not just the ones whose import happened to finish first.
@@ -497,6 +502,25 @@ export class Sessions {
   }
   /** The host services execution strategies run on: whether this host registered the feature-exec service. */
   private executionServices(): ExecutionServices { return { featureExec: this.ctx.get('featureExec') !== undefined } }
+  /**
+   * An aligner Session's tools: exactly `ALIGN_TOOLS`, in catalog order. Its own plugins narrow the set — switching the
+   * `image` group off removes `read_image` and nothing else — while the three orchestrator tools are always present because
+   * the host registers them for an alignment Ticket. A required reader the host lacks fails the decoration, as the
+   * Answerer's does; the allow list, not the permission, is what keeps an aligner read-only.
+   */
+  private alignOnly(agent: Agent, binding: SessionBinding): (() => void)[] {
+    const parent = scopeParentOf(agent)
+    const allow = () => {
+      const agents = this.host.store.settings().agents
+      binding.capabilities?.sync('aligner', agents)
+      const enabled = new Set(roleTools('aligner', agents))
+      const tools = ALIGN_TOOLS.filter(name => ALIGN_ORCHESTRATOR_TOOLS.includes(name) || enabled.has(name))
+      const present = tools.filter(name => ALIGN_ORCHESTRATOR_TOOLS.includes(name) || agent.ctx.tools.get(name, parent))
+      if (!present.includes('read')) throw new Error('dsh-superagent needs the aligner Session\'s read tool, which this host does not provide')
+      return present
+    }
+    return [this.installTools(agent, binding, allow)]
+  }
   /** Restricts an Answerer Session to the read-only tools, failing when this host does not provide them. */
   private answerOnly(agent: Agent): (() => void)[] {
     const parent = scopeParentOf(agent)

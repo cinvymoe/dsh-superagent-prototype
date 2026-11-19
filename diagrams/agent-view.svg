@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="agent-view-title agent-view-desc" id="agent-view-root">
         <title id="agent-view-title">Agent 视角：五类 Session 各自看到什么、能做什么、留下什么</title>
-        <desc id="agent-view-desc">三个入口的 Trigger 进入唯一的主 Session，它按 Decision 把工作交给讨论 Answerer、对齐 Aligner 或切片 Worker；三类 Session 各自读取拼好的提示、持有自己的工具并写回状态，三层之下是所有 Session 共用的提示词版本、store 与环境出口。</desc>
+        <desc id="agent-view-desc">三个入口的 Trigger 进入唯一的主 Session，它按 Decision 把工作交给讨论 Answerer、对齐 Aligner 或执行 Worker；四类 Session 各自读取拼好的提示、持有自己的工具并写回状态，三层之下是所有 Session 共用的提示词版本、store 与环境出口。</desc>
         <defs>
       <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
       #agent-view-root { --color-paper: #f5f5f5; --color-paper-2: #ececec;
@@ -112,7 +112,7 @@
         <text x="80" y="430" class="d-name" fill="#2d3142">讨论 Answerer</text>
         <text x="408" y="430" class="d-mono" fill="#5a6580" text-anchor="end">discuss</text>
         <text x="80" y="462" class="d-eyebrow" fill="#5a6580">PROMPT</text>
-        <text x="136" y="462" class="d-row" fill="#4f5d75">worker 基座 − worker/work，末尾 discuss.md</text>
+        <text x="136" y="462" class="d-row" fill="#4f5d75">worker 基座 − worker/work/replies/handoff</text>
         <text x="80" y="494" class="d-eyebrow" fill="#5a6580">TOOLS</text>
         <text x="136" y="494" class="d-row" fill="#4f5d75">read / glob / grep（只读）· discussion_ask</text>
         <text x="80" y="526" class="d-eyebrow" fill="#5a6580">WRITES</text>
@@ -123,15 +123,16 @@
         <!-- aligner -->
         <rect x="448" y="404" width="360" height="184" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
         <text x="464" y="430" class="d-name" fill="#2d3142">对齐 Aligner</text>
-        <text x="792" y="430" class="d-mono" fill="#5a6580" text-anchor="end">ticket · mode=align</text>
+        <text x="792" y="430" class="d-mono" fill="#5a6580" text-anchor="end">role aligner · no worker slot</text>
         <text x="464" y="462" class="d-eyebrow" fill="#5a6580">PROMPT</text>
-        <text x="520" y="462" class="d-row" fill="#4f5d75">worker 基座 − worker/work，末尾 align.md</text>
+        <text x="520" y="462" class="d-row" fill="#4f5d75">worker 基座 − worker/work/replies/handoff</text>
         <text x="464" y="494" class="d-eyebrow" fill="#5a6580">TOOLS</text>
-        <text x="520" y="494" class="d-row" fill="#4f5d75">read · orchestrator_report · orchestrator_align</text>
+        <text x="520" y="488" class="d-row" fill="#4f5d75">read / read_image / glob / grep</text>
+        <text x="520" y="504" class="d-row" fill="#4f5d75">+ orchestrator_read / align / report</text>
         <text x="464" y="526" class="d-eyebrow" fill="#5a6580">WRITES</text>
-        <text x="520" y="526" class="d-row" fill="#4f5d75">一轮 Alignment：summary / slices / acceptance</text>
+        <text x="520" y="526" class="d-row" fill="#4f5d75">Alignment：summary / slices / acceptance</text>
         <text x="464" y="558" class="d-eyebrow" fill="#5a6580">RETURNS</text>
-        <text x="520" y="558" class="d-row" fill="#4f5d75">人确认后，路由按 slice 各建一单</text>
+        <text x="520" y="558" class="d-row" fill="#4f5d75">人确认后按 slice 建单 · aligner 槽 ×2</text>
 
         <!-- worker -->
         <rect x="832" y="404" width="360" height="184" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>

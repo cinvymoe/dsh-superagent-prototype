@@ -122,6 +122,8 @@
         <text x="664" y="306" class="d-row" fill="#4f5d75">模型只看到这一份文本，</text>
         <text x="664" y="324" class="d-row" fill="#4f5d75">没有第二处注入。</text>
 
+        <text x="64" y="372" class="d-row" fill="#bf4520">闸门：角色关闭 → reserve 前失败（roleDisabled），不建 Session</text>
+
         <rect x="940" y="236" width="268" height="108" rx="6" fill="#ffffff" stroke="#2d3142" stroke-opacity="0.22"/>
         <text x="956" y="264" class="d-name" fill="#2d3142">工具与写回</text>
         <text x="956" y="284" class="d-mono" fill="#5a6580">report · route · align</text>
@@ -157,7 +159,7 @@
 
         <text x="448" y="566" class="d-sub" fill="#bf4520" font-weight="600">② 每次请求 · 每次都重拼</text>
         <text x="448" y="586" class="d-row" fill="#4f5d75">首行 [dsh-superagent prompt revision N]，</text>
-        <text x="448" y="604" class="d-row" fill="#4f5d75">各段按固定顺序拼，worker 末尾加 mandate。</text>
+        <text x="448" y="604" class="d-row" fill="#4f5d75">各段按固定顺序拼，worker / aligner 末尾加 mandate。</text>
 
         <text x="832" y="566" class="d-sub" fill="#2d3142" font-weight="600">③ 每次回报 · 写回之后</text>
         <text x="832" y="586" class="d-row" fill="#4f5d75">report → store → effects（reply / notice / launch），</text>

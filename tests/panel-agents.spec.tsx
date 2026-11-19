@@ -57,24 +57,30 @@ it('adds Agents between Execution and Prompts and keeps the group when the panel
   expect(current()).toBe(zh['settingsGroup.agents'])
 })
 
-it('lists the three roles with required tools and plugin switches, and says subagents inherit the worker\'s plugins', async () => {
+it('lists the four roles with required tools and plugin switches, and says subagents inherit the worker\'s plugins', async () => {
   await open()
   expect(all('[data-agent-role]').map(item => item.querySelector('.dt-block-title')?.textContent))
-    .toEqual([zh['agentRole.main'], zh['agentRole.worker'], zh['agentRole.answerer']])
+    .toEqual([zh['agentRole.main'], zh['agentRole.worker'], zh['agentRole.aligner'], zh['agentRole.answerer']])
   expect(text()).toContain(zh.agentsIntroShort)
   expect(zh.agentsIntroShort).toContain('插件')
   expect(zh.agentsIntroShort).toContain('子代理')
   // A role offers only its applicable plugins, and every switch that is not a required tool belongs to a plugin row.
   expect(pluginIds('main')).toEqual(['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'])
   expect(pluginIds('worker')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'])
+  expect(pluginIds('aligner')).toEqual(['image'])
   expect(pluginIds('answerer')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
-  for (const role of ['main', 'worker', 'answerer']) {
+  for (const role of ['main', 'worker', 'aligner', 'answerer']) {
     expect(all(`[data-agent-role="${role}"] [role="switch"]:not([disabled])`).every(item => !!item.closest('[data-agent-plugin]'))).toBe(true)
     expect(card(role).querySelector('[data-plugin-tool]')).toBeNull()
   }
   // The required row is read-only and shows the core tools the plugins cannot switch off.
   for (const tool of ['skill', 'bash', 'read']) expect((toolSwitch('main', tool) as HTMLButtonElement).disabled).toBe(true)
   expect(card('main').querySelector('[data-agent-tool="bash"]')?.textContent).toContain(zh.agentToolRequired)
+  // The aligner card is the read-only one: its required tools are the readers it always keeps, and only image applies.
+  expect(all('[data-agent-role="aligner"] [data-agent-tool]').map(item => item.getAttribute('data-agent-tool')))
+    .toEqual(['read', 'glob', 'grep'])
+  for (const tool of ['read', 'glob', 'grep']) expect((toolSwitch('aligner', tool) as HTMLButtonElement).disabled).toBe(true)
+  expect(card('aligner').querySelector(`[aria-label="${zh['agentRoleHint.aligner']}"]`)).not.toBeNull()
   await click(toolSwitch('main', 'bash'))
   expect(all('.dt-savebar')).toHaveLength(0)
 })
@@ -111,11 +117,13 @@ it('shows the model a blank override inherits, follows a worker override, and re
   await open()
   expect(inheritedLine('main')).toContain('eval-provider / eval-model')
   expect(inheritedLine('answerer')).toContain('exec-provider / exec-model · high')
+  expect(inheritedLine('aligner')).toContain('exec-provider / exec-model · high')
   expect(inheritedLine('worker')).toContain('exec-provider / exec-model · high')
   // A worker override moves the Answerer with it, while the worker's own blank field keeps inheriting Execution settings.
   await pick('worker', 'provider', 'worker-provider'); await pick('worker', 'model', 'worker-model')
   await pick('worker', 'effort', 'high')
   expect(inheritedLine('answerer')).toContain('worker-provider / worker-model · high')
+  expect(inheritedLine('aligner')).toContain('worker-provider / worker-model · high')
   expect(inheritedLine('worker')).toContain('exec-provider / exec-model · high')
   // One click on Restore inheritance clears a role's override again.
   await pick('main', 'provider', 'other-provider'); await pick('main', 'model', 'other-model')
@@ -205,6 +213,7 @@ it('toggles plugins per role and saves enabledPlugins in catalog order', async (
   expect(value.worker.enabledPlugins).toEqual(['skills', 'todo', 'subagents', 'billion-context'])
   expect(value.main.enabledPlugins).toEqual(['image'])
   expect(value.answerer.enabledPlugins).toEqual(['image', 'web', 'skills', 'todo', 'subagents'])
+  expect(value.aligner.enabledPlugins).toEqual(['image'])
   expect(server.settings.agents).toMatchObject({ main: { enabledPlugins: ['image'] },
     worker: { enabledPlugins: ['skills', 'todo', 'subagents', 'billion-context'] } })
   // A reloaded view keeps the saved switches; turning one back on keeps the catalog order rather than the click order.
@@ -219,7 +228,7 @@ it('shows only plugin switches, with no per-tool add list or optional tool switc
   server.registeredTools = []
   await open()
   expect(document.querySelector('[data-plugin-tool]')).toBeNull()
-  for (const role of ['main', 'worker', 'answerer']) expect(card(role).textContent).toContain(zh.agentPlugins)
+  for (const role of ['main', 'worker', 'aligner', 'answerer']) expect(card(role).textContent).toContain(zh.agentPlugins)
 })
 
 it('keeps the plugin draft and shows the localized reason when a save enables an inapplicable plugin', async () => {
@@ -295,7 +304,7 @@ it('adds a custom plugin from an MCP suggestion, enables it and keeps it after a
   await click(pluginSwitch('main', 'magpie'))
   await click(zh.save)
   expect(server.settings.agents.plugins.find(plugin => plugin.id === 'magpie')).toMatchObject({ name: 'magpie',
-    tools: ['mcp__magpie__call_tool', 'mcp__magpie__repos'], roles: ['main', 'worker', 'answerer'] })
+    tools: ['mcp__magpie__call_tool', 'mcp__magpie__repos'], roles: ['main', 'worker', 'aligner', 'answerer'] })
   expect(server.settings.agents.main.enabledPlugins).toContain('magpie')
   // A reload reads the stored plugin back from the catalog.
   await open()
@@ -350,7 +359,7 @@ it('shows the Agents group and its role copy in English', async () => {
   expect(current()).toBe(en['settingsGroup.agents'])
   expect(text()).toContain(en.agentsIntroShort)
   expect(all('[data-agent-role]').map(item => item.querySelector('.dt-block-title')?.textContent))
-    .toEqual([en['agentRole.main'], en['agentRole.worker'], en['agentRole.answerer']])
+    .toEqual([en['agentRole.main'], en['agentRole.worker'], en['agentRole.aligner'], en['agentRole.answerer']])
   expect(text()).toContain(en.agentRequiredTools)
   expect(text()).toContain(en.agentPlugins)
 })

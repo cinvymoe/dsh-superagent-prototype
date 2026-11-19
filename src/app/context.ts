@@ -7,7 +7,7 @@ export { textPage } from './cards.ts'
 export const sharedPrompt = promptFile('shared')
 export const masterPrompt = promptFile('orchestrator')
 export const workerPrompt = promptFile('worker')
-/** Appended to a worker's prompt when its ticket aligns a requirement instead of implementing it. */
+/** The aligner role's prompt: after the shared rules and guides, it proposes an alignment instead of implementing one. */
 export const alignPrompt = promptFile('align')
 /** Appended to a worker's prompt when its ticket holds a discussion on its own Thread instead of implementing or aligning work. */
 export const discussPrompt = promptFile('discuss')

@@ -11,9 +11,10 @@ type SourceSettings = SettingsVersion['settings']['sources'][string]
 export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction' | 'ruleEnabled' | 'ruleDisabled' | 'ruleRemoved'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'maxWorkers' | 'paused' | 'resumed' | 'executionDirectory' | 'prepareCommand'
-  | 'blockedCommands' | 'agentMainModel' | 'agentWorkerModel' | 'agentAnswererModel' | 'agentMainPluginEnabled'
-  | 'agentWorkerPluginEnabled' | 'agentAnswererPluginEnabled' | 'agentMainPluginDisabled' | 'agentWorkerPluginDisabled'
-  | 'agentAnswererPluginDisabled' | 'agentPluginAdded' | 'agentPluginRemoved'
+  | 'blockedCommands' | 'agentMainModel' | 'agentWorkerModel' | 'agentAlignerModel' | 'agentAnswererModel'
+  | 'agentMainPluginEnabled' | 'agentWorkerPluginEnabled' | 'agentAlignerPluginEnabled' | 'agentAnswererPluginEnabled'
+  | 'agentMainPluginDisabled' | 'agentWorkerPluginDisabled' | 'agentAlignerPluginDisabled' | 'agentAnswererPluginDisabled'
+  | 'agentPluginAdded' | 'agentPluginRemoved'
 /** A single settings diff entry rendered by the panel using `change.<code>` and field labels from the Source listing. */
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
@@ -24,6 +25,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 const AGENT_CHANGES: Readonly<Record<AgentRole, { model: SettingsChangeCode; enabled: SettingsChangeCode; disabled: SettingsChangeCode }>> = {
   main: { model: 'agentMainModel', enabled: 'agentMainPluginEnabled', disabled: 'agentMainPluginDisabled' },
   worker: { model: 'agentWorkerModel', enabled: 'agentWorkerPluginEnabled', disabled: 'agentWorkerPluginDisabled' },
+  aligner: { model: 'agentAlignerModel', enabled: 'agentAlignerPluginEnabled', disabled: 'agentAlignerPluginDisabled' },
   answerer: { model: 'agentAnswererModel', enabled: 'agentAnswererPluginEnabled', disabled: 'agentAnswererPluginDisabled' },
 }
 /** A snapshot's Agent overrides; revisions saved before the block existed carry none. */

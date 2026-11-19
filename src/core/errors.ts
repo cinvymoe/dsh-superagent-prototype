@@ -1,4 +1,7 @@
-/** User-facing error codes mapped to their category ('missing' or 'refused') and English message template. */
+/**
+ * User-facing error codes mapped to their HTTP category and English message template: 'missing' answers 404, 'conflict' 409
+ * (the request is valid but the current state refuses it, such as a role a person turned off), and 'refused' 400.
+ */
 export const USER_ERRORS = {
   unknownTicket: ['missing', 'Unknown ticket'],
   unknownProblem: ['missing', 'Unavailable Eval not found'],
@@ -44,6 +47,8 @@ export const USER_ERRORS = {
   agentsUnknownPlugin: ['refused', 'The {role} Agent enables plugins that do not exist: {plugins}'],
   agentsPluginRole: ['refused', 'The {role} Agent cannot enable these plugins, which do not apply to it: {plugins}'],
   agentsPluginRequires: ['refused', 'The {role} Agent cannot enable these plugin dependencies: {requires}'],
+  agentsRoleRequired: ['refused', 'The {role} Agent is infrastructure and cannot be turned off'],
+  roleDisabled: ['conflict', 'The {role} Agent is turned off; turn it on in the Agent settings to continue'],
   setupComplete: ['refused', 'Setup is complete'],
   prepareUnavailable: ['refused', 'The checkout cannot take a local merge: {reasons}'],
   prepareBusy: ['refused', 'A pull and build is already running'],
@@ -96,18 +101,21 @@ export const USER_ERRORS = {
   questionLimit: ['refused', 'A requirement keeps at most {max} questions'],
   answerText: ['refused', 'A discussion answer needs text'],
   answerNotFailed: ['refused', 'Only a failed answer can be retried'],
-} as const satisfies Record<string, readonly ['missing' | 'refused', string]>
+} as const satisfies Record<string, readonly ['missing' | 'refused' | 'conflict', string]>
 export type UserErrorCode = keyof typeof USER_ERRORS
 
 /**
- * Structured error thrown by Engine parts and application services when a caller request is invalid or references missing state.
- * Tool handlers and HTTP routes inspect its code and missing flag to return appropriate status responses, while the web panel localizes the code.
+ * Structured error thrown by Engine parts and application services when a caller request is invalid, references missing state,
+ * or conflicts with the state that holds (such as a role a person turned off). Tool handlers and HTTP routes inspect its code,
+ * `missing` and `conflict` flags to return appropriate status responses, while the web panel localizes the code.
  */
 export class UserError extends Error {
   readonly missing: boolean
+  readonly conflict: boolean
   constructor(readonly code: UserErrorCode, readonly values: Record<string, string> = {}) {
     const [kind, text] = USER_ERRORS[code]
     super(text.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match))
     this.missing = kind === 'missing'
+    this.conflict = kind === 'conflict'
   }
 }

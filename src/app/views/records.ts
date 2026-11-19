@@ -1,7 +1,7 @@
 /** Shared view projections for triggers, tickets, threads, decisions, and channel links. */
 import { z } from 'zod'
 import { canRetry, followupOwners, latestReport, liveTicket, settled, threadKey, ticketStage, type ActorRef, type ChannelRef, type Decision,
-  type DecisionKind, type Thread, type ThreadFacts, type Ticket, type TicketStage, type Trigger } from '../../core/index.ts'
+  type DecisionKind, type Reason, type Thread, type ThreadFacts, type Ticket, type TicketStage, type Trigger } from '../../core/index.ts'
 import { allowedSender, listedBot } from '../../policy.ts'
 import type { ChannelLink, Localized } from '../../sources/kind.ts'
 import type { SourceRegistry } from '../../sources/registry.ts'
@@ -106,19 +106,23 @@ export function triggerView(view: Snapshot, trigger: Trigger, threadDecisions?: 
         : undefined } }
 }
 export type TriggerView = ReturnType<typeof triggerView>
-/** Single-line summary of why a ticket in the `person` stage is waiting on human action (omitted once answered and back with the Executor). */
-function ticketNote(ticket: Ticket, stage: TicketStage): { text: string; error: boolean } | undefined {
+/**
+ * Single-line summary of why a ticket in the `person` stage is waiting on human action (omitted once answered and back with
+ * the Executor). A failed or blocked report that carries a reason code keeps it beside the summary, so the panel words it.
+ */
+function ticketNote(ticket: Ticket, stage: TicketStage): { text: string; error: boolean; reason?: Reason } | undefined {
   if (stage.stage !== 'person') return undefined
   if (stage.action === 'answer' && ticket.attention) return { text: preview(ticket.attention.question), error: false }
   if (stage.action === 'delivery' && ticket.delivery) return { text: preview(ticket.delivery.error), error: true }
-  const summary = latestReport(ticket)?.summary
+  const report = latestReport(ticket), summary = report?.summary
   if ((stage.action !== 'blocked' && stage.action !== 'failed') || !summary) return undefined
-  return { text: preview(summary.split('\n')[0]!), error: stage.action === 'failed' }
+  return { text: preview(summary.split('\n')[0]!), error: stage.action === 'failed', ...(report?.reason ? { reason: report.reason } : {}) }
 }
 export function ticketSummary(ticket: Ticket) {
   const stage = ticketStage(ticket)
   const note = ticketNote(ticket, stage)
   const state = liveTicket(ticket) ? 'open' as const : 'ended' as const
+  const report = latestReport(ticket)
   return { id: ticket.id, title: ticket.title, state, ...stage, ...note ? { note } : {},
     actions: { retry: canRetry(ticket), stop: liveTicket(ticket) }, strength: ticket.mandate.strength, ended: ticket.ended,
     attention: ticket.attention && { ...ticket.attention, question: markdown(ticket.attention.question) },
@@ -126,8 +130,8 @@ export function ticketSummary(ticket: Ticket) {
     // Every started Assignment of a Ticket runs in its one shared worker Session.
     deliveryError: attribute(ticket.delivery?.error), sessionId: ticket.assignments.some(item => item.startedAt)
       ? workerSessionId(ticket.id) : '',
-    directory: attribute(ticket.execution?.directory), summary: latestReport(ticket)?.summary ?? '', createdAt: ticket.createdAt,
-    updatedAt: ticket.updatedAt }
+    directory: attribute(ticket.execution?.directory), summary: report?.summary ?? '',
+    ...(report?.reason ? { reportReason: report.reason } : {}), createdAt: ticket.createdAt, updatedAt: ticket.updatedAt }
 }
 export type TicketSummaryView = ReturnType<typeof ticketSummary>
 function threadUrl(store: Store, thread: Thread): string | undefined {

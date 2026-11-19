@@ -249,7 +249,7 @@ it('upgrades a schema 11 database in place, running only the Agent plugin conver
   migrated.close()
 })
 
-it('renames the schema 12 Agent roles in the current and historical settings, keeping every override', () => {
+it('upgrades a schema 12 Agent block: the old aligner becomes the answerer and the new aligner starts enabled on its defaults', () => {
   const path = join(directory, 'db.sqlite')
   const store = new Store(path)
   store.close()
@@ -270,18 +270,73 @@ it('renames the schema 12 Agent roles in the current and historical settings, ke
   const migrated = new Store(path)
   expect(migrated.get('schema')).toBe(SCHEMA_VERSION)
   const agents = migrated.settings().agents
-  // The alignment role became the Answerer, the execution role the worker, and the plugin scope followed it.
+  // The old alignment role became the Answerer, the execution role the worker, and the plugin scope followed it.
   expect(agents.answerer.enabledPlugins).toEqual(['image', 'web'])
   expect(agents.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-executor'])
   expect(agents.main.enabledPlugins).toEqual(['image', 'billion-context', 'imported-executor'])
+  // Schema 14 gives the aligner its own role again; an upgraded block starts it enabled on its defaults, not on `answerer`.
+  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   // billion-context is seeded back because the main Session still enables it.
   expect(agents.plugins).toEqual(expect.arrayContaining([
     { id: 'imported-executor', name: 'Imported executor tools', tools: ['plugin_lint'], roles: ['worker'] }]))
-  // The historical revision is renamed too, so the history panel diffs the current names.
+  // The historical revision is renamed too, so the history panel diffs the current names; the new aligner is defaulted in.
   const history = migrated.settingsHistory()[0]!.settings.agents
   expect(history).not.toHaveProperty('executor')
-  expect(history).not.toHaveProperty('aligner')
+  expect(history.answerer.enabledPlugins).toEqual(['image', 'web'])
+  expect(history.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   expect(history.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-executor'])
+  migrated.close()
+})
+
+it('renames an old aligner entry even when a sibling role carried the only per-tool switches', () => {
+  const path = join(directory, 'db.sqlite')
+  schema10(path, {
+    settings: { agents: {
+      main: { model: null, disabledTools: [], addedTools: [] },
+      // The aligner entry of a schema 11 record need not carry tool switches; it still belongs to the old answerer.
+      aligner: { model: { provider: 'old', model: 'answerer-model' } },
+      executor: { model: null, disabledTools: ['web_search'], addedTools: [] },
+    } },
+  })
+  const store = new Store(path)
+  const agents = store.settings().agents
+  expect(agents.answerer.model).toEqual({ provider: 'old', model: 'answerer-model' })
+  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
+  store.close()
+})
+
+it('adds the aligner to a schema 13 Agent block and leaves the answerer exactly as it was', () => {
+  const path = join(directory, 'db.sqlite')
+  const store = new Store(path)
+  store.close()
+  const db = new DatabaseSync(path)
+  db.prepare("UPDATE kv SET value='13' WHERE key='schema'").run()
+  const version = (revision: number, settings: unknown) => JSON.stringify({ revision, savedAt: '', source: 'panel', policyVersion: '',
+    policyChanged: false, notified: [], settings })
+  const answererModel = { provider: 'answerer-provider', model: 'answerer-model' }
+  // A schema 13 record already names the current roles; the answerer carries a model and a narrower plugin set of its own.
+  const current = { agents: {
+    plugins: [{ id: 'imported-answerer', name: 'Imported answerer tools', tools: ['plugin_lint'], roles: ['answerer'] }],
+    main: { model: null, enabledPlugins: ['image', 'billion-context', 'imported-answerer'] },
+    worker: { model: null, enabledPlugins: ['image', 'skills', 'imported-answerer'] },
+    answerer: { model: answererModel, enabledPlugins: ['image', 'imported-answerer'] },
+  } }
+  db.prepare('INSERT INTO kv VALUES (?, ?)').run('settings-version:1', version(1, current))
+  db.prepare('INSERT OR REPLACE INTO kv VALUES (?, ?)').run('settings-revision', '1')
+  db.close()
+  const migrated = new Store(path)
+  expect(migrated.get('schema')).toBe(SCHEMA_VERSION)
+  const agents = migrated.settings().agents
+  // The answerer keeps its model and plugins: the step that renamed old roles never runs for a schema 13 database.
+  expect(agents.answerer).toMatchObject({ model: answererModel, enabledPlugins: ['image', 'imported-answerer'] })
+  expect(agents.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
+  expect(agents.worker.enabledPlugins).toEqual(['image', 'skills', 'imported-answerer'])
+  // The stored history reads the same way, and the plugin scope of the answerer is untouched.
+  const history = migrated.settingsHistory()[0]!.settings.agents
+  expect(history.answerer.enabledPlugins).toEqual(['image', 'imported-answerer'])
+  expect(history.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
+  expect(history.plugins).toEqual(expect.arrayContaining([
+    { id: 'imported-answerer', name: 'Imported answerer tools', tools: ['plugin_lint'], roles: ['answerer'] }]))
   migrated.close()
 })
 
@@ -314,7 +369,7 @@ it('changes nothing when one step fails: the database stays at schema 10 as it w
     updatedAt: '2', mandate: mandate({ via: 'listed' }), meta: { sourceTriggerId: 'trig-1', workspace: '/w/fix-1' } }
   // The current settings must validate; an invalid value aborts the migration transaction.
   schema10(path, { settings: { executor: { maxWorkers: 'many' } } }, { ticket: [ticket] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 13 failed: the settings: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 14 failed: the settings: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t1'").get()!.value))).toMatchObject({ meta: { workspace: '/w/fix-1' } })
@@ -587,7 +642,7 @@ it('names the ticket it stopped at when a ticket does not read, and leaves the d
   const path = join(directory, 'db.sqlite')
   const { inputs: _inputs, ...broken } = ticket10('t9')
   schema10(path, {}, { ticket: [broken] })
-  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 13 failed: ticket t9: /)
+  expect(() => new Store(path)).toThrow(/^The orchestrator database is unchanged at schema 10: its migration to schema 14 failed: ticket t9: /)
   const db = new DatabaseSync(path)
   expect(db.prepare("SELECT value FROM kv WHERE key='schema'").get()).toEqual({ value: '10' })
   expect(JSON.parse(String(db.prepare("SELECT value FROM ticket WHERE id='t9'").get()!.value))).toEqual(broken)

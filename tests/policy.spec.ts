@@ -259,9 +259,10 @@ describe('settings migration', () => {
       projects: {},
       agents: { plugins: [{ id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
         tools: ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image'], roles: ['main', 'worker'] }],
-        main: { model: null, enabledPlugins: ['image', 'billion-context'] },
-        worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'] },
-        answerer: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } },
+        main: { model: null, enabledPlugins: ['image', 'billion-context'], enabled: true },
+        worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'], enabled: true },
+        aligner: { model: null, enabledPlugins: ['image'], enabled: true },
+        answerer: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'], enabled: true } },
     })
     expect(migrateSettings(migrated)).toEqual(migrated)
   })
@@ -495,10 +496,11 @@ describe('bots and events without a sender', () => {
 describe('agent settings', () => {
   const empty = { plugins: [{ id: 'billion-context', name: 'Billion Context', description: 'Compress the Session context with the ACP compression tools.',
     tools: ['compress', 'decompress', 'search_context', 'acp_status', 'acp_cache', 'acp_read_original_image'], roles: ['main', 'worker'] }],
-    main: { model: null, enabledPlugins: ['image', 'billion-context'] },
-    worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'] },
-    answerer: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'] } }
-  it('parses an empty agents block for the three roles, and defaults one that settings saved before it existed lack', () => {
+    main: { model: null, enabledPlugins: ['image', 'billion-context'], enabled: true },
+    worker: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'], enabled: true },
+    aligner: { model: null, enabledPlugins: ['image'], enabled: true },
+    answerer: { model: null, enabledPlugins: ['image', 'web', 'skills', 'todo', 'subagents'], enabled: true } }
+  it('parses an empty agents block for the four roles, and defaults one that settings saved before it existed lack', () => {
     expect(SettingsSchema.parse({}).agents).toEqual(empty)
     // A snapshot written before the block existed reads as the default plugin block, so an upgrade changes no behavior.
     expect(SettingsSchema.parse({ paused: true, eval: { mode: 'auto' } }).agents).toEqual(empty)
@@ -509,7 +511,8 @@ describe('agent settings', () => {
       tools: ['retired_tool'], roles: ['worker'] }], worker: { enabledPlugins: ['imported-worker', 'retired-plugin'] } } })
     expect(stored.agents.plugins[0]!.tools).toEqual(['retired_tool'])
     expect(stored.agents.worker.enabledPlugins).toEqual(['imported-worker', 'retired-plugin'])
-    expect(stored.agents.main).toEqual({ model: null, enabledPlugins: ['image', 'billion-context'] })
+    expect(stored.agents.main).toEqual({ model: null, enabledPlugins: ['image', 'billion-context'], enabled: true })
+    expect(stored.agents.aligner).toEqual({ model: null, enabledPlugins: ['image'], enabled: true })
   })
   it('converts the old per-tool block into plugins without widening a role', () => {
     const old = { main: { model: null, disabledTools: ['read_image'], addedTools: ['compress'] },

@@ -6,14 +6,14 @@ import { constants } from 'node:fs'
 import { access, mkdir, mkdtemp, rmdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { key, latestAssignment, latestReport, liveTicket, runningAssignment, threadKey, waitsForPerson } from '../core/index.ts'
-import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Executor, Mandate, PolicyEffect, Ticket, TicketInput, Trigger }
+import type { AssessmentOutcome, Assignment, EngineForExecutor, Execution, Executor, Mandate, PolicyEffect, Reason, Ticket, TicketInput, Trigger }
   from '../core/index.ts'
 import type { Deployment, Machine } from '../deployment.ts'
 import { runAsWorker, verifyDirectory } from '../infra/environment.ts'
-import { settingsFor, type Settings } from '../policy.ts'
+import { settingsFor, type AgentRole, type Settings } from '../policy.ts'
 import type { Store } from '../app/store.ts'
 import { Later, type Effects } from '../app/effects.ts'
-import { workerSlotLimit } from '../app/agent-specs.ts'
+import { alignerSlotLimit, roleEnabled, ticketRole, workerSlotLimit } from '../app/agent-specs.ts'
 import { resolvedExecutionRoot, type Variable } from '../app/execution-environment.ts'
 import type { Sessions } from '../app/sessions.ts'
 import { WorktreeNameSchema } from '../app/assessment.ts'
@@ -210,8 +210,10 @@ export function inputMessage(input: TicketInput, trigger?: object): string | und
   return input.kind === 'text' ? input.text : undefined
 }
 /**
- * Tracks active and starting worker sessions against the configured concurrency limit: a ticket holds a slot while its
- * worker's turn runs, while its shell jobs or subagents run after that turn ended, and while a launch or wake starts that worker.
+ * Tracks active and starting Sessions of one pool against that pool's limit: a ticket holds a slot while its Session's turn
+ * runs, while its shell jobs or subagents run after that turn ended, and while a launch or wake starts that Session. The
+ * executor keeps two pools — execution Tickets share the configured worker slots, alignment Tickets hold their own fixed
+ * pair — and each pool counts only its own Tickets, so an aligner never waits for, or takes, a worker slot.
  * DshExecutor reserves slots synchronously before awaiting launch or wake work so two starts cannot take the last slot,
  * and allows one extra slot beyond the limit for human follow-ups (`by === 'person'`) so they never wait behind new launches.
  */
@@ -253,7 +255,10 @@ export class WorkerSlots {
  */
 export class DshExecutor implements Executor {
   private readonly disposers: (() => void)[] = []
-  private readonly slots: WorkerSlots
+  /** Execution Tickets' slots, limited by the saved Execution setting. */
+  private readonly workerSlots: WorkerSlots
+  /** Alignment Tickets' slots: a fixed pair of their own, so a proposal never waits behind, or blocks, execution work. */
+  private readonly alignerSlots: WorkerSlots
   /** Transient failure counts tried so far: keyed by `assignment.id` for worker turns and `launch:<assignment.id>` for launches. */
   private readonly transient = new Map<string, number>()
   /** Assignment IDs currently waiting on a transient-failure backoff timer before resuming their worker turn. */
@@ -273,14 +278,25 @@ export class DshExecutor implements Executor {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
   /** Registers the `launch` and `delivery` effect handlers; both are held (concurrency limit 0) while processing is paused. */
   constructor(private readonly host: ExecutorHost) {
-    // Every Ticket Session is a worker's, alignment and execution alike, so both hold the worker role's slot pool.
-    this.slots = new WorkerSlots(() => host.store.tickets.open().filter(ticket => this.running(ticket)).map(ticket => ticket.id),
-      () => workerSlotLimit(host.store.settings()))
-    // Each launch reserves a worker slot so launches run concurrently while slots are free.
-    host.effects.handle('launch', payload => this.launchQueued(payload), { limit: () => host.paused() ? 0 : this.slots.launches(),
+    // One pool per role's Tickets: execution Tickets share the worker slots, alignment Tickets their own fixed pair.
+    this.workerSlots = new WorkerSlots(() => this.held('worker'), () => workerSlotLimit(host.store.settings()))
+    this.alignerSlots = new WorkerSlots(() => this.held('aligner'), alignerSlotLimit)
+    // Each launch reserves a slot of its Ticket's pool, so launches run concurrently while either pool has room.
+    host.effects.handle('launch', payload => this.launchQueued(payload), { limit: () => host.paused() ? 0 : this.launches(),
       retry: [5000, 300_000] })
     // Failed input deliveries are recorded on the ticket itself rather than reported through the `delivery` effect health entry (`quiet: true`).
     host.effects.handle('delivery', payload => this.deliverQueued(payload.ticketId), { limit: () => host.paused() ? 0 : 4, quiet: true })
+  }
+  /** How many launches may start now: the free slots of both pools together, each pool counting only its own Tickets. */
+  private launches(): number {
+    return Math.max(0, this.workerSlots.launches()) + Math.max(0, this.alignerSlots.launches())
+  }
+  /** The slot pool a Ticket's Session belongs to: an alignment Ticket's aligner pool, else the worker pool. */
+  private pool(ticket: Ticket): WorkerSlots { return ticket.mode === 'align' ? this.alignerSlots : this.workerSlots }
+  /** The open Tickets holding a slot of `pool`: an alignment Ticket's in the aligner pool, every other Ticket's in the worker pool. */
+  private held(pool: 'worker' | 'aligner'): string[] {
+    return this.host.store.tickets.open()
+      .filter(ticket => (ticket.mode === 'align') === (pool === 'aligner') && this.running(ticket)).map(ticket => ticket.id)
   }
   /** Populates a newly accepted ticket's `execution` attributes (worktree name, workspace directory, and assignment text). */
   prepare(ticket: Ticket, outcome: Extract<AssessmentOutcome, { kind: 'accept' }>): Ticket {
@@ -340,7 +356,12 @@ export class DshExecutor implements Executor {
     if (waiting?.length) throw new Later()
     // A paused project holds its own tickets' launches; the effect retries until the pause ends, as a paused process does.
     if (settingsFor(this.host.store.settings(), ticket.project).paused) throw new Later()
-    this.slots.reserve(ticketId, 'launch')
+    // A role a person turned off cannot start a Session. The Ticket fails here, before it takes a slot of its pool, with the
+    // reason code the panel words; an automatic retry would only fail again, so it waits for a person's retry after the role
+    // is on again (see `resumeAligners` for the Inputs a running Session kept waiting meanwhile).
+    const role = ticketRole(ticket)
+    if (!roleEnabled(this.host.store.settings(), role)) { this.launchRefused(ticketId, assignmentId, role); return }
+    this.pool(ticket).reserve(ticketId, 'launch')
     try { await this.launch(ticket, assignment); this.transient.delete(`launch:${assignmentId}`) }
     catch (error) {
       // Shutdown or pause re-queues the launch for resume, and transient network/provider errors retry with backoff.
@@ -350,7 +371,7 @@ export class DshExecutor implements Executor {
       if (this.host.closing() || error instanceof Later) throw error
       if (!(error instanceof PrepareFailed) && this.retries(`launch:${assignmentId}`, error)) throw error
       this.launchFailed(ticketId, assignmentId, error)
-    } finally { this.slots.free(ticketId) }
+    } finally { this.pool(ticket).free(ticketId) }
   }
   /**
    * Delivers queued inputs to a running assignment one by one, re-reading ticket state before each delivery so delivery
@@ -362,6 +383,8 @@ export class DshExecutor implements Executor {
     const first = this.host.store.tickets.get(ticketId)
     const target = first && liveTicket(first) ? runningAssignment(first) : undefined
     if (!first || !target || !first.undelivered.length) return
+    // A role turned off takes no new Input: what waits stays in `undelivered` until a save turns the role back on.
+    if (!roleEnabled(this.host.store.settings(), ticketRole(first))) return
     let woken = false
     try {
       for (;;) {
@@ -374,14 +397,15 @@ export class DshExecutor implements Executor {
         if (!woken && !this.running(ticket)) {
           // A person's message wakes its worker ahead of new launches, in the slot kept for it.
           const person = ticket.undelivered.some(id => fromPerson(ticket.inputs.find(item => item.id === id)))
-          this.slots.reserve(ticketId, person ? 'person' : 'wake')
+          this.pool(ticket).reserve(ticketId, person ? 'person' : 'wake')
           woken = true
         }
         const input = ticket.inputs.find(item => item.id === inputId)
         try {
           // Recreate the worker session if it was externally deleted.
           if (!this.host.context.agents.get(sessionId as SessionId)) {
-            await this.host.sessions.ensure(sessionId, ticket.execution?.directory ?? '', ticket.title, 'worker', undefined, ticket.project)
+            await this.host.sessions.ensure(sessionId, ticket.execution?.directory ?? '', ticket.title, ticket.mode === 'align' ? 'aligner' : 'worker',
+              undefined, ticket.project)
           }
           if (input) await this.deliverInput(ticket, assignment, input)
         } catch (error) {
@@ -393,7 +417,7 @@ export class DshExecutor implements Executor {
         }
         this.host.engine.inputsDelivered(ticketId, assignment.id, [inputId])
       }
-    } finally { if (woken) this.slots.free(ticketId) }
+    } finally { if (woken) this.pool(first).free(ticketId) }
   }
   private async deliverInput(ticket: Ticket, assignment: Assignment, input: TicketInput): Promise<void> {
     // Re-check right before session delivery because the ticket may have ended while awaiting `sourceLink`.
@@ -469,8 +493,11 @@ export class DshExecutor implements Executor {
     }
     await until(stop(), undefined, SHUTDOWN_STOP_MS)
   }
-  /** Number of open tickets whose worker holds a worker slot: its turn runs, or its shell jobs or subagents still run after its turn ended. */
-  activeCount(): number { return this.host.store.tickets.open().filter(ticket => this.running(ticket)).length }
+  /**
+   * Number of execution Tickets holding a worker slot: its turn runs, or its shell jobs or subagents still run after its
+   * turn ended. Alignment Tickets hold their own pool, so they are not counted as worker load.
+   */
+  activeCount(): number { return this.held('worker').length }
   /** Whether a ticket's worker holds a worker slot: its turn runs, or its shell jobs or subagents do after its turn ended. */
   private running(ticket: Ticket): boolean {
     if (!runningAssignment(ticket)) return false
@@ -482,12 +509,32 @@ export class DshExecutor implements Executor {
     if (!ticket || !liveTicket(ticket) || latestAssignment(ticket)?.id !== assignmentId) return
     this.failed(ticketId, String(error))
   }
-  /** Records a `failed` report on the ticket and relays the failure to the main Session in one transaction. */
-  private failed(ticketId: string, summary: string): void {
+  /**
+   * Marks a queued launch failed because its role is turned off, with the reason code the panel words. The caller checks the
+   * ticket is still the latest and live; the ticket then waits for a person, and a retry after the role is enabled starts it.
+   */
+  private launchRefused(ticketId: string, assignmentId: string, role: AgentRole): void {
+    const ticket = this.host.store.tickets.get(ticketId)
+    if (!ticket || !liveTicket(ticket) || latestAssignment(ticket)?.id !== assignmentId) return
+    this.failed(ticketId, `The ${role} Agent is turned off in the Agent settings`, { code: 'roleDisabled', values: { role } })
+  }
+  /** Records a `failed` report on the ticket, with an optional reason code, and relays the failure to the main Session in one transaction. */
+  private failed(ticketId: string, summary: string, reason?: Reason): void {
     this.host.store.atomic(() => {
-      const updated = this.host.engine.report(ticketId, { state: 'failed', summary })
+      const updated = this.host.engine.report(ticketId, { state: 'failed', summary, ...(reason ? { reason } : {}) })
       this.relay(resultRelay(updated, 'failed', summary))
     })
+  }
+  /**
+   * After a saved `agents` block turns a role back on, queues delivery for the Inputs its open Tickets kept waiting while it
+   * was off: a running pair of aligner slots resumes, and a Ticket that failed its launch still needs a person's retry.
+   */
+  resumeAligners(): void {
+    for (const ticket of this.host.store.tickets.open()) {
+      if (!ticket.undelivered.length || !roleEnabled(this.host.store.settings(), ticketRole(ticket))) continue
+      const running = runningAssignment(ticket)
+      if (running) this.deliver(ticket, running)
+    }
   }
   private relay({ id, text }: { id: string; text: string }): void { this.host.sessions.relay(id, text) }
   private async launch(ticket: Ticket, assignment: Assignment): Promise<void> {
@@ -507,7 +554,8 @@ export class DshExecutor implements Executor {
     }
     if (!current()) return
     const sessionId = workerSessionId(ticket.id)
-    const agent = await this.host.sessions.ensure(sessionId, workspace, ticket.title, 'worker', undefined, ticket.project)
+    const agent = await this.host.sessions.ensure(sessionId, workspace, ticket.title, ticket.mode === 'align' ? 'aligner' : 'worker',
+      undefined, ticket.project)
     if (!current()) return
     // The background work of the Assignment this one replaces stops first, so its end does not clear this one's message.
     await this.stopped(ticket.id)
@@ -633,12 +681,12 @@ export class DshExecutor implements Executor {
       if (this.host.paused()) { this.after(SLOT_WAIT_MS, go); return }
       const sessionId = workerSessionId(ticketId)
       const waking = !this.running(ticket)
-      try { if (waking) this.slots.reserve(ticketId, 'wake') } catch (failure) {
+      try { if (waking) this.pool(ticket).reserve(ticketId, 'wake') } catch (failure) {
         if (!(failure instanceof Later)) throw failure
         this.after(SLOT_WAIT_MS, go); return
       }
       const sent = this.host.sessions.prompt(sessionId, `retry:${assignmentId}:${tries}`, text, 'queue')
-      void this.background(sent.finally(() => { if (waking) this.slots.free(ticketId); this.resuming.delete(assignmentId) })
+      void this.background(sent.finally(() => { if (waking) this.pool(ticket).free(ticketId); this.resuming.delete(assignmentId) })
         .catch(failure => { this.failed(ticketId, String(failure)) }))
     }
     this.after(TRANSIENT_BACKOFF_MS * 2 ** (tries - 1), go)

@@ -229,7 +229,7 @@
         <rect x="672" y="274" width="56" height="12" rx="2" fill="none" stroke="#2d3142" stroke-width="0.8" stroke-opacity="0.30"/>
         <text x="700" y="283" class="d-tag" fill="#5a6580" text-anchor="middle">ALIGNER</text>
         <text x="796" y="302" class="d-name" fill="#2d3142" text-anchor="middle">Aligner · align Ticket</text>
-        <text x="796" y="322" class="d-sub" fill="#4f5d75" text-anchor="middle">每需求一个 Session · 不实现</text>
+        <text x="796" y="322" class="d-sub" fill="#4f5d75" text-anchor="middle">aligner 角色 · 只读七件 · 不实现</text>
         <text x="796" y="342" class="d-mono" fill="#5a6580" text-anchor="middle">orchestrator_align</text>
         <text x="796" y="358" class="d-sub" fill="#4f5d75" text-anchor="middle">routing note 引讨论结论 · slices</text>
 
