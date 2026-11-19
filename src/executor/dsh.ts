@@ -497,7 +497,13 @@ export class DshExecutor implements Executor {
    * Number of execution Tickets holding a worker slot: its turn runs, or its shell jobs or subagents still run after its
    * turn ended. Alignment Tickets hold their own pool, so they are not counted as worker load.
    */
-  activeCount(): number { return this.held('worker').length }
+  activeCount(): number { return this.roleCount('worker') }
+  /** How many Sessions of `role` hold a slot of its pool now; the main Session and an answerer hold none. */
+  roleCount(role: AgentRole): number {
+    if (role === 'worker') return this.held('worker').length
+    if (role === 'aligner') return this.held('aligner').length
+    return 0
+  }
   /** Whether a ticket's worker holds a worker slot: its turn runs, or its shell jobs or subagents do after its turn ended. */
   private running(ticket: Ticket): boolean {
     if (!runningAssignment(ticket)) return false

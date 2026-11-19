@@ -164,6 +164,24 @@ it('hands a requirement\'s discussion conclusion to the Aligner from its result 
   expect(text()).toContain(zh['discussion.handedOff'])
 })
 
+it('disables the hand-off with a localized reason while the Aligner is off, and posts nothing', async () => {
+  server.localProjects = [PROJECT]
+  server.settings = { ...server.settings, agents: { ...server.settings.agents, aligner: { ...server.settings.agents.aligner, enabled: false } } }
+  const talk = localDiscussion('Design the layout', 'Design the layout\n\nDetails', PROJECT.id, 'd-aligner-off')
+  server.localDiscussions = [{ ...talk, issueId: 'q-off', updatedAt: '2026-09-24T00:00:00Z',
+    answers: [localDiscussionAnswer(talk, 'Design the layout', '2026-09-24T00:00:00Z')] }]
+  server.localIssues = [{ ...localIssue('Design the layout', 'Design the layout\n\nDetails'), id: 'q-off', discussionId: 'd-aligner-off' }]
+  at({ page: 'discussions', id: 'd-aligner-off' })
+  await mount()
+  const handoff = button(zh['discussion.handoff'])
+  expect(handoff.disabled).toBe(true)
+  expect(handoff.title).toBe(zh['discussion.handoffAlignerOff'])
+  expect(document.querySelector('[data-aligner-off]')?.textContent).toBe(zh['discussion.handoffAlignerOff'])
+  // The server still refuses a hand-off, but the panel does not send one from a disabled button.
+  await click(handoff)
+  expect(server.requests.some(request => request.path === 'local/discussions/d-aligner-off/handoff')).toBe(false)
+})
+
 it("puts the Answerer's questions on one card and sends the person's answers back as one message", async () => {
   const talk = localDiscussion('Design the layout', 'Design the layout\n\nDetails', PROJECT.id, 'd-ask')
   server.localProjects = [PROJECT]

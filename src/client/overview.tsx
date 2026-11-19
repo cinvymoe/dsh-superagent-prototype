@@ -98,6 +98,8 @@ export function OverviewPage() {
       {/* Pauses surface in `problems` above, so Executor counts render the same in both states; while setup waits, nothing runs. */}
       {setup?.problem ? <Hint>{t('executorWaitingSetup')}</Hint> : <div className="dt-stats">
         {stat(t('executingLabel'), `${data.executor.running} / ${data.executor.maxWorkers}`)}
+        {/* The Aligner pool is its own: its switch and 0–2 Sessions sit beside the worker load, which never counts one. */}
+        {stat(t('agentRole.aligner'), `${data.executor.aligner.enabled ? t('agentOn') : t('agentOff')} · ${data.executor.aligner.running} / ${data.executor.aligner.limit}`)}
         {stat(t('queuedLabel'), data.executor.queued)}
         {stat(t('idleLabel'), data.executor.idle)}
       </div>}

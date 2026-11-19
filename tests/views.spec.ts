@@ -173,7 +173,7 @@ it('does not show a follow-up that reached a ticket as waiting for an Eval, thou
   expect(threadSummary(snapshot(host), store.threads.get('feishu:oc_1:om_root')!)).toMatchObject({ stage: 'queued', pending: 1 })
 })
 
-const load = { running: 0, queued: 0 }
+const load = { running: 0, queued: 0, aligner: { running: 0, limit: 2 } }
 const problems = (host: ReturnType<typeof views>, health: Parameters<typeof overview>[1] = {},
   missingChains: Parameters<typeof overview>[5] = []) =>
   overview(host, health, 'v1', load, undefined, missingChains).problems

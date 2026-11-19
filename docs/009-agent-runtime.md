@@ -100,6 +100,7 @@ DSH 组装系统提示 → 调到上面的 `text(context)` → 依次发生：
 - 工单已结束或有更新 assignment → 静默丢弃；
 - 计划切片的依赖还没结束 → `Later`；
 - 该项目被暂停（`settingsFor(settings, ticket.project).paused`）→ `Later`；
+- 工单角色被关闭（`roleEnabled(settings, ticketRole(ticket))`）→ **在抢槽之前** `launchRefused`，以 `roleDisabled` 失败并等人重开后再 Retry，不占池、不自动重试；
 - 否则按工单的 `mode` 选池（`align` → aligner 池，其余 → worker 池），`reserve(ticketId, 'launch')` 抢槽，抢不到抛 `Later`。
 
 ### ⑥ `launch()`：造环境、造 Session、喂第一句
@@ -107,7 +108,7 @@ DSH 组装系统提示 → 调到上面的 `text(context)` → 依次发生：
 `dsh.ts:491`：
 
 1. `prepareDirectory(ticket)`——目录不存在才跑（worktree 根、`prepare` 命令、超时与失败即 `PrepareFailed`，不重试）。
-2. `sessions.ensure(workerSessionId(ticket.id), workspace, ticket.title, ticket.mode === 'align' ? 'aligner' : 'worker', undefined, ticket.project)`——建 Session 并完成 T1 的全部装饰（提示回调、技能、工具、模型、权限）。对齐工单的 Session 名仍是 `worker-<id>`，但角色、提示与只读工具面都是 aligner 的。
+2. `sessions.ensure(workerSessionId(ticket.id), workspace, ticket.title, ticketRole(ticket), undefined, ticket.project)`——建 Session 并完成 T1 的全部装饰（提示回调、技能、工具、模型、权限）；角色由注册表 `agent-specs.ts` 决定，而不是按工单来源分支。对齐工单的 Session 名仍是 `worker-<id>`，但角色、提示与只读工具面都是 aligner 的。
 3. `stopped(ticket.id)` 等上一份 assignment 的后台工作停下。
 4. 组装第一条用户消息（JSON，不是散文）：`{ ticket_id, title, assignment, trigger: 卡片, batch }`；已经被喂过就只发增量 `{ ticket_id, assignment }`。
 5. `sessions.prompt(sessionId, requestId, text, 'queue', authorize, () => engine.assignmentStarted(...))`——**投喂与状态转移在同一个授权回调里**，投喂前还会再校验一次工单仍然有效。

@@ -70,9 +70,19 @@ it('lists the four roles with required tools and plugin switches, and says subag
   expect(pluginIds('aligner')).toEqual(['image'])
   expect(pluginIds('answerer')).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   for (const role of ['main', 'worker', 'aligner', 'answerer']) {
-    expect(all(`[data-agent-role="${role}"] [role="switch"]:not([disabled])`).every(item => !!item.closest('[data-agent-plugin]'))).toBe(true)
+    expect(all(`[data-agent-role="${role}"] [role="switch"]:not([disabled])`)
+      .filter(item => !item.closest('[data-agent-enabled]')).every(item => !!item.closest('[data-agent-plugin]'))).toBe(true)
     expect(card(role).querySelector('[data-plugin-tool]')).toBeNull()
   }
+  // Only the Aligner has a role switch; the other three cards say they are infrastructure and offer no way to turn them off.
+  expect(all('[data-agent-enabled]')).toHaveLength(1)
+  expect(card('aligner').querySelector('[data-agent-enabled] [role="switch"]')).not.toBeNull()
+  for (const role of ['main', 'worker', 'answerer']) {
+    expect(card(role).querySelector('[data-agent-enabled]')).toBeNull()
+    expect(card(role).querySelector('[data-agent-infrastructure] .dt-tag')?.textContent).toBe(zh.agentInfrastructure)
+    expect(card(role).querySelector('[data-agent-infrastructure]')?.textContent).toContain(zh.agentInfrastructureHint)
+  }
+  expect(card('aligner').querySelector('[data-agent-infrastructure]')).toBeNull()
   // The required row is read-only and shows the core tools the plugins cannot switch off.
   for (const tool of ['skill', 'bash', 'read']) expect((toolSwitch('main', tool) as HTMLButtonElement).disabled).toBe(true)
   expect(card('main').querySelector('[data-agent-tool="bash"]')?.textContent).toContain(zh.agentToolRequired)
@@ -100,15 +110,33 @@ it('shows each plugin\'s tools and whether this host provides them', async () =>
   expect(pluginRow('main', 'image').textContent).toContain(zh.agentPluginDisabled)
 })
 
-it('shows the worker\'s running load and links to Execution settings instead of editing concurrency here', async () => {
+it('shows the worker\'s running load and the Aligner\'s own slots, and links concurrency to Execution settings', async () => {
+  server.alignerRunning = 2
   await open()
   const load = [...card('worker').querySelectorAll('.dt-lv')].find(item => item.textContent?.startsWith(zh.executingLabel))
   expect(load?.textContent).toBe(`${zh.executingLabel} 2 / 3`)
+  // An aligner holds the aligner pool, so its card reports that pool's own two sessions, never the worker load.
+  expect(card('aligner').querySelector('[data-agent-running]')?.textContent).toBe(`${zh.agentAlignerRunning} 2 / 2`)
+  expect(card('worker').querySelector('[data-agent-running]')).toBeNull()
   // Concurrency has one place: the Execution group.
   expect(all('input[type="number"]')).toEqual([])
   await click(find(zh.agentChangeConcurrency, '[data-agent-role="worker"] button'))
   expect(current()).toBe(zh['settingsGroup.execution'])
   expect(field<HTMLInputElement>(zh.maxWorkers).value).toBe('3')
+})
+
+it('turns the Aligner off, saves the role switch, and shows the state it stores', async () => {
+  await open()
+  const toggle = card('aligner').querySelector<HTMLElement>('[data-agent-enabled] [role="switch"]')!
+  expect(toggle.getAttribute('aria-checked')).toBe('true')
+  await click(toggle)
+  expect(toggle.getAttribute('aria-checked')).toBe('false')
+  expect(card('aligner').querySelector('[data-agent-enabled]')?.getAttribute('data-agent-enabled')).toBe('off')
+  // Only the role switch is dirty; the plugin switches stay as they were.
+  expect(all('.dt-savebar')).toHaveLength(1)
+  await click(zh.save)
+  expect(server.settings.agents.aligner.enabled).toBe(false)
+  expect(server.requests.filter(request => request.method === 'PUT').map(request => request.path)).toEqual(['settings/agents'])
 })
 
 it('shows the model a blank override inherits, follows a worker override, and restores inheritance in one click', async () => {
@@ -271,13 +299,16 @@ it('lists an Agents save with its role, model and plugin change lines', async ()
   server.history = { current: 4, policyVersion: 'abcdef1234567890', items: [{ revision: 4, savedAt: '2026-09-22T00:00:00Z',
     source: 'panel', policyVersion: 'abcdef1234567890', policyChanged: false, notified: [], block: 'agents',
     changes: [{ code: 'agentWorkerModel' }, { code: 'agentMainPluginEnabled', items: ['image'] },
-      { code: 'agentAnswererPluginDisabled', items: ['web'] }, { code: 'agentPluginAdded', items: ['extra'] }] }] }
+      { code: 'agentAnswererPluginDisabled', items: ['web'] }, { code: 'agentPluginAdded', items: ['extra'] },
+      { code: 'agentRoleDisabled', role: 'aligner' }] }] }
   await open()
   await click(zh.configHistory)
   expect(text()).toContain(zh['change.agentWorkerModel'])
   expect(text()).toContain(zh['change.agentMainPluginEnabled'].replace('{items}', 'image'))
   expect(text()).toContain(zh['change.agentAnswererPluginDisabled'].replace('{items}', 'web'))
   expect(text()).toContain(zh['change.agentPluginAdded'].replace('{items}', 'extra'))
+  // A whole-role switch names the role in the interface language, not its raw id.
+  expect(text()).toContain(zh['change.agentRoleDisabled'].replace('{name}', zh['agentRole.aligner']))
 })
 
 it('adds a custom plugin from an MCP suggestion, enables it and keeps it after a reload', async () => {

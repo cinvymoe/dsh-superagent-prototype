@@ -1,8 +1,9 @@
 /** The Aligner role's switch: what a save refuses, what it gates, and what turning it off leaves running. */
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { startRuntime, type Host } from './fixtures/host.ts'
-import { AGENT_ROLES, AgentsConfigSchema, SettingsSchema, type AgentsConfig } from '../src/policy.ts'
+import { AGENT_ROLES, AgentsConfigSchema, SettingsSchema, policyVersion, type AgentsConfig } from '../src/policy.ts'
 import { validateAgentRoles } from '../src/app/agent-tools.ts'
+import { policyHistory } from '../src/app/settings-history.ts'
 import { UserError } from '../src/core/index.ts'
 
 /** The id of the first human message on a local issue's thread. */
@@ -61,6 +62,21 @@ it('reads every role as on by default, refuses to turn infrastructure roles off,
       .toThrow(new UserError('agentsRoleRequired', { role }))
   }
 
+  // `GET settings` names every role, its switch and whether the panel may offer one; only the Aligner's is switchable.
+  const settingsRoles = (await h.api('GET', 'settings')).body.agents as { roles: { role: string; enabled: boolean; switchable: boolean }[] }
+  expect(settingsRoles.roles.map(entry => ({ role: entry.role, enabled: entry.enabled, switchable: entry.switchable })))
+    .toEqual([{ role: 'main', enabled: true, switchable: false }, { role: 'worker', enabled: true, switchable: false },
+      { role: 'aligner', enabled: true, switchable: true }, { role: 'answerer', enabled: true, switchable: false }])
+  // `GET state` carries the same roles at runtime, with the pool each one holds and how many Sessions run now.
+  const state = async () => (await h.api('GET', 'state')).body as { agents: { roles: { role: string; enabled: boolean; switchable: boolean
+    running: number; limit: number | null }[] } }
+  expect((await state()).agents.roles).toEqual([
+    { role: 'main', enabled: true, switchable: false, running: 0, limit: null },
+    { role: 'worker', enabled: true, switchable: false, running: 0, limit: 3 },
+    { role: 'aligner', enabled: true, switchable: true, running: 0, limit: 2 },
+    { role: 'answerer', enabled: true, switchable: false, running: 0, limit: 2 },
+  ])
+
   const save = await saveAgents(withAligner(false))
   expect(save.saved).toBe(true)
   expect(agentsOf().aligner.enabled).toBe(false)
@@ -68,6 +84,13 @@ it('reads every role as on by default, refuses to turn infrastructure roles off,
   expect(catalog).toMatchObject({ enabled: false, switchable: true })
   // The other roles' switches are not offered, so their stored flags stay on.
   expect(h.runtime.settings.catalog().roles.filter(entry => entry.switchable).map(entry => entry.role)).toEqual(['aligner'])
+  // Turning it off is a runtime state the panel reads, and the history names the role rather than one of its plugins.
+  expect((await state()).agents.roles.find(role => role.role === 'aligner')).toMatchObject({ enabled: false, switchable: true })
+  expect(policyHistory(h.runtime.store, h.runtime.sources, policyVersion(h.runtime.store.settings())).items[0]!.changes)
+    .toEqual([{ code: 'agentRoleDisabled', role: 'aligner' }])
+  await saveAgents(withAligner(true))
+  expect(policyHistory(h.runtime.store, h.runtime.sources, policyVersion(h.runtime.store.settings())).items[0]!.changes)
+    .toEqual([{ code: 'agentRoleEnabled', role: 'aligner' }])
 })
 
 it('refuses a conclusion handed to a turned-off aligner with 409 roleDisabled, and takes it once the role is on', async () => {

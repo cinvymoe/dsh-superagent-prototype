@@ -125,7 +125,7 @@ const MERGED = { merged: true, head: 'fedcba9876543210fedcba9876543210fedcba98',
 /** A runtime whose prepare answers the given status and result, or throws the given failure from a merge. */
 const prepareRuntime = (merge: () => Promise<typeof MERGED>) => ({
   store: { settings: () => SettingsSchema.parse({}), tickets: { open: () => [] } },
-  executor: { activeCount: () => 0 },
+  executor: { activeCount: () => 0, roleCount: () => 0 },
   machine: { stateDir: '/srv/dsh-superagent', promptMaxChars: { get: () => 100_000 }, admissionContextMaxPages: { get: () => 10 },
     admissionContextTimeoutMs: { get: () => 15_000 } },
   health: {}, masterId: 'master', configured: () => false,

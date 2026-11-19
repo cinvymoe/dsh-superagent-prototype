@@ -12,6 +12,7 @@ export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction'
   | 'sourceEnabled' | 'sourceDisabled' | 'sourceField' | 'sourceRowsAdded' | 'sourceRowsRemoved' | 'sourceRowsChanged' | 'sourceAdmission'
   | 'mode' | 'timeout' | 'evalModel' | 'executorModel' | 'maxWorkers' | 'paused' | 'resumed' | 'executionDirectory' | 'prepareCommand'
   | 'blockedCommands' | 'agentMainModel' | 'agentWorkerModel' | 'agentAlignerModel' | 'agentAnswererModel'
+  | 'agentRoleEnabled' | 'agentRoleDisabled'
   | 'agentMainPluginEnabled' | 'agentWorkerPluginEnabled' | 'agentAlignerPluginEnabled' | 'agentAnswererPluginEnabled'
   | 'agentMainPluginDisabled' | 'agentWorkerPluginDisabled' | 'agentAlignerPluginDisabled' | 'agentAnswererPluginDisabled'
   | 'agentPluginAdded' | 'agentPluginRemoved'
@@ -19,6 +20,8 @@ export type SettingsChangeCode = 'ruleAdded' | 'ruleRenamed' | 'ruleInstruction'
 export interface SettingsChange {
   code: SettingsChangeCode; items?: string[]; from?: string | number | boolean; to?: string | number | boolean; name?: string; source?: string
   field?: string; part?: true
+  /** The Agent role a whole-role change names, which the panel localizes as `agentRole.<role>`. */
+  role?: AgentRole
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** Each Agent role's model and plugin enable/disable change codes. */
@@ -92,6 +95,8 @@ function settingsChanges(before: SettingsVersion['settings'], after: SettingsVer
   for (const role of AGENT_ROLES) {
     const was = wasAgents[role], is = isAgents[role], codes = AGENT_CHANGES[role]
     if (!same(was.model, is.model)) changes.push({ code: codes.model })
+    // Turning the role itself on or off is a change of its own, named by the role rather than by a plugin.
+    if (was.enabled !== is.enabled) changes.push({ code: is.enabled ? 'agentRoleEnabled' : 'agentRoleDisabled', role })
     // A comparison is by plugin id and order-independent, as enabling one twice means the same thing as once.
     const wasPlugins = new Set(was.enabledPlugins), isPlugins = new Set(is.enabledPlugins)
     const enabled = is.enabledPlugins.filter(id => !wasPlugins.has(id))

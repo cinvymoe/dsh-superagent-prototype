@@ -205,4 +205,10 @@ it('runs two alignments beside a running worker with one worker slot, and holds 
   // GET state reports the worker load alone: two running aligners are not worker Sessions and the waiting one is no
   // execution Ticket, so the panel's worker figure stays `1 / 1`.
   expect((await h.api('GET', 'state')).body).toMatchObject({ load: { running: 1, queued: 0, maxWorkers: 1 } })
+  // The Aligner pool is reported beside it: two of its own two slots run, and the third alignment waits without a Session.
+  const state = (await h.api('GET', 'state')).body as { load: { aligner: { running: number; limit: number } }
+    agents: { roles: { role: string; enabled: boolean; switchable: boolean; running: number; limit: number | null }[] } }
+  expect(state.load.aligner).toEqual({ running: 2, limit: 2 })
+  expect(state.agents.roles.find(role => role.role === 'aligner')).toMatchObject({ enabled: true, switchable: true, running: 2, limit: 2 })
+  expect(state.agents.roles.find(role => role.role === 'worker')).toMatchObject({ enabled: true, switchable: false, running: 1, limit: 1 })
 })

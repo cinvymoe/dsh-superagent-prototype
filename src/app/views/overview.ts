@@ -3,6 +3,7 @@ import { reasonText, ticketStage, type Decision, type Thread } from '../../core/
 import type { Health } from '../../sources/host.ts'
 import type { SetupProblem } from '../../setup.ts'
 import { anyoneAllowed } from '../../policy.ts'
+import { roleEnabled } from '../agent-specs.ts'
 import type { Store } from '../store.ts'
 import type { MissingProjectChain } from '../projects.ts'
 import { awaitingEval, dayAgo, newestFirst, ownersOf, snapshot, threadSummary, type ViewHost } from './records.ts'
@@ -78,7 +79,9 @@ export function overview(host: ViewHost, health: HealthMap, policyVersionValue: 
   return {
     problems,
     person: open.filter(ticket => ticketStage(ticket).stage === 'person').map(ticket => ticketRow(view, ticket)),
-    executor: { ...load, maxWorkers: settings.executor.maxWorkers, idle: open.filter(ticket => ticketStage(ticket).stage === 'idle').length },
+    executor: { ...load, maxWorkers: settings.executor.maxWorkers, idle: open.filter(ticket => ticketStage(ticket).stage === 'idle').length,
+      // The aligner switch belongs with the pool it reports: off means the panel will not start a proposal Session.
+      aligner: { ...load.aligner, enabled: roleEnabled(settings, 'aligner') } },
     flow: { received, filtered, triggers: received - filtered, judged: judgement.judged, accepted: judgement.accepted,
       evaluating: evaluating.length, dropped: store.read.droppedSince(since) },
     policyVersion: policyVersionValue,

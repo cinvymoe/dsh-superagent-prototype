@@ -8,7 +8,7 @@ import { sourceSkills } from './context.ts'
 import type { ModelCatalog } from '@deepseek-ai/dsh-api-session-controller/types'
 import { PromptConflict, SKILL_NAME, SKILL_PREFIX, TEAM_SECTIONS, builtInBase, builtInParts, defaultPrompts, savePrompts, type Prompts }
   from './prompts.ts'
-import { policyVersion } from '../policy.ts'
+import { AGENT_ROLES, policyVersion } from '../policy.ts'
 import { SettingsConflict, type Settings } from './settings.ts'
 import { SetupError, type SetupProblem } from '../setup.ts'
 import { UserError, type EngineForPeople, type Ticket } from '../core/index.ts'
@@ -22,6 +22,7 @@ import type { Store } from './store.ts'
 import type { TextCache } from './cache.ts'
 import type { LinkTarget, ViewHost } from './views/records.ts'
 import type { Variable } from './execution-environment.ts'
+import { AGENT_SPECS, roleEnabled } from './agent-specs.ts'
 import { policyHistory } from './settings-history.ts'
 import { overview } from './views/overview.ts'
 import { settingsView } from './views/settings.ts'
@@ -47,7 +48,7 @@ export interface HttpHost {
   readonly sessions: Pick<Sessions, 'status' | 'notify' | 'delivery'>
   readonly settings: Pick<Settings, 'view' | 'save' | 'pause' | 'sync' | 'refreshLabels' | 'catalog'>
   readonly engine: EngineForPeople
-  readonly executor: Pick<DshExecutor, 'activeCount'>
+  readonly executor: Pick<DshExecutor, 'activeCount' | 'roleCount'>
   readonly health: Record<string, Health>
   readonly machine: Machine
   readonly masterId: string
@@ -138,12 +139,22 @@ function setupView(runtime: HttpHost) {
       agent: resolved.github.login, feishu: resolved.feishu ? { appId: resolved.feishu.appId, brand: resolved.feishu.brand, botId: resolved.feishu.botId, name: resolved.feishu.name } : null } : null,
   }
 }
+/**
+ * Each configured Agent role's runtime state: whether it is on, whether the panel may switch it, and how many Sessions of
+ * its pool run now against that pool's limit. The panel offers an Aligner switch and its `0 / 2` figure from this, while the
+ * worker figure stays `load.running`, which never counts an aligner.
+ */
+export function agentsState(runtime: HttpHost) {
+  const settings = runtime.store.settings()
+  return { roles: AGENT_ROLES.map(role => ({ role, enabled: roleEnabled(settings, role), switchable: AGENT_SPECS[role].switchable,
+    running: runtime.executor.roleCount(role), limit: AGENT_SPECS[role].slot?.limit(settings) ?? null })) }
+}
 /** Build the `/orchestrator/api/state` response consumed by the management panel and `scripts/dsh-superagent status` (`docs/006-deployment.md`). */
 export function stateView(runtime: HttpHost) {
   const settings = runtime.store.settings()
-  return { setup: setupView(runtime), load: { ...executorLoad(runtime.store, runtime.executor.activeCount()),
+  return { setup: setupView(runtime), load: { ...executorLoad(runtime.store, runtime.executor.activeCount(), runtime.executor.roleCount('aligner')),
     maxWorkers: settings.executor.maxWorkers },
-    masterId: runtime.masterId, paused: settings.paused, health: runtime.health }
+    agents: agentsState(runtime), masterId: runtime.masterId, paused: settings.paused, health: runtime.health }
 }
 const views = (runtime: HttpHost): ViewHost => ({ store: runtime.store, sources: runtime.sources, links: runtime.links() })
 const setupState = (runtime: HttpHost): SetupState => ({ deployment: runtime.configured() ? runtime.deployment : undefined,
@@ -199,7 +210,8 @@ function routes(runtime: HttpHost): Routes {
     'POST deployment/prepare': () => runtime.prepare.merge(),
     'GET deployment/landing': () => runtime.landing.status(),
     'GET overview': () => overview(views(runtime), runtime.health, policyVersion(store.settings()),
-      executorLoad(store, runtime.executor.activeCount()), runtime.setupProblem ?? runtime.feishuProblem, runtime.projects.missingChains()),
+      executorLoad(store, runtime.executor.activeCount(), runtime.executor.roleCount('aligner')), runtime.setupProblem ?? runtime.feishuProblem,
+      runtime.projects.missingChains()),
     'GET search': ({ query }) => search(views(runtime), query.q ?? '', runtime.sourceLinks),
     'GET sources': () => sourcesStatus(views(runtime), runtime.health, setupState(runtime)),
     'GET settings': ({ query }) => settingsView(store, runtime.sources, runtime.health, setupState(runtime), runtime.machine.stateDir,
