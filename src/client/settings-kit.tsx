@@ -167,7 +167,8 @@ function changeText(t: T, change: HistoryChange, sources: SourceView[]): string 
     : change.code === 'mode' ? valueLabel(t, 'mode', String(value)) : String(value)
   return t(`change.${change.code}`,
     { items: (change.items ?? []).map(item => source?.labels[item] ?? item).join(t('listSeparator')),
-    from: shown(change.from), to: shown(change.to), name: change.name ?? '', source: source ? localized(t, source.title)
+    from: shown(change.from), to: shown(change.to), name: change.role ? t(`agentRole.${change.role}`) : change.name ?? '',
+    source: source ? localized(t, source.title)
       : change.source ?? '',
     field: field ? localized(t, field.label) : change.field ?? '' })
 }

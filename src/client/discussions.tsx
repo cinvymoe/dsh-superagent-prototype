@@ -201,7 +201,11 @@ function AlignmentRound({ round, index }: { round: LocalHandoff; index: number }
  */
 export function DiscussionDetail({ id }: { id: string }) {
   const { t, call, notify, navigate } = usePanel()
+  const { state } = usePanelData()
   const { data, error, reload } = usePoll(() => call('GET local/discussions/:id', { id }), [id])
+  // The Aligner is the one role a person may turn off; handing a conclusion over is refused server-side, and the button says
+  // why before a click reaches that refusal.
+  const alignerOn = state?.agents.roles.find(entry => entry.role === 'aligner')?.enabled !== false
   const [comment, setComment] = useState('')
   const paste = useImagePaste()
   const [busy, setBusy] = useState(false)
@@ -371,8 +375,8 @@ export function DiscussionDetail({ id }: { id: string }) {
             <div className="dt-actions dt-result-actions">
               {discussion.issueId
                 ? <>
-                  <Button variant="primary" size="sm" disabled={busy || !canHand}
-                    title={canHand ? t('discussion.handoffHint') : t('discussion.handedOff')}
+                  <Button variant="primary" size="sm" disabled={busy || !canHand || !alignerOn}
+                    title={!alignerOn ? t('discussion.handoffAlignerOff') : canHand ? t('discussion.handoffHint') : t('discussion.handedOff')}
                     icon={<Icon name="review" size={14} />} onClick={() => { void handoff() }}>{t('discussion.handoff')}</Button>
                   <Button variant="outline" size="sm" icon={<Icon name="inbox" size={14} />}
                     onClick={() => navigate({ page: 'requirements', id: discussion.issueId! })}>{t('discussion.openIssue')}</Button>
@@ -384,6 +388,7 @@ export function DiscussionDetail({ id }: { id: string }) {
               {discussion.issueId === undefined && <Button variant="ghost" size="sm" disabled={busy}
                 onClick={() => setConfirming(true)}>{t('discussion.delete')}</Button>}
             </div>
+            {!alignerOn && <p className="dt-hint" data-aligner-off>{t('discussion.handoffAlignerOff')}</p>}
             {rounds.length > 0 && <p className="dt-hint">{t('discussion.roundsHint', { count: String(rounds.length) })}</p>}
             {rounds.length > 0 && <p className="dt-hint">
               {t('discussion.handoffTo', { ticket: rounds.at(-1)!.ticketId })}<When at={rounds.at(-1)!.at} /></p>}

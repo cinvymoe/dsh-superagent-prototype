@@ -140,6 +140,8 @@ export function AgentsSettings() {
   const { settings } = useSettings()
   const { state } = usePanelData()
   const { blocks, agents } = settings
+  // The Aligner's live session figure comes from `GET state`, the same pool the runtime reports, never the worker load.
+  const aligner = state?.agents.roles.find(entry => entry.role === 'aligner')
   // Role order and scope come from the server's catalog, the same registry the runtime reads.
   const catalogRoles = agents.roles.map(entry => entry.role)
   const draft = useBlockDraft('agents', blocks.agents.value, blocks.agents.revision)
@@ -208,11 +210,21 @@ export function AgentsSettings() {
             </div>
           })}
         </Section>
-        {agents.roles.map(({ role, required }: RoleCatalog) => {
+        {agents.roles.map(({ role, required, switchable }: RoleCatalog) => {
           const enabled = value[role].enabledPlugins
           const catalog = applicable(role)
           return <div key={role} className="dt-form dt-block" data-agent-role={role}>
             <h2 className="dt-block-title">{t(`agentRole.${role}`)}<InfoTip text={t(`agentRoleHint.${role}`)} /></h2>
+            <Section title={t('agentState')} hint={switchable ? t('agentStateHint') : t('agentInfrastructureHint')}>
+              {switchable
+                ? <div className="dt-switch-row" data-agent-enabled={value[role].enabled === false ? 'off' : 'on'}>
+                  <span className="dt-field-head">{t('agentEnabled')}<InfoTip text={t('agentEnabledHint')} /></span>
+                  <Switch checked={value[role].enabled !== false} label={t('agentEnabled')}
+                    onChange={on => edit(role, { enabled: on })} />
+                </div>
+                : <p className="dt-flow" data-agent-infrastructure><Tag tone="quiet">{t('agentInfrastructure')}</Tag>
+                  <span className="dt-hint">{t('agentInfrastructureHint')}</span></p>}
+            </Section>
             <Section title={t('agentModel')} hint={t('agentModelHint')}>
               <p className="dt-flow">
                 <LabelValue label={t('agentInherited')} value={modelText(t, inherited(role))} />
@@ -221,6 +233,10 @@ export function AgentsSettings() {
               </p>
               <ModelField id={`dt-agent-${role}-model`} value={value[role].model} onChange={model => edit(role, { model })} />
             </Section>
+            {role === 'aligner' && aligner && <Section title={t('agentConcurrency')} hint={t('agentConcurrencyHint')}>
+              <p className="dt-flow" data-agent-running><LabelValue label={t('agentAlignerRunning')}
+                value={`${aligner.running} / ${aligner.limit ?? 0}`} /></p>
+            </Section>}
             <Section title={t('agentRequiredTools')} hint={t('agentRequiredToolsHint')}>
               {required.map(tool => <ToolRow key={tool} name={tool} note={t('agentToolRequired')} required />)}
             </Section>

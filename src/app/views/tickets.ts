@@ -1,6 +1,7 @@
 /** Ticket list, ticket detail, mandate basis formatting, and executor load views. */
 import { liveTicket, threadKey, ticketStage, type AcceptMode, type AdmissionCell, type MandateBasis, type Ticket,
   type TicketStage } from '../../core/index.ts'
+import { ALIGN_CONCURRENCY } from '../agent-specs.ts'
 import { workerSessionId } from '../../executor/dsh.ts'
 import type { Store } from '../store.ts'
 import { channelLink, decisionView, newestFirst, page, snapshot, threadSummary, ticketLine, type Snapshot,
@@ -50,16 +51,16 @@ export function ticketRow(view: Snapshot, ticket: Ticket) {
 /**
  * Executor slot utilization: `running` worker Sessions in an active turn (which occupy slots and are interrupted by a
  * restart), and execution tickets `queued` for a slot. An alignment Ticket holds the aligner pool instead, so it appears in
- * neither figure.
+ * neither figure; `aligner` reports that pool's own running Sessions against its fixed limit.
  */
-export interface ExecutorLoad { running: number; queued: number }
-export function executorLoad(store: Store, running: number): ExecutorLoad {
+export interface ExecutorLoad { running: number; queued: number; aligner: { running: number; limit: number } }
+export function executorLoad(store: Store, running: number, alignerRunning = 0): ExecutorLoad {
   const queued = (ticket: Ticket) => {
     if (ticket.mode === 'align') return false
     const stage = ticketStage(ticket)
     return stage.stage === 'working' && stage.action === 'queued'
   }
-  return { running, queued: store.tickets.open().filter(queued).length }
+  return { running, queued: store.tickets.open().filter(queued).length, aligner: { running: alignerRunning, limit: ALIGN_CONCURRENCY } }
 }
 export function ticketDetail(host: ViewHost, id: string) {
   const { store } = host

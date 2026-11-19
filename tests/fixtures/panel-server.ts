@@ -195,6 +195,8 @@ worktreeRoot?: string; prepare?: string; blockedCommands?: string[]; cli?: strin
   /** When set, a pull and build refuses with `prepareFailed` carrying this script message and log path. */
   prepareFailure?: { message: string; log: string }
   health: Record<string, Health>
+  /** How many alignment Sessions run now, reported by `GET state` and the Overview's Aligner figure. */
+  alignerRunning: number
   /** When true, all API requests return an empty 404 to simulate the host plugin being stopped. */
   down: boolean
   /** Count of responses not yet consumed by the client. */
@@ -274,7 +276,12 @@ function sourceStatuses(): SourceStatusRow[] {
   })
 }
 const stateView = (): StateView => ({
-  setup: server.setup, load: { running: server.setup.problem ? 0 : 2, queued: 0, maxWorkers: server.settings.executor.maxWorkers },
+  setup: server.setup, load: { running: server.setup.problem ? 0 : 2, queued: 0, maxWorkers: server.settings.executor.maxWorkers,
+    aligner: { running: server.alignerRunning, limit: 2 } },
+  agents: { roles: (['main', 'worker', 'aligner', 'answerer'] as const).map(role => ({ role,
+    enabled: server.settings.agents[role].enabled !== false, switchable: role === 'aligner',
+    running: role === 'worker' ? (server.setup.problem ? 0 : 2) : role === 'aligner' ? server.alignerRunning : 0,
+    limit: role === 'worker' ? server.settings.executor.maxWorkers : role === 'aligner' ? 2 : null })) },
   masterId: 'master', paused: server.settings.paused,
   // The panel does not read health; the service script does.
   health: {},
@@ -318,7 +325,8 @@ const overviewView = (): ApiResponse<'GET overview'> => {
       ...server.localProjects.filter(project => project.missingChain).map(project => ({ kind: 'project-chain-missing' as const,
         project: { id: project.id, name: project.name }, chain: project.missingChain! })),
       ...server.failing.map(outgoing => ({ kind: 'outgoing' as const, outgoing }))],
-    person: server.person, executor: { running: 2, queued: 0, maxWorkers: server.settings.executor.maxWorkers, idle: 1 },
+    person: server.person, executor: { running: 2, queued: 0, maxWorkers: server.settings.executor.maxWorkers, idle: 1,
+      aligner: { running: server.alignerRunning, limit: 2, enabled: server.settings.agents.aligner.enabled !== false } },
     flow: { received: 12, filtered: 2, triggers: 10, judged: 5, accepted: 1, evaluating: 0,
       dropped: server.dropped.filter(item => item.dropped.at >= dayAgo()).length },
     policyVersion: 'abcdef1234567890',
@@ -370,7 +378,7 @@ function initial(): PanelServer {
     en: 'Feishu message' } }
   const defaults = { revision: 0, previousRevision: null, savedAt: '', source: 'defaults' }
   return {
-    health: {}, down: false, pending: 0, opened: [], requests: [], misuse: [], queued: new Set(), dropped: [], failing: [],
+    health: {}, alignerRunning: 0, down: false, pending: 0, opened: [], requests: [], misuse: [], queued: new Set(), dropped: [], failing: [],
     setup: { machine: MACHINE, problem: null, feishuProblem: null,
       accounts: { repository: 'acme/widgets', intakeRepository: 'acme/widgets', agent: 'agent-bot', feishu: { appId: 'cli_bot', brand: 'feishu', botId: 'ou_bot',
         name: 'Widgets Bot' } } },
