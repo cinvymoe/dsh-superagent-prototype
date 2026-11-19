@@ -4,12 +4,12 @@
  */
 import { UserError } from '../core/index.ts'
 import { AGENT_ROLES, COMPRESSION_TOOLS, type AgentPlugin, type AgentRole, type AgentsConfig } from '../policy.ts'
+import { AGENT_SPECS, ROUTER_PRESET, WORKER_PRESET } from './agent-specs.ts'
 
 /** Re-exported for callers of the catalog: the compression tools belong to a stored plugin now. */
 export { COMPRESSION_TOOLS }
-
-/** The agent presets Executor Sessions and the main Session are created with, which the bundle's patch defines. */
-export const WORKER_PRESET = 'dsh-superagent-worker', ROUTER_PRESET = 'dsh-superagent-router'
+/** Re-exported for callers of the catalog: the registry holds the presets the bundle's patch defines. */
+export { ROUTER_PRESET, WORKER_PRESET }
 /**
  * The DSH tools a worker Session works with, in catalog order: files, search, the shell and its jobs, the web, skills, its
  * todo list and subagents. It gets no other tool the profile has, whenever it was registered: none that asks or shows a person
@@ -24,14 +24,13 @@ export const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep'
 export const MAIN_TOOLS = ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill']
 /**
  * The tools a role cannot turn off: they are not part of any plugin, appear in its read-only required row, and stay in the
- * allow list whenever the host provides them. `skill` is required on the main Session but comes from the `skills` plugin on a
- * worker, and both platform shells are required on a worker while a host registers only its own. The Answerer keeps the
- * same row because it runs the standard worker preset; its runtime whitelist narrows the allow list to reading tools.
+ * allow list whenever the host provides them. The registry (`agent-specs.ts`) holds each role's list, which the catalog and
+ * the migration read through this table.
  */
 export const REQUIRED_TOOLS: Readonly<Record<AgentRole, readonly string[]>> = {
-  main: ['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'],
-  worker: ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'],
-  answerer: ['read', 'write', 'edit', 'glob', 'grep', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'],
+  main: AGENT_SPECS.main.required,
+  worker: AGENT_SPECS.worker.required,
+  answerer: AGENT_SPECS.answerer.required,
 }
 /**
  * A plugin a Session mounts into its own scope when the role enables it: the module the profile resolves, and the config
@@ -85,7 +84,7 @@ export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
   { id: 'fork-subagent', name: 'Fork subagent', description: 'Fork this Session into a subagent that keeps its context.',
     tools: ['subagent_fork'], roles: [...AGENT_ROLES], providedBy: 'mount',
     mount: { module: '@deepseek-ai/dsh-tool-subagent',
-      config: role => ({ provider: 'fork', toolName: 'subagent_fork', agentPreset: AGENT_TOOLS[role].preset }) } },
+      config: role => ({ provider: 'fork', toolName: 'subagent_fork', agentPreset: AGENT_SPECS[role].preset }) } },
 ]
 /** One role's configurable tool surface: the preset it runs under and the tools it cannot turn off. */
 export interface AgentTools { preset: string; required: readonly string[] }
@@ -129,11 +128,11 @@ export const FORBIDDEN_ADDED_TOOLS: readonly string[] = ['ask_user_question', 'a
   'wait_agent', 'team_task_create', 'team_task_update', 'run_code']
 /** Whether a stored plugin's declared tool is on the forbidden list. */
 export const forbiddenAddedTool = (name: string): boolean => FORBIDDEN_ADDED_TOOLS.includes(name)
-/** Each role's preset; the built-in plugin definitions above hold the tools, so a role only keeps its preset and required tools. */
+/** Each role's preset and required tools as the registry holds them, kept in the shape the catalog and its callers use. */
 export const AGENT_TOOLS: Readonly<Record<AgentRole, AgentTools>> = {
-  main: { preset: ROUTER_PRESET, required: REQUIRED_TOOLS.main },
-  worker: { preset: WORKER_PRESET, required: REQUIRED_TOOLS.worker },
-  answerer: { preset: WORKER_PRESET, required: REQUIRED_TOOLS.answerer },
+  main: { preset: AGENT_SPECS.main.preset, required: AGENT_SPECS.main.required },
+  worker: { preset: AGENT_SPECS.worker.preset, required: AGENT_SPECS.worker.required },
+  answerer: { preset: AGENT_SPECS.answerer.preset, required: AGENT_SPECS.answerer.required },
 }
 /** Whether a plugin's definition applies to `role`; an absent `roles` means every role. */
 export function pluginApplies(plugin: Pick<AgentPlugin, 'roles'>, role: AgentRole): boolean {
@@ -206,7 +205,7 @@ export function closeAgentsPlugins(agents: AgentsConfig): AgentsConfig {
 }
 /** A role's catalog order: the main Session's built-ins, else the work tools, which keeps a Session's allow list stable. */
 export function orderedTools(role: AgentRole): readonly string[] {
-  return role === 'main' ? MAIN_TOOLS : WORK_TOOLS
+  return AGENT_SPECS[role].tools === 'main' ? MAIN_TOOLS : WORK_TOOLS
 }
 /**
  * The tools a role may call: its required core tools, then the tools of the plugins it enables, deduplicated and kept in the
@@ -214,7 +213,7 @@ export function orderedTools(role: AgentRole): readonly string[] {
  * from two plugins is named once. `addedTools` no longer exists, so a save can only change this list by enabling a plugin.
  */
 export function roleTools(role: AgentRole, agents: AgentsConfig): string[] {
-  const allowed = new Set(REQUIRED_TOOLS[role])
+  const allowed = new Set(AGENT_SPECS[role].required)
   const extra: string[] = []
   for (const plugin of enabledPluginDefs(role, agents)) {
     // A mounted capability's tool is registered in the Session's own scope, which `tools.restrict` cannot name; putting it
@@ -234,7 +233,7 @@ export function roleTools(role: AgentRole, agents: AgentsConfig): string[] {
  */
 function candidateTools(agents: AgentsConfig, registered: readonly RegisteredTool[]): { name: string; description: string }[] {
   const pluginTools = new Set([...BUILTIN_PLUGINS, ...agents.plugins].flatMap(plugin => plugin.tools))
-  const builtInTools = new Set(AGENT_ROLES.flatMap(role => REQUIRED_TOOLS[role]))
+  const builtInTools = new Set(AGENT_ROLES.flatMap(role => AGENT_SPECS[role].required))
   const seen = new Set<string>()
   return registered.filter(tool => {
     if (!tool.name || pluginTools.has(tool.name) || builtInTools.has(tool.name) || forbiddenAddedTool(tool.name) || seen.has(tool.name)) return false
@@ -305,7 +304,7 @@ export function agentCatalog(agents: AgentsConfig, registered: readonly Register
   })
   return {
     plugins,
-    roles: AGENT_ROLES.map(role => ({ role, preset: AGENT_TOOLS[role].preset, required: [...REQUIRED_TOOLS[role]],
+    roles: AGENT_ROLES.map(role => ({ role, preset: AGENT_SPECS[role].preset, required: [...AGENT_SPECS[role].required],
       plugins: plugins.filter(plugin => plugin.roles.includes(role)).map(plugin => plugin.id),
       enabledPlugins: [...agents[role].enabledPlugins] })),
     suggestions,
@@ -331,7 +330,7 @@ export function validateAgentPlugins(agents: AgentsConfig): void {
     const forbidden = plugin.tools.filter(forbiddenAddedTool)
     if (forbidden.length > 0) throw new UserError('agentsPluginForbiddenTool', { plugin: plugin.id, tools: forbidden.join(', ') })
     const roles = plugin.roles ?? [...AGENT_ROLES]
-    const required = roles.flatMap(role => REQUIRED_TOOLS[role].filter(name => plugin.tools.includes(name)).map(name => `${role}: ${name}`))
+    const required = roles.flatMap(role => AGENT_SPECS[role].required.filter(name => plugin.tools.includes(name)).map(name => `${role}: ${name}`))
     if (required.length > 0) throw new UserError('agentsPluginRequiredTool', { plugin: plugin.id, tools: required.join(', ') })
   }
   const known = (id: string) => builtIn.has(id) || agents.plugins.some(plugin => plugin.id === id)

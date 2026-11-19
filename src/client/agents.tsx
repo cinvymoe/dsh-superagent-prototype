@@ -19,8 +19,6 @@ import { useState } from 'react'
 
 type RoleCatalog = SettingsView['agents']['roles'][number]
 type RoleConfig = AgentsConfig[AgentRole]
-// Kept local so the client bundle never imports `policy.ts`, whose runtime graph reaches Node-only modules.
-const ALL_ROLES: readonly AgentRole[] = ['main', 'worker', 'answerer']
 /** One role's override, with its model cleared so `roleModel` answers what a blank field would inherit. */
 function withoutOverride(agents: AgentsConfig, role: AgentRole): AgentsConfig {
   switch (role) {
@@ -62,15 +60,15 @@ function pluginIdFor(name: string, taken: ReadonlySet<string>): string {
   return id
 }
 /** A draft plugin as the catalog would offer it, so a newly added one shows its missing tools before it is saved. */
-function draftPlugin(plugin: AgentPlugin, available: readonly string[]): AgentPluginCatalog {
+function draftPlugin(plugin: AgentPlugin, available: readonly string[], catalogRoles: readonly AgentRole[]): AgentPluginCatalog {
   const tools = [...new Set(plugin.tools)]
   const missingTools = tools.filter(name => !available.includes(name))
-  return { ...plugin, tools, roles: plugin.roles ?? [...ALL_ROLES], builtIn: false,
+  return { ...plugin, tools, roles: plugin.roles ?? [...catalogRoles], builtIn: false,
     provided: missingTools.length === 0, missingTools }
 }
-/** Role labels for a plugin's scope, in role order. */
-function roleNames(t: T, roles: readonly AgentRole[]): string {
-  return ALL_ROLES.filter(role => roles.includes(role)).map(role => t(`agentRole.${role}`)).join(', ')
+/** Role labels for a plugin's scope, in the catalog's role order. */
+function roleNames(t: T, roles: readonly AgentRole[], catalogRoles: readonly AgentRole[]): string {
+  return catalogRoles.filter(role => roles.includes(role)).map(role => t(`agentRole.${role}`)).join(', ')
 }
 function ToolRow({ name, note, required }: { name: string; note?: string; required?: boolean }) {
   return <div className="dt-switch-row" data-agent-tool={name}>
@@ -84,9 +82,11 @@ function AddPluginDialog({ catalog, taken, onAdd, onClose }: {
   onAdd: (plugin: AgentPlugin) => void; onClose: () => void
 }) {
   const { t } = usePanel()
+  // The role list comes from `GET settings`, so the panel never hardcodes the configured roles.
+  const catalogRoles = catalog.roles.map(entry => entry.role)
   const [name, setName] = useState('')
   const [chosen, setChosen] = useState<readonly string[]>([])
-  const [roles, setRoles] = useState<readonly AgentRole[]>(ALL_ROLES)
+  const [roles, setRoles] = useState<readonly AgentRole[]>(catalogRoles)
   const [extra, setExtra] = useState('')
   const [error, setError] = useState<string>()
   // Every tool a person may choose, one row per name even when a suggestion group and the ungrouped list both name it.
@@ -115,7 +115,7 @@ function AddPluginDialog({ catalog, taken, onAdd, onClose }: {
         <Input value={name} maxLength={100} aria-label={t('agentPluginName')}
           onChange={event => { setName(event.target.value); setError(undefined) }} /></label>
       <div className="dt-subhead" data-plugin-roles><span className="dt-field-head">{t('agentPluginRoles')}</span></div>
-      {ALL_ROLES.map(role => <div className="dt-switch-row" key={role} data-plugin-role={role}>
+      {catalogRoles.map(role => <div className="dt-switch-row" key={role} data-plugin-role={role}>
         <span className="dt-field-head">{t(`agentRole.${role}`)}</span>
         <Switch checked={roles.includes(role)} label={t(`agentRole.${role}`)}
           onChange={on => setRoles(current => on ? [...current, role] : current.filter(item => item !== role))} />
@@ -147,6 +147,8 @@ export function AgentsSettings() {
   const { settings } = useSettings()
   const { state } = usePanelData()
   const { blocks, agents } = settings
+  // Role order and scope come from the server's catalog, the same registry the runtime reads.
+  const catalogRoles = agents.roles.map(entry => entry.role)
   const draft = useBlockDraft('agents', blocks.agents.value, blocks.agents.revision)
   const value = draft.value
   const [adding, setAdding] = useState(false)
@@ -157,14 +159,14 @@ export function AgentsSettings() {
     executor: blocks.executor.value }, role)
   // The saved catalog plus the draft's own plugins, so a plugin added or deleted here reacts before it is saved.
   const definitions = new Map(agents.plugins.map(plugin => [plugin.id, plugin]))
-  for (const plugin of value.plugins) if (!definitions.has(plugin.id)) definitions.set(plugin.id, draftPlugin(plugin, agents.availableTools))
+  for (const plugin of value.plugins) if (!definitions.has(plugin.id)) definitions.set(plugin.id, draftPlugin(plugin, agents.availableTools, catalogRoles))
   // A plugin removed from the draft disappears from the role cards at once, while the built-ins and the draft's own
   // definitions are the only ids a save may name.
   const activeIds = new Set([...agents.plugins.filter(plugin => plugin.builtIn).map(plugin => plugin.id),
     ...value.plugins.map(plugin => plugin.id)])
   const applicable = (role: AgentRole) => {
     const saved = agents.roles.find(entry => entry.role === role)?.plugins ?? []
-    const drafted = value.plugins.filter(plugin => (plugin.roles ?? ALL_ROLES).includes(role)).map(plugin => plugin.id)
+    const drafted = value.plugins.filter(plugin => (plugin.roles ?? catalogRoles).includes(role)).map(plugin => plugin.id)
     return [...new Set([...saved, ...drafted])].filter(id => definitions.has(id) && activeIds.has(id))
   }
   const taken = new Set([...definitions.keys(), ...value.plugins.map(plugin => plugin.id)])
@@ -190,7 +192,7 @@ export function AgentsSettings() {
   })
   const requestDelete = (plugin: AgentPluginCatalog) => {
     // Only a plugin some role has switched on needs a confirmation, because deleting it also turns it off there.
-    if (ALL_ROLES.some(role => value[role].enabledPlugins.includes(plugin.id))) setDeleting(plugin); else remove(plugin.id)
+    if (catalogRoles.some(role => value[role].enabledPlugins.includes(plugin.id))) setDeleting(plugin); else remove(plugin.id)
   }
   return <div className="dt-form">
     <form className="dt-form" onSubmit={event => { void draft.submit(event) }}>
@@ -205,7 +207,7 @@ export function AgentsSettings() {
             return <div key={plugin.id} className="dt-switch-row" data-custom-plugin={plugin.id}>
               <span className="dt-field-head">{plugin.name}<Tag tone="quiet">{t('agentPluginCustom')}</Tag>
                 {definition.missingTools.length > 0 && <Tag tone="warning">{t('agentPluginUnavailable')}</Tag>}
-                <span className="dt-hint" data-custom-plugin-meta>{t('agentPluginAppliesTo', { roles: roleNames(t, roles) })}
+                <span className="dt-hint" data-custom-plugin-meta>{t('agentPluginAppliesTo', { roles: roleNames(t, roles, catalogRoles) })}
                   {' · '}{definition.tools.join(', ')}</span></span>
               <Button variant="ghost" size="sm" icon={<Icon name="trash" />}
                 aria-label={t('agentPluginDeleteLabel', { name: plugin.name })}

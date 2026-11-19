@@ -1,11 +1,12 @@
 /** Answers of local discussions, kept on the discussion record and produced in the background by its Answerer. */
 import { key, UserError } from '../core/index.ts'
 import type { LocalAnswer, LocalDiscussion, LocalImage } from '../sources/local-format.ts'
+import { answerSlotLimit } from './agent-specs.ts'
 import type { DiscussionAnswerer } from './answerer.ts'
 import type { Discussions } from './discussions.ts'
 
-/** How many discussions answer at once; separate from the worker slots, so a discussion never holds one. */
-export const ANSWER_CONCURRENCY = 2
+/** How many discussions answer at once; the Answerer role's own pool, which the registry states beside the worker pool. */
+export const ANSWER_CONCURRENCY = answerSlotLimit()
 
 /** Host dependencies used by `Answers`. */
 export interface AnswersHost {

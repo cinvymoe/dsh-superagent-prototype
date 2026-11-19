@@ -10,20 +10,21 @@ import { z } from 'zod'
 import { key, liveTicket, type Ticket } from '../core/index.ts'
 import { mandateInstructions, ticketOfSession } from '../executor/dsh.ts'
 import type { HealthEntry } from '../infra/health.ts'
-import { AGENT_TOOLS, MAIN_TOOLS, ROUTER_PRESET, roleTools, WORKER_PRESET } from './agent-tools.ts'
+import { agentSpec } from './agent-specs.ts'
+import { MAIN_TOOLS, roleTools } from './agent-tools.ts'
 import { Capabilities } from './capabilities.ts'
 import { AgentDelivery, messageId } from './delivery.ts'
 import type { Effects } from './effects.ts'
 import { resolveExecutionStrategy, type ExecutionServices } from './execution-strategy.ts'
 import type { Variable } from './execution-environment.ts'
 import { RetryHealth } from './retry-health.ts'
-import { initializeRoleModel, roleModel } from './role-models.ts'
+import { initializeRoleModel } from './role-models.ts'
 import { bundledSkills } from './skill-files.ts'
 import { SKILL_PREFIX, type PromptVersion, type Prompts } from './prompts.ts'
 import type { LocalDiscussion } from '../sources/local-format.ts'
 import { discussionTools } from './tools/discussion.ts'
 import type { Discussions } from './discussions.ts'
-import { settingsFor } from '../policy.ts'
+import { settingsFor, type AgentRole } from '../policy.ts'
 import type { Store } from './store.ts'
 import { KV } from '../kv.ts'
 import type { RegisterTool, Tool } from './tools/tool.ts'
@@ -146,8 +147,11 @@ export class Sessions {
     ctx.inject(['agentPresets'], child => {
       child.on('agent-preset/selected', (sessionId, preset) => {
         const ticketId = ticketOfSession(sessionId), agent = ctx.agents.get(sessionId as SessionId)
-        const ours = sessionId === this.host.masterId ? ROUTER_PRESET
-          : this.answerers.has(sessionId) || ticketId && this.host.store.tickets.get(ticketId) ? WORKER_PRESET : undefined
+        // The registry names the preset each Session role runs under, so this check cannot drift from creation.
+        const role: AgentRole | undefined = sessionId === this.host.masterId ? 'main'
+          : this.answerers.has(sessionId) ? 'answerer'
+          : ticketId !== undefined && this.host.store.tickets.get(ticketId) ? 'worker' : undefined
+        const ours = role === undefined ? undefined : agentSpec(role).preset
         if (!ours || preset === ours || !agent) return
         const presets = child.get('agentPresets') as { select(agent: Agent, preset: string): Promise<string> }
         presets.select(agent, ours).catch(() => {})
@@ -165,19 +169,18 @@ export class Sessions {
   async ensure(id: string, cwd: string, title: string, role: 'orchestrator' | 'worker', answerer?: LocalDiscussion,
     project?: string): Promise<Agent> {
     const ctx = this.ctx
+    const spec = agentSpec(role === 'orchestrator' ? 'main' : answerer ? 'answerer' : 'worker')
     if (answerer) this.answerers.set(id, answerer)
     let result = await ctx.sessionController.resolveAgent(id as SessionId)
     if ('error' in result && result.error.code === 'session/not-found') {
       const workspace = await ctx.workspaceRegistry.create(cwd)
       // A Session keeps the preset it was created with, one of the bundle's own (cordis.patch.yml).
-      await ctx.sessionController.create({ sessionId: id as SessionId, workspaceId: workspace.id,
-        agentPreset: role === 'worker' ? WORKER_PRESET : ROUTER_PRESET })
+      await ctx.sessionController.create({ sessionId: id as SessionId, workspaceId: workspace.id, agentPreset: spec.preset })
       result = await ctx.sessionController.resolveAgent(id as SessionId)
     }
     if ('error' in result) throw result.error
     const settings = settingsFor(this.host.store.settings(), project)
-    await initializeRoleModel(ctx, result.agent, role === 'orchestrator' ? roleModel(settings, 'main')
-      : roleModel(settings, answerer ? 'answerer' : 'worker'))
+    await initializeRoleModel(ctx, result.agent, spec.model(settings))
     await this.decorate(result.agent)
     ctx.permissionPresets.set(result.agent.session, 'danger-full-access')
     await ctx.sessionController.rename({ sessionId: id as SessionId, title })
@@ -202,7 +205,7 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     const missing = ANSWER_TOOLS.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the Q&A Session's tools ${missing.join(', ')}, which this host does not provide`)
-    await initializeRoleModel(ctx, agent, roleModel(this.host.store.settings(), 'worker'))
+    await initializeRoleModel(ctx, agent, agentSpec('worker').model(this.host.store.settings()))
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     binding.disposers.push(agent.ctx.systemPrompt.section({ name: 'dsh-superagent-answer', order: 9999, complete: true, text: () => {
@@ -304,6 +307,8 @@ export class Sessions {
     const ticket = master ? undefined : this.ticketOf(agent)
     const discussion = master ? undefined : this.answerers.get(agent.id)
     if (!master && !ticket && !discussion) { await this.limitSubagent(agent); return }
+    // The registry says how this role's prompt and tools are chosen, so decoration no longer branches on the role name.
+    const spec = agentSpec(master ? 'main' : discussion ? 'answerer' : 'worker')
     const binding: SessionBinding = { disposers: [] }
     this.bindings.set(agent, binding)
     // The role's mounted capabilities come from this Session's own scope: enabled ones are loaded now, and the tool refresh
@@ -318,11 +323,10 @@ export class Sessions {
       const current = ticket && host.store.tickets.get(ticket.id)
       // A slice worker is told to run the execution strategy its Ticket pinned; any other worker implements directly.
       const strategy = current?.plan && resolveExecutionStrategy(current.plan, this.executionServices())
-      const composed = master ? host.prompts.compose(version.config, 'orchestrator', current ? host.environment(current) : undefined)
-        : discussion ? host.prompts.composeDiscuss(version.config, [])
-        : current?.mode === 'align' ? host.prompts.composeAlign(version.config, host.environment(current))
-        : strategy ? host.prompts.composeExecute(version.config, strategy.mode, host.environment(current))
-        : host.prompts.compose(version.config, 'worker', current ? host.environment(current) : undefined)
+      // An align Ticket runs on the worker role: its spec still reads the alignment guide, while a slice reads its pinned
+      // execution strategy and every other worker Ticket the worker rules.
+      const composed = spec.prompt(host.prompts, { config: version.config,
+        ...(current ? { ticket: current, environment: host.environment(current) } : {}), ...(strategy ? { strategy } : {}) })
       return `[dsh-superagent prompt revision ${version.revision}]\n${composed}\n${current ? mandateInstructions(current.mandate) : ''}`
     }, ...(master ? { complete: true } : {}) }))
     // A recreated skill scope (e.g. after the skills service restarts) starts empty, so reset `binding.skills` before rebinding.
@@ -336,19 +340,26 @@ export class Sessions {
     // Bail out if the agent was disposed while awaiting the skill scope.
     if (this.bindings.get(agent) !== binding) return
     const register = this.registerTool(agent, binding)
-    if (!discussion) for (const tool of host.tools(agent, ticket)) register(tool.name, tool.description, tool.schema, tool.execute)
-    if (master) {
-      binding.disposers.push(...this.mainTools(agent, binding), agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
-    } else if (discussion) {
-      // The discussion Answerer reads the workspace, and may put its open questions to the person; the whitelist, not the
-      // permission, is the boundary.
-      const askable = this.host.discussions?.()
-      if (askable) for (const item of discussionTools({ discussionId: discussion.id, discussion: () => askable.get(discussion.id),
-        ask: questions => askable.ask(discussion.id, { questions }) })) register(item.name, item.description, item.schema, item.execute)
-      binding.disposers.push(...this.answerOnly(agent))
-    } else {
-      // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
-      binding.disposers.push(...this.workOnly(agent, ticket!, binding))
+    // The main Session and every Ticket Session also carry the host's orchestrator tools; a discussion Answerer does not.
+    if (spec.tools !== 'answer') for (const tool of host.tools(agent, ticket)) register(tool.name, tool.description, tool.schema, tool.execute)
+    // One installer per strategy the registry names: a new role that reuses one needs no branch here.
+    switch (spec.tools) {
+      case 'main':
+        binding.disposers.push(...this.mainTools(agent, binding), agent.ctx.tools.guard(execution => noWait(execution, () => this.routed(agent))))
+        break
+      case 'answer': {
+        // The discussion Answerer reads the workspace, and may put its open questions to the person; the whitelist, not the
+        // permission, is the boundary.
+        const askable = this.host.discussions?.()
+        if (askable) for (const item of discussionTools({ discussionId: discussion!.id, discussion: () => askable.get(discussion!.id),
+          ask: questions => askable.ask(discussion!.id, { questions }) })) register(item.name, item.description, item.schema, item.execute)
+        binding.disposers.push(...this.answerOnly(agent))
+        break
+      }
+      case 'work':
+        // An Executor Session keeps the profile's work tools it has, which DSH requires to be known; its own tools are not masked.
+        binding.disposers.push(...this.workOnly(agent, ticket!, binding))
+        break
     }
     // The first turn must see the capabilities the role enables, not just the ones whose import happened to finish first.
     await binding.capabilities?.settle()
@@ -365,7 +376,7 @@ export class Sessions {
     const parent = scopeParentOf(agent)
     // Read through the parent scope like `workOnly` does: it includes the preset's and the host's global tools and bypasses
     // this Session's own restriction.
-    const missing = AGENT_TOOLS.main.required.filter(name => !agent.ctx.tools.get(name, parent))
+    const missing = agentSpec('main').required.filter(name => !agent.ctx.tools.get(name, parent))
     if (missing.length > 0) throw new Error(`dsh-superagent needs the main Session's tools ${missing.join(', ')}, which this host does not provide`)
     const restrict = this.installTools(agent, binding, () => {
       const agents = this.host.store.settings().agents
@@ -375,7 +386,7 @@ export class Sessions {
       const tools = roleTools('main', agents)
       // A required tool was checked above, so it stays exactly as before; a plugin tool is dropped while its plugin is not
       // installed, instead of making `restrict` refuse a name it cannot resolve.
-      return tools.filter(name => AGENT_TOOLS.main.required.includes(name) || agent.ctx.tools.get(name, parent))
+      return tools.filter(name => agentSpec('main').required.includes(name) || agent.ctx.tools.get(name, parent))
     })
     const off = this.ctx.on('tools/change', () => binding.tools?.())
     return [restrict, off]
@@ -444,7 +455,7 @@ export class Sessions {
       const projections = this.ctx.get('sessionProjections') as { stateOf?: (session: Agent['session'], key: string) => unknown } | undefined
       const selected = typeof presets?.presetForSession === 'function' ? presets.presetForSession(agent.session)
         : projections?.stateOf?.(agent.session, 'agentPreset')
-      return (selected ?? agent.session.header.agentPreset) === ROUTER_PRESET
+      return (selected ?? agent.session.header.agentPreset) === agentSpec('main').preset
     } catch { return false }
   }
   /**
