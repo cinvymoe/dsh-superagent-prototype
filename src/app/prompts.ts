@@ -144,12 +144,13 @@ export class Prompts {
     return composePrompt(config, role, environmentSection(config, variables), role === 'orchestrator' ? policySection(this.store.settings(), config) : undefined)
   }
   /**
-   * The shared rules and guides an aligner or a discussion session reads, without the worker's implementation mandate,
-   * followed by `guide`. Neither owns delivery, so neither may read like a worker that does.
+   * The shared rules and guides an aligner or a discussion session reads, without the worker's implementation mandate or
+   * the replies it owns, followed by `guide`. Neither the aligner nor the answerer delivers anything or speaks to a person
+   * through the reply policy, so the `runtime/replies` section would tell it to use tools its surface does not hold.
    */
   private composeGuide(config: PromptConfig, variables: Variable[] | undefined, guide: string): string {
     const parts = promptParts(config, 'worker', environmentSection(config, variables))
-      .filter(part => !['runtime/worker', 'runtime/work', 'runtime/handoff/worker'].includes(part.name))
+      .filter(part => !['runtime/worker', 'runtime/work', 'runtime/replies', 'runtime/handoff/worker'].includes(part.name))
       .map(part => part.text)
     return [...parts, guide].join('\n\n')
   }

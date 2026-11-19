@@ -568,9 +568,12 @@ describe('project prepare commands', () => {
     const updated = await h.api('PUT', `local/projects/${alpha.id}`, { worktreeRoot: moved, prepare: 'prepare alpha again' })
     expect(updated.status).toBe(200)
     expect(h.runtime.store.tickets.get(accepted.id)!.execution).toEqual(execution)
-    // A new ticket of A uses A's new root and command, while B's next ticket keeps B's own.
+    // A new ticket of A uses A's new root and command, while B's next ticket keeps B's own. The aligner pool holds two
+    // predictions at once, so the first ticket ends before B's is accepted.
     const next = await accept(h.runtime.local.create({ title: 'Alpha again', project: alpha.id }).id)
     expect(next.execution?.directory).toBe(join(moved, next.execution!.name))
+    expect(next.execution?.worktreeRoot).toBe(moved)
+    h.runtime.engine.stopTicket(accepted.id)
     const betaTicket = await accept(h.runtime.local.create({ title: 'Beta requirement', project: beta.id }).id)
     const alphaRun = prepareRuns().find(run => run.env?.DSH_SUPERAGENT_TICKET === next.id)!
     const beforeEdit = prepareRuns().find(run => run.env?.DSH_SUPERAGENT_TICKET === accepted.id)!
@@ -578,6 +581,7 @@ describe('project prepare commands', () => {
     expect(beforeEdit).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare alpha'], cwd: first }))
     expect(alphaRun).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare alpha again'], cwd: moved }))
     expect(betaRun).toEqual(expect.objectContaining({ argv: ['sh', '-c', 'prepare beta'], cwd: second }))
+    // The ended ticket keeps the execution it was accepted with.
     expect(h.runtime.store.tickets.get(accepted.id)!.execution).toEqual(execution)
   })
 

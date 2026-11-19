@@ -14,7 +14,7 @@
 | [003 执行 · 阶段](../docs/003-execution.md) | [ticket-state](./ticket-state.html) | 七个阶段与恢复；Assignment 平行时间线 |
 | [003 执行 · 失败](../docs/003-execution.md) | [failure-recovery](./failure-recovery.html) | 过路性重试 / 挂起 / 恢复，以及四条横切规则 |
 | [003 执行 · 并发](../docs/003-execution.md) | [concurrency-queue](./concurrency-queue.html) | 三类来源、有限槽位、人的插队槽 |
-| [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | [agent-capabilities](./agent-capabilities.html) | 三个角色的工具集怎么按插件拼出来 |
+| [003 执行 · 能力](../docs/003-execution.md) · [005 面板](../docs/005-panel.md) | [agent-capabilities](./agent-capabilities.html) | 四个角色的工具集怎么按插件拼出来 |
 | [004 提示词](../docs/004-prompts.md) | [prompt-assembly](./prompt-assembly.html) | 团队段 → 内置段 → 技能 → 角色组装 → 版本 |
 | [005 面板](../docs/005-panel.md) | [panel-ia](./panel-ia.html) · [requirement-lifecycle](./requirement-lifecycle.html) · [discussion-to-requirement](./discussion-to-requirement.html) · [discussion-routing](./discussion-routing.html) | 四层漏斗；需求的状态；讨论如何变成需求；Router 的 discuss 决策与交给对齐 |
 | [006 部署](../docs/006-deployment.md) | [deployment-topology](./deployment-topology.html) · [trust-boundaries](./trust-boundaries.html) | 一个进程与一个状态目录；唯一授权路径与被拒绝的旁路 |
@@ -192,8 +192,8 @@ flowchart TB
 
 [![一个进程，一个状态目录，两个外部账号](./deployment-topology.png)](./deployment-topology.html)
 
-- 两个边界：本机（操作系统的登录用户）与外部账号服务；六个节点：进程、SQLite、三类 Session、工单目录、GitHub、可选 Feishu。
-- 构件带版本：`panel 127.0.0.1:3082`、`bundle dsh 0.2.1`、`orchestrator.sqlite schema 13`、`gh ≥ 2.48`、`lark-cli 1.0.90`。
+- 两个边界：本机（操作系统的登录用户）与外部账号服务；六个节点：进程、SQLite、四类 Session（main / worker / aligner / answerer）、工单目录、GitHub、可选 Feishu。
+- 构件带版本：`panel 127.0.0.1:3082`、`bundle dsh 0.2.1`、`orchestrator.sqlite schema 14`、`gh ≥ 2.48`、`lark-cli 1.0.90`。
 - 跨边界两条：`HTTPS:443`（gh / git）与 `lark-cli`；本机内两条：`in-process` 与 `sqlite`、`cwd`。
 
 ## 图 9：Agent 能力分层（003 / 005 / 007）
@@ -201,7 +201,7 @@ flowchart TB
 [![一个 Session 的工具集是五层拼出来的](./agent-capabilities.png)](./agent-capabilities.html)
 
 - 五层拼装：必需核心工具 → 内置插件组 → 运行期挂载能力 → 存储插件（billion-context / 自定义）→ slice 固定执行策略。
-- 右侧三列是角色默认值：main（只读核心 + image + billion-context）、worker（工作核心 + image/web/skills/todo/subagents + billion-context，subagent 继承）、answerer（只读，无 `orchestrator_align`）。
+- 右侧四列是角色默认值：main（只读核心 + image + billion-context）、worker（工作核心 + image/web/skills/todo/subagents + billion-context，subagent 继承）、aligner（只读七件，只有 image 可关，不占 worker 槽）、answerer（只读，无 `orchestrator_align`）。
 - 保存 `agents` 后，运行中的 Session 在下一个 step 重装 allow list；宿主没注册的工具被滤掉，进行中的 step 保持原样。
 
 ## 图 3：讨论与 Issue 双管线隔离（设计提案，未实施）
@@ -277,8 +277,8 @@ flowchart TB
 
 [![槽位有限，人永远进得来](./concurrency-queue.png)](./concurrency-queue.html)
 
-- 三类来源汇入等待队列：新工单、订阅/CI、人的消息；讨论回答走独立的两个 Answerer 槽。
-- 槽位画成格子：3 个正常槽 + 1 个人工槽（H），依赖未结束的 slice 不占槽。
+- 三类来源汇入等待队列：新工单、订阅/CI、人的消息；执行工单用 worker 槽，对齐工单用独立的两个 Aligner 槽，讨论回答走独立的两个 Answerer 槽。
+- 槽位画成格子：worker 3 个正常槽 + 1 个人工槽（H），依赖未结束的 slice 不占槽；`GET state` 的 worker load 不含 aligner。
 
 ### 图 19：提示词拼装（004）
 

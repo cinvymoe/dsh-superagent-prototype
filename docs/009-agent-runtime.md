@@ -24,7 +24,7 @@
 | 步骤 | 做什么 | 位置 |
 |---|---|---|
 | 1 | 解析或创建 DSH Session，绑定 preset（`ROUTER_PRESET` / `WORKER_PRESET`） | `sessions.ts:165-186` |
-| 2 | 按角色初始化模型：项目覆盖层 `settingsFor(settings, project)` 之后取 `roleModel(settings, 'main' \| 'worker' \| 'answerer')` | `sessions.ts:183-185` |
+| 2 | 按角色初始化模型：项目覆盖层 `settingsFor(settings, project)` 之后取 `roleModel(settings, 'main' \| 'worker' \| 'aligner' \| 'answerer')`；`align` 工单的角色是 `aligner` | `sessions.ts:183-185` |
 | 3 | `decorate(agent)`：挂提示段回调、绑技能作用域、注册工具与白名单 | `sessions.ts:300` |
 | 4 | 权限预设设为 `danger-full-access` | `sessions.ts:186` |
 | 5 | 重命名 Session（标题即工单标题或讨论标题） | `sessions.ts:187` |
@@ -53,8 +53,8 @@ DSH 组装系统提示 → 调到上面的 `text(context)` → 依次发生：
 | Session | 组合 | 说明 |
 |---|---|---|
 | 主 Session | `compose(config, 'orchestrator', env)` | 完整覆盖，含 `dispatch`、`admission`、`policy` |
-| 讨论 Answerer | `composeDiscuss(config, [])` | worker 基座减去 `worker`/`work`，末尾 `discuss.md`，没有实施授权 |
-| 对齐 Aligner | `composeAlign(config, env)` | 同基座 + `align.md`，只提案 |
+| 讨论 Answerer | `composeDiscuss(config, [])` | worker 基座减去 `worker`/`work`/`replies`/handoff，末尾 `discuss.md`，没有实施授权 |
+| 对齐 Aligner | `composeAlign(config, env)` | worker 基座减去 `worker`/`work`/`replies`/handoff，末尾 `align.md`，只提案 |
 | 切片 Worker | `composeExecute(config, strategy.mode, env)` 或 `compose(config, 'worker', env)` | 前者带执行策略，后者直接实施 |
 | 单题 Answerer | `composeAnswer(config)` | `shared` + `answer.md`，只回答一题 |
 
@@ -91,7 +91,7 @@ DSH 组装系统提示 → 调到上面的 `text(context)` → 依次发生：
 
 ### ④ 入队 `launch`
 
-`executor.start` 只做一件事：`effects.enqueue('launch', assignment.id, …)`（`src/executor/dsh.ts:327`）。`launch` 的处理函数带并发上限 `limit: () => host.paused() ? 0 : this.slots.launches()`——上限就是 `maxWorkers` 减去正在跑的与已预留的槽位。槽满时 `launchQueued` 抛 `Later`，effect 留在队列里按序重试。
+`executor.start` 只做一件事：`effects.enqueue('launch', assignment.id, …)`（`src/executor/dsh.ts:327`）。`launch` 的处理函数带并发上限 `limit: () => host.paused() ? 0 : this.launches()`——上限是两个槽池各自「上限减去正在跑的与已预留的槽位」之和：执行工单用 `maxWorkers` 个 worker 槽，对齐工单用固定 2 个 aligner 槽（`ALIGN_CONCURRENCY`），两者互不占用。槽满时 `launchQueued` 抛 `Later`，effect 留在队列里按序重试。
 
 ### ⑤ `launchQueued` 的闸门
 
@@ -100,14 +100,14 @@ DSH 组装系统提示 → 调到上面的 `text(context)` → 依次发生：
 - 工单已结束或有更新 assignment → 静默丢弃；
 - 计划切片的依赖还没结束 → `Later`；
 - 该项目被暂停（`settingsFor(settings, ticket.project).paused`）→ `Later`；
-- 否则 `slots.reserve(ticketId, 'launch')` 抢槽，抢不到抛 `Later`。
+- 否则按工单的 `mode` 选池（`align` → aligner 池，其余 → worker 池），`reserve(ticketId, 'launch')` 抢槽，抢不到抛 `Later`。
 
 ### ⑥ `launch()`：造环境、造 Session、喂第一句
 
 `dsh.ts:491`：
 
 1. `prepareDirectory(ticket)`——目录不存在才跑（worktree 根、`prepare` 命令、超时与失败即 `PrepareFailed`，不重试）。
-2. `sessions.ensure(workerSessionId(ticket.id), workspace, ticket.title, 'worker', undefined, ticket.project)`——建 Session 并完成 T1 的全部装饰（提示回调、技能、工具、模型、权限）。
+2. `sessions.ensure(workerSessionId(ticket.id), workspace, ticket.title, ticket.mode === 'align' ? 'aligner' : 'worker', undefined, ticket.project)`——建 Session 并完成 T1 的全部装饰（提示回调、技能、工具、模型、权限）。对齐工单的 Session 名仍是 `worker-<id>`，但角色、提示与只读工具面都是 aligner 的。
 3. `stopped(ticket.id)` 等上一份 assignment 的后台工作停下。
 4. 组装第一条用户消息（JSON，不是散文）：`{ ticket_id, title, assignment, trigger: 卡片, batch }`；已经被喂过就只发增量 `{ ticket_id, assignment }`。
 5. `sessions.prompt(sessionId, requestId, text, 'queue', authorize, () => engine.assignmentStarted(...))`——**投喂与状态转移在同一个授权回调里**，投喂前还会再校验一次工单仍然有效。
@@ -153,7 +153,7 @@ DSH 组装系统提示 → 调到上面的 `text(context)` → 依次发生：
 
 1. **`relay` 唤醒，`notice` 不唤醒。** 前者是「有人跟你说话」，后者是「顺手让你知道」。
 2. **`complete: true` 只给主 Session。** 其它角色的系统提示是叠加在 preset 之上的；这也是为什么 Worker 能保留工具与工作方式，而主 Session 的整份提示由 `compose` 决定。
-3. **讨论 Answerer 不占 Worker 槽。** 它跑在自己的只读 Session 里（`ensureAnswerer`），工具是只读族加 `discussion_ask`，永远不会建 Ticket。
+3. **Aligner 与讨论 Answerer 都不占 Worker 槽。** Aligner 跑在对齐工单的只读 Session 里，占 aligner 池（固定 2 个，`ALIGN_CONCURRENCY`），`GET state` 的 worker load 只数执行工单；讨论 Answerer 跑在 `ensureAnswerer` 的只读 Session 里，工具是只读族加 `discussion_ask`，永远不会建 Ticket。
 
 ---
 

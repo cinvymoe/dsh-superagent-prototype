@@ -1,5 +1,5 @@
 /**
- * The plugin catalog of the three Agent roles: the built-in capability groups, the required core tools a role keeps, the
+ * The plugin catalog of the four Agent roles: the built-in capability groups, the required core tools a role keeps, the
  * tools an enabled plugin adds, the catalog `GET settings` offers, and the checks a save of the `agents` settings block runs.
  */
 import { UserError } from '../core/index.ts'
@@ -23,6 +23,12 @@ export const WORK_TOOLS = ['read', 'write', 'edit', 'read_image', 'glob', 'grep'
 /** The DSH tools the main Session works with, in catalog order: skills, files, the shell and its jobs, and images. */
 export const MAIN_TOOLS = ['skill', 'bash', 'read', 'read_image', 'job_output', 'job_list', 'job_kill']
 /**
+ * The tools an aligner may call, in catalog order: reading the repository (`read_image` only while the image plugin is
+ * enabled) and the three orchestrator tools that put an alignment on the local board. Nothing here writes, runs, messages
+ * a Session or asks a person, so an aligner can only propose.
+ */
+export const ALIGN_TOOLS = ['read', 'read_image', 'glob', 'grep', 'orchestrator_read', 'orchestrator_align', 'orchestrator_report']
+/**
  * The tools a role cannot turn off: they are not part of any plugin, appear in its read-only required row, and stay in the
  * allow list whenever the host provides them. The registry (`agent-specs.ts`) holds each role's list, which the catalog and
  * the migration read through this table.
@@ -30,6 +36,7 @@ export const MAIN_TOOLS = ['skill', 'bash', 'read', 'read_image', 'job_output', 
 export const REQUIRED_TOOLS: Readonly<Record<AgentRole, readonly string[]>> = {
   main: AGENT_SPECS.main.required,
   worker: AGENT_SPECS.worker.required,
+  aligner: AGENT_SPECS.aligner.required,
   answerer: AGENT_SPECS.answerer.required,
 }
 /**
@@ -70,19 +77,21 @@ export const BUILTIN_PLUGINS: readonly BuiltinPlugin[] = [
   // Standard-mode plugins no superagent preset registers: a role enables one and its Session mounts it, so an unenabled
   // capability has no tool and no prompt section at all. `ask-user` blocks on the main Session because a person is waiting
   // there, and times out on a worker, which must keep working while the answer is pending.
+  // The mounted capabilities name their roles explicitly rather than `AGENT_ROLES`: an aligner reads and proposes, so it
+  // never gets a tool that asks a person, publishes a file, fetches the web or forks a Session.
   { id: 'ask-user', name: 'Ask user', description: 'Ask the person a question and wait for the answer.',
-    tools: ['ask_user_question'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    tools: ['ask_user_question'], roles: ['main', 'worker', 'answerer'], providedBy: 'mount',
     mount: { module: '@deepseek-ai/dsh-tool-ask-user',
       config: role => role === 'main' ? { mode: 'legacy' } : { mode: 'timed', timeout: 120 } } },
   { id: 'present', name: 'Present', description: 'Publish a file as a deliverable for the person.',
-    tools: ['present'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    tools: ['present'], roles: ['main', 'worker', 'answerer'], providedBy: 'mount',
     mount: { module: '@deepseek-ai/dsh-tool-present', config: () => ({}) } },
   { id: 'web-fetch', name: 'Web fetch', description: 'Read a web page in full.',
-    tools: ['web_fetch'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    tools: ['web_fetch'], roles: ['main', 'worker', 'answerer'], providedBy: 'mount',
     // A second dsh-tool-web instance registers only the fetch tool, so it never shadows the preset's web_search.
     mount: { module: '@deepseek-ai/dsh-tool-web', config: () => ({ search: false, fetch: true }) } },
   { id: 'fork-subagent', name: 'Fork subagent', description: 'Fork this Session into a subagent that keeps its context.',
-    tools: ['subagent_fork'], roles: [...AGENT_ROLES], providedBy: 'mount',
+    tools: ['subagent_fork'], roles: ['main', 'worker', 'answerer'], providedBy: 'mount',
     mount: { module: '@deepseek-ai/dsh-tool-subagent',
       config: role => ({ provider: 'fork', toolName: 'subagent_fork', agentPreset: AGENT_SPECS[role].preset }) } },
 ]
@@ -132,6 +141,7 @@ export const forbiddenAddedTool = (name: string): boolean => FORBIDDEN_ADDED_TOO
 export const AGENT_TOOLS: Readonly<Record<AgentRole, AgentTools>> = {
   main: { preset: AGENT_SPECS.main.preset, required: AGENT_SPECS.main.required },
   worker: { preset: AGENT_SPECS.worker.preset, required: AGENT_SPECS.worker.required },
+  aligner: { preset: AGENT_SPECS.aligner.preset, required: AGENT_SPECS.aligner.required },
   answerer: { preset: AGENT_SPECS.answerer.preset, required: AGENT_SPECS.answerer.required },
 }
 /** Whether a plugin's definition applies to `role`; an absent `roles` means every role. */
@@ -195,17 +205,20 @@ export function closeAgentPlugins(role: AgentRole, agents: AgentsConfig): string
 }
 /**
  * The saved block with every role's `requires` closed over, so enabling one capability also enables what it depends on.
- * The Answerer starts from a worker's defaults, so closing a block never turns a worker plugin on for it.
+ * The Answerer starts from a worker's defaults, so closing a block never turns a worker plugin on for it; the aligner keeps
+ * its own, much narrower, set beside the worker's.
  */
 export function closeAgentsPlugins(agents: AgentsConfig): AgentsConfig {
   return { ...agents,
     main: { ...agents.main, enabledPlugins: closeAgentPlugins('main', agents) },
     worker: { ...agents.worker, enabledPlugins: closeAgentPlugins('worker', agents) },
+    aligner: { ...agents.aligner, enabledPlugins: closeAgentPlugins('aligner', agents) },
     answerer: { ...agents.answerer, enabledPlugins: closeAgentPlugins('answerer', agents) } }
 }
-/** A role's catalog order: the main Session's built-ins, else the work tools, which keeps a Session's allow list stable. */
+/** A role's catalog order: the main Session's built-ins, an aligner's read-only set, else the work tools. */
 export function orderedTools(role: AgentRole): readonly string[] {
-  return AGENT_SPECS[role].tools === 'main' ? MAIN_TOOLS : WORK_TOOLS
+  const installer = AGENT_SPECS[role].tools
+  return installer === 'main' ? MAIN_TOOLS : installer === 'align' ? ALIGN_TOOLS : WORK_TOOLS
 }
 /**
  * The tools a role may call: its required core tools, then the tools of the plugins it enables, deduplicated and kept in the

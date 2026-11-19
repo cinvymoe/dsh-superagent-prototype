@@ -1,5 +1,7 @@
 /**
- * Migrates a schema 10, 11 or 12 database to schema 13 in a single transaction so runtime readers never convert legacy shapes.
+ * Migrates a schema 10, 11, 12 or 13 database to schema 14 in a single transaction so runtime readers never convert legacy
+ * shapes. Schema 14 gives the aligner a role of its own again: a schema 12 database's old aligner becomes the answerer and
+ * the new aligner starts on its defaults, while a schema 13 database only gains the aligner.
  * Databases older than schema 10 are rejected: this version cannot migrate them.
  */
 import { basename } from 'node:path'
@@ -18,7 +20,7 @@ import type { SettingsVersion, Store } from './store.ts'
 import { Versions } from './versions.ts'
 import { KV, type Key } from '../kv.ts'
 
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 /** The oldest database schema version this build can open and migrate directly. */
 export const OLDEST_SCHEMA = 10
 /** Returns an error message explaining why `version` cannot be opened: older schemas need a new state directory. */
@@ -35,7 +37,8 @@ function step<T>(record: string, work: () => T): T {
 }
 /** Rewrite all schema 10 records into their schema 11 shapes in place. */
 export function migrateTo11(store: Store): void {
-  step('the settings', () => { migrateSettingsRecords(store) })
+  // The role rename has already run for a database below schema 13 (see `migrateTo13`), so no step here renames roles.
+  step('the settings', () => { migrateSettingsRecords(store, false) })
   step('the prompt versions', () => { migratePrompts(store) })
   const answers = new Map<string, string[]>()
   for (const name of store.keys('answer-ready:')) {
@@ -91,19 +94,30 @@ export function migrateTo11(store: Store): void {
   step('the Triggers\' times', () => { triggerTimes(store) })
 }
 /**
- * Rewrite the current and historical settings records from the per-tool Agent block into the plugin block. The same
- * conversion also runs inside the schema 11 migration, so a schema 10 database reaches schema 12 in one open.
+ * Rewrite the current and historical settings records from the per-tool Agent block into the plugin block. The plugin
+ * conversion itself is idempotent, so it runs for every database whose Agent block predates the plugin shape.
  */
 export function migrateTo12(store: Store): void {
-  step('the settings', () => { migrateSettingsRecords(store) })
+  step('the settings', () => { migrateSettingsRecords(store, false) })
 }
 
 /**
- * Rename the current and historical settings records' Agent roles to `main`, `worker` and `answerer`: the same rewrite
- * runs inside the earlier steps, so every supported database reaches schema 13 however old it is.
+ * Rename the current and historical settings records' Agent roles to `main`, `worker`, `aligner` and `answerer` for a
+ * database that still stores the old names: the old aligner (the discussion answerer) becomes the answerer, and the executor
+ * becomes the worker. This is the only step that runs `renameAgents`, and it runs before the current role set is read — so
+ * the new aligner a later step defaults in is never renamed. A schema 13 database is already renamed and skips this step.
  */
 export function migrateTo13(store: Store): void {
-  step('the settings', () => { migrateSettingsRecords(store) })
+  step('the settings', () => { migrateSettingsRecords(store, true) })
+}
+
+/**
+ * Read the current and historical settings records into the schema 14 role set: a stored block that names no aligner gains
+ * the role on its defaults (`enabledPlugins: ['image']`, no model override). It never renames roles, because a schema 12
+ * database was renamed by `migrateTo13` before this step and a schema 13 one has no old names left.
+ */
+export function migrateTo14(store: Store): void {
+  step('the settings', () => { migrateSettingsRecords(store, false) })
 }
 /**
  * Normalize trigger and thread timestamps to fixed-width millisecond ISO strings so lexicographical text order matches
@@ -198,18 +212,20 @@ const ORIGINS: Readonly<Record<string, SettingsOrigin>> = { web: 'panel', 'orche
 const REMOVED_SOURCES: readonly string[] = ['github-issue']
 /**
  * Upgrade current and historical settings records to the schema 11 structure: strip removed source kinds from active
- * settings while keeping them in historical revisions and mapping historical origin names.
+ * settings while keeping them in historical revisions and mapping historical origin names. `renameRoles` is true for the
+ * one step that converts the old Agent role names and false for every later step, so a freshly defaulted aligner is never
+ * renamed into the answerer.
  */
-function migrateSettingsRecords(store: Store): void {
+function migrateSettingsRecords(store: Store, renameRoles: boolean): void {
   const stored = store.get<unknown>('settings')
   if (stored !== undefined) {
-    const settings = SettingsSchema.parse(migrateSettings(stored))
+    const settings = SettingsSchema.parse(migrateSettings(stored, renameRoles))
     store.set('settings', { ...settings, sources: Object.fromEntries(Object.entries(settings.sources).filter(([id]) => !REMOVED_SOURCES.includes(id))) })
   }
   // Preserve unparseable historical revisions as-is so a corrupt history entry does not block startup.
   for (const name of store.keys('settings-version:')) {
     const version = store.get<{ source: string; settings: unknown }>(name)!
-    const settings = SettingsSchema.safeParse(migrateSettings(version.settings))
+    const settings = SettingsSchema.safeParse(migrateSettings(version.settings, renameRoles))
     store.set(name, { ...version, source: ORIGINS[version.source] ?? version.source, ...settings.success ? { settings: settings.data } : {} })
   }
 }
@@ -218,9 +234,9 @@ interface Member { name?: string; feishuId?: string; github?: string }
  * Convert legacy flat settings (chat lists in Policy, top-level pause flag) or pre-schema-11 domain settings into current domain blocks:
  * strips fields replaced by rule instructions and prompts (Executor reviewers and branch prefix, rule `visual` flag, `autoMergeLineLimit`, Source `authority`, GitHub `mergeCli`), extracts `paused` to the top level, and splits cross-source `members` into per-source `policy.sources` entries.
  */
-export function migrateSettings(value: unknown): unknown {
+export function migrateSettings(value: unknown, renameRoles = true): unknown {
   if (!isObject(value)) return value
-  if (!('members' in value || 'allowedChats' in value || 'admission' in value)) return withoutRemovedFields(value)
+  if (!('members' in value || 'allowedChats' in value || 'admission' in value)) return withoutRemovedFields(value, renameRoles)
   const old = value as { models?: { orchestrator?: unknown; worker?: unknown }; paused?: boolean; allowedChats?: string[]; members?: unknown[];
     allowDirectMessages?: boolean; pollSeconds?: number; maxWorkers?: number; admission?: { mode?: string; chats?: string[]; timeoutSeconds?: number; rules?: unknown[] } }
   const chats = new Map<string, 'mentions' | 'all'>()
@@ -234,7 +250,7 @@ export function migrateSettings(value: unknown): unknown {
     eval: { ...(old.admission?.mode ? { mode: old.admission.mode } : {}), ...(old.admission?.timeoutSeconds ? { timeoutSeconds: old.admission.timeoutSeconds } : {}),
       model: old.models?.orchestrator ?? null },
     executor: { model: old.models?.worker ?? null, ...(old.maxWorkers ? { maxWorkers: old.maxWorkers } : {}), paused: old.paused ?? false },
-  })
+  }, renameRoles)
 }
 /**
  * The Agent role names a schema 12 block stores, mapped to the names this build uses: the executor role became the
@@ -277,11 +293,19 @@ export function migrateAgents(value: unknown): unknown {
   return result
 }
 /**
- * Rename a schema 12 `agents` block to this build's roles, including the role scopes of its stored plugins; a name the
- * build already uses stays as it is, so running the step twice changes nothing.
+ * Rename a schema 12 `agents` block to this build's roles, including the role scopes of its stored plugins. A block that
+ * still stores the old `executor` role (or scopes a stored plugin to it) is the old naming and is renamed; a block that does
+ * not is already current, so its `aligner` is this build's own role and stays as it is. Running the step twice changes
+ * nothing.
  */
 export function renameAgents(value: unknown): unknown {
   if (!isObject(value)) return value
+  const scoped = Array.isArray(value.plugins) && value.plugins.some(plugin => isObject(plugin)
+    && Array.isArray(plugin.roles) && plugin.roles.includes('executor'))
+  // A block that still names the old executor role, or an aligner without the answerer beside it, is the old naming (a
+  // schema 14 block is never migrated); a current block keeps this build's own aligner role as it is.
+  const legacy = value.executor !== undefined || (value.aligner !== undefined && value.answerer === undefined) || scoped
+  if (!legacy) return value
   const result: Stored = { ...value }
   for (const [name, role] of Object.entries(LEGACY_ROLES)) {
     if (name === role || result[name] === undefined) continue
@@ -298,7 +322,7 @@ export function renameAgents(value: unknown): unknown {
   }
   return result
 }
-function withoutRemovedFields(value: Stored): Stored {
+function withoutRemovedFields(value: Stored, renameRoles = true): Stored {
   const { executor, policy, sources, agents, ...rest } = value as { executor?: Stored; policy?: Stored; sources?: Record<string, Stored>; agents?: unknown }
   // `paused` is now a top-level setting rather than a field on `executor`.
   const { reviewer: _reviewer, visualReviewer: _visualReviewer, branchPrefix: _branchPrefix, paused, ...kept } = executor ?? {}
@@ -320,7 +344,8 @@ function withoutRemovedFields(value: Stored): Stored {
   // Rewrite environment variable prefixes from the project's earlier names in `prepare` commands.
   if (typeof kept.prepare === 'string') kept.prepare = kept.prepare.replace(/\bDSH_(?:TAG|GO|FREELANCER)_/g, 'DSH_SUPERAGENT_')
   return { ...rest, ...(typeof paused === 'boolean' ? { paused } : {}), ...(executor ? { executor: kept } : {}),
-    ...(instances ? { sources: instances } : {}), ...(agents !== undefined ? { agents: renameAgents(migrateAgents(agents)) } : {}),
+    ...(instances ? { sources: instances } : {}),
+    ...(agents !== undefined ? { agents: renameRoles ? renameAgents(migrateAgents(agents)) : migrateAgents(agents) } : {}),
     ...(policy ? { policy: { ...policyRest, ...(rules ? { rules } : {}), ...(parts ? { sources: parts } : {}) } } : {}) }
 }
 

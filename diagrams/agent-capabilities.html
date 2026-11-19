@@ -141,8 +141,8 @@
 
     <div class="diagram-container">
       <svg viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="agent-capabilities-title agent-capabilities-desc">
-        <title id="agent-capabilities-title">Agent 工具集的分层拼装与三个角色</title>
-        <desc id="agent-capabilities-desc">分层图：一个 Session 的允许工具由必需核心工具、内置插件组、运行期挂载能力、存储插件和 slice 固定执行策略五层拼装；右侧列出 main、worker、answerer 三个角色各自的默认组合与模型继承。</desc>
+        <title id="agent-capabilities-title">Agent 工具集的分层拼装与四个角色</title>
+        <desc id="agent-capabilities-desc">分层图：一个 Session 的允许工具由必需核心工具、内置插件组、运行期挂载能力、存储插件和 slice 固定执行策略五层拼装；右侧列出 main、worker、aligner、answerer 四个角色各自的默认组合与模型继承。</desc>
         <defs>
           <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
@@ -200,38 +200,44 @@
         <text x="768" y="464" class="d-mono" fill="#5a6580" text-anchor="end">pinned on plan</text>
 
         <!-- ============ role column ============ -->
-        <text x="824" y="122" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">THREE ROLES</text>
+        <text x="824" y="122" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">FOUR ROLES</text>
 
-        <rect x="824" y="136" width="416" height="96" rx="6" fill="#f5f5f5"/>
-        <rect x="824" y="136" width="416" height="96" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="824" y="136" width="416" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="136" width="416" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
         <rect x="832" y="146" width="64" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
         <text x="864" y="155" class="d-tag" fill="#5a6580" text-anchor="middle">MAIN</text>
-        <text x="840" y="176" class="d-name" fill="#2d3142">主 Session</text>
-        <text x="840" y="198" class="d-sub" fill="#4f5d75">只读核心 · 5 秒等待上限</text>
-        <text x="840" y="218" class="d-mono" fill="#5a6580">image + billion-context + 7 built-ins</text>
+        <text x="840" y="172" class="d-name" fill="#2d3142">主 Session</text>
+        <text x="840" y="192" class="d-sub" fill="#4f5d75">只读核心 · 5 秒等待上限</text>
+        <text x="840" y="212" class="d-mono" fill="#5a6580">image + billion-context + 7 built-ins</text>
 
-        <rect x="824" y="248" width="416" height="144" rx="6" fill="#f5f5f5"/>
-        <rect x="824" y="248" width="416" height="144" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
-        <rect x="832" y="258" width="64" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
-        <text x="864" y="267" class="d-tag" fill="#5a6580" text-anchor="middle">WORKER</text>
-        <text x="840" y="288" class="d-name" fill="#2d3142">worker-&lt;ticketId&gt;</text>
-        <text x="840" y="310" class="d-sub" fill="#4f5d75">工作核心 + image / web / skills / todo / subagents</text>
-        <text x="840" y="330" class="d-sub" fill="#4f5d75">billion-context：长对话自己折叠</text>
-        <text x="840" y="350" class="d-sub" fill="#5a6580">subagent 继承同一套插件与权限</text>
-        <text x="840" y="372" class="d-mono" fill="#5a6580">align ticket 与 slice ticket 同一个角色</text>
+        <rect x="824" y="232" width="416" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="232" width="416" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="242" width="64" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="864" y="251" class="d-tag" fill="#5a6580" text-anchor="middle">WORKER</text>
+        <text x="840" y="268" class="d-name" fill="#2d3142">worker-&lt;ticketId&gt;</text>
+        <text x="840" y="288" class="d-sub" fill="#4f5d75">工作核心 + image / web / skills / todo / subagents</text>
+        <text x="840" y="306" class="d-sub" fill="#5a6580">billion-context 折叠长对话；subagent 继承同一套插件</text>
 
-        <rect x="824" y="408" width="416" height="88" rx="6" fill="#f5f5f5"/>
-        <rect x="824" y="408" width="416" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
-        <rect x="832" y="418" width="72" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
-        <text x="868" y="427" class="d-tag" fill="#5a6580" text-anchor="middle">ANSWERER</text>
-        <text x="840" y="448" class="d-name" fill="#2d3142">answerer-&lt;discussion&gt;</text>
-        <text x="840" y="470" class="d-sub" fill="#4f5d75">只读工具；没有 orchestrator_align</text>
-        <text x="840" y="488" class="d-mono" fill="#5a6580">cannot align, dispatch or create a requirement</text>
+        <rect x="824" y="328" width="416" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="328" width="416" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="338" width="72" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="868" y="347" class="d-tag" fill="#5a6580" text-anchor="middle">ALIGNER</text>
+        <text x="840" y="364" class="d-name" fill="#2d3142">aligner · worker-&lt;ticketId&gt;</text>
+        <text x="840" y="384" class="d-sub" fill="#4f5d75">read / read_image / glob / grep · orchestrator_read/align/report</text>
+        <text x="840" y="404" class="d-mono" fill="#5a6580">image 是唯一可关的插件；不占 worker 槽</text>
+
+        <rect x="824" y="424" width="416" height="88" rx="6" fill="#f5f5f5"/>
+        <rect x="824" y="424" width="416" height="88" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+        <rect x="832" y="434" width="72" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+        <text x="868" y="443" class="d-tag" fill="#5a6580" text-anchor="middle">ANSWERER</text>
+        <text x="840" y="460" class="d-name" fill="#2d3142">answerer-&lt;discussion&gt;</text>
+        <text x="840" y="480" class="d-sub" fill="#4f5d75">只读工具；没有 orchestrator_align</text>
+        <text x="840" y="500" class="d-mono" fill="#5a6580">cannot align, dispatch or create a requirement</text>
 
         <!-- model chain -->
-        <text x="824" y="528" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">MODEL INHERITANCE</text>
-        <text x="824" y="552" class="d-sub" fill="#4f5d75">main ← eval.model　worker ← executor.model</text>
-        <text x="824" y="574" class="d-sub" fill="#4f5d75">answerer ← worker 的生效模型</text>
+        <text x="824" y="536" class="d-arrow" fill="#5a6580" letter-spacing="0.14em">MODEL INHERITANCE</text>
+        <text x="824" y="560" class="d-sub" fill="#4f5d75">main ← eval.model　worker ← executor.model</text>
+        <text x="824" y="582" class="d-sub" fill="#4f5d75">aligner / answerer ← worker 的生效模型</text>
 
         <!-- annotation -->
         <text x="64" y="528" class="d-annot" fill="#bf4520">保存 agents 后，运行中的 Session 在下一个 step 重装 allow list。</text>
@@ -284,7 +290,7 @@
 
     <footer class="footer">
       <span>dsh-superagent · agents &amp; capabilities · 对应 docs/003-execution.md、docs/005-panel.md</span>
-      <span>5 layers · 3 roles</span>
+      <span>5 layers · 4 roles</span>
     </footer>
   </div>
 

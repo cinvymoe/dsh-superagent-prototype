@@ -4,8 +4,8 @@
  */
 import { afterEach, expect, it, vi } from 'vitest'
 import { AGENT_ROLES, AgentsConfigSchema, DEFAULT_AGENT_PLUGINS, DEFAULT_ENABLED_PLUGINS, SettingsSchema, type AgentRole, type AgentsConfig } from '../src/policy.ts'
-import { AGENT_TOOLS, BUILTIN_PLUGINS, COMPRESSION_TOOLS, FORBIDDEN_ADDED_TOOLS, MAIN_TOOLS, REQUIRED_TOOLS, WORK_TOOLS, agentCatalog,
-  capabilityMounts, closeAgentPlugins, closeAgentsPlugins, pluginSuggestions, roleTools, validateAgentPlugins } from '../src/app/agent-tools.ts'
+import { AGENT_TOOLS, ALIGN_TOOLS, BUILTIN_PLUGINS, COMPRESSION_TOOLS, FORBIDDEN_ADDED_TOOLS, MAIN_TOOLS, REQUIRED_TOOLS, WORK_TOOLS,
+  agentCatalog, capabilityMounts, closeAgentPlugins, closeAgentsPlugins, pluginSuggestions, roleTools, validateAgentPlugins } from '../src/app/agent-tools.ts'
 import { roleModel } from '../src/app/role-models.ts'
 import { UserError } from '../src/core/index.ts'
 import { startRuntime, feishu, type Host } from './fixtures/host.ts'
@@ -25,14 +25,19 @@ type SettingsBody = { blocks: { agents: { revision: number; value: AgentsConfig 
 type HistoryBody = { items: { block: string; changes: { code: string; items?: string[] }[] | null }[] }
 
 it('catalogs each Agent role and the built-in plugin groups that reproduce the previous tool surface', () => {
-  expect([...AGENT_ROLES]).toEqual(['main', 'worker', 'answerer'])
+  expect([...AGENT_ROLES]).toEqual(['main', 'worker', 'aligner', 'answerer'])
   expect(BUILTIN_PLUGINS.map(plugin => plugin.id)).toEqual(['image', 'web', 'skills', 'todo', 'subagents',
     'ask-user', 'present', 'web-fetch', 'fork-subagent'])
   expect(AGENT_TOOLS.main.preset).toBe('dsh-superagent-router')
   expect(AGENT_TOOLS.worker.preset).toBe('dsh-superagent-worker')
+  expect(AGENT_TOOLS.aligner.preset).toBe('dsh-superagent-worker')
   expect(AGENT_TOOLS.answerer.preset).toBe('dsh-superagent-worker')
   expect([...AGENT_TOOLS.main.required]).toEqual(['skill', 'bash', 'read', 'job_output', 'job_list', 'job_kill'])
   expect([...AGENT_TOOLS.worker.required]).toEqual(REQUIRED_TOOLS.worker)
+  // An aligner keeps the readers it needs and no optional group but image, so its surface stays read-only.
+  expect([...AGENT_TOOLS.aligner.required]).toEqual(['read', 'glob', 'grep'])
+  expect(roleTools('aligner', emptyAgents)).toEqual(ALIGN_TOOLS.filter(name => name !== 'orchestrator_read'
+    && name !== 'orchestrator_align' && name !== 'orchestrator_report'))
   // An applicable plugin never declares a required tool of that role, so no switch can take one away.
   for (const role of AGENT_ROLES) {
     const applicable = BUILTIN_PLUGINS.filter(plugin => plugin.roles.includes(role))
@@ -41,6 +46,7 @@ it('catalogs each Agent role and the built-in plugin groups that reproduce the p
   // A new database starts on the plugin defaults that reproduce the per-tool surface it replaced.
   expect(emptyAgents.main.enabledPlugins).toEqual(['image', 'billion-context'])
   expect(emptyAgents.worker.enabledPlugins).toEqual(['image', 'web', 'skills', 'todo', 'subagents', 'billion-context'])
+  expect(emptyAgents.aligner.enabledPlugins).toEqual(['image'])
   expect(emptyAgents.answerer.enabledPlugins).toEqual(DEFAULT_ENABLED_PLUGINS.answerer)
   // billion-context is a stored definition now, so a fresh block seeds it and the panel may edit or remove it.
   expect(emptyAgents.plugins).toEqual(DEFAULT_AGENT_PLUGINS.map(plugin => ({ ...plugin, tools: [...plugin.tools] })))
@@ -164,7 +170,7 @@ it('resolves each role\'s model through its own override, then the role default,
   expect(roleModel(value({ answerer: { model: answererModel } }), 'answerer')).toEqual(answererModel)
 })
 
-it('applies a worker\'s own plugin switches to every Ticket Session and an Answerer\'s to discussions', async () => {
+it('applies each role\'s own model and switches: worker Tickets, the aligner\'s read-only surface and discussions', async () => {
   h = await startRuntime()
   const project = h.runtime.local.createProject({ name: 'Demo', repository: 'deepseek-ai/dsh-superagent-prototype' })
   const issue = h.runtime.local.create({ title: 'Align the local board', body: 'Requirements arrive in the panel.', project: project.id })
@@ -178,15 +184,13 @@ it('applies a worker\'s own plugin switches to every Ticket Session and an Answe
   const llm = (h.ctx as unknown as { llm: { resolveCallConfig: ReturnType<typeof vi.fn> } }).llm
   llm.resolveCallConfig.mockClear()
   const triggerId = h.runtime.store.read.threadTriggers(`local:${issue.id}`, 1)[0]!.id
-  // Alignment runs on the worker role now: its model and plugin switches, including the web group switched off here.
+  // An alignment Ticket runs the aligner role: it still inherits the worker's model, but its tools are the read-only
+  // aligner surface, so none of the worker's implementation switches reach it.
   const align = await h.route({ kind: 'accept', trigger_id: triggerId, title: 'Align the local board', worktree_name: 'align-local-board',
     acknowledgement: '收到，先做需求对齐。', mode: 'align' }) as { ticket: { ticket_id: string } }
   await h.runtime.idle()
   expect(llm.resolveCallConfig).toHaveBeenCalledWith(workerModel)
-  const alignAllow = h.restrictions.get(`worker-${align.ticket.ticket_id}`)!.at(-1)!
-  expect(alignAllow).toContain('bash')
-  expect(alignAllow).toContain('read_image')
-  expect(alignAllow).not.toContain('web_search')
+  expect(h.restrictions.get(`worker-${align.ticket.ticket_id}`)!.at(-1)).toEqual(ALIGN_TOOLS)
   // A discussion's Answerer uses its own model and switches: read-only, narrowed to its own plugins, no alignment tool.
   const discussion = h.runtime.discussions.create({ body: 'Discuss the split', project: project.id })
   const answerer = `answerer-${discussion.id}`
@@ -209,13 +213,16 @@ it('returns the agents block with its revision, the shared plugin catalog and ea
   expect(status).toBe(200)
   const settings = body as unknown as SettingsBody
   expect(settings.blocks.agents).toEqual({ revision: 0, value: emptyAgents })
-  expect(settings.agents.roles.map(entry => entry.role)).toEqual(['main', 'worker', 'answerer'])
+  expect(settings.agents.roles.map(entry => entry.role)).toEqual(['main', 'worker', 'aligner', 'answerer'])
   expect(settings.agents.roles[0]).toMatchObject({ preset: 'dsh-superagent-router', required: REQUIRED_TOOLS.main,
     plugins: ['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
     enabledPlugins: ['image', 'billion-context'] })
   expect(settings.agents.roles[1]).toMatchObject({ required: REQUIRED_TOOLS.worker,
     plugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'] })
-  expect(settings.agents.roles[2]).toMatchObject({ required: REQUIRED_TOOLS.answerer,
+  // The aligner card: the worker preset, its three read-only required tools, and the image group as the only plugin.
+  expect(settings.agents.roles[2]).toMatchObject({ role: 'aligner', preset: 'dsh-superagent-worker', required: REQUIRED_TOOLS.aligner,
+    plugins: ['image'], enabledPlugins: ['image'] })
+  expect(settings.agents.roles[3]).toMatchObject({ required: REQUIRED_TOOLS.answerer,
     plugins: ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent'] })
   // The shared catalog marks the built-in groups and the tools this host does not register.
   expect(settings.agents.plugins.map(plugin => [plugin.id, plugin.builtIn, plugin.provided]))
@@ -231,6 +238,7 @@ it('returns the agents block with its revision, the shared plugin catalog and ea
   expect(settings.agents.roles.map(entry => entry.plugins)).toEqual([
     ['image', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
     ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent', 'billion-context'],
+    ['image'],
     ['image', 'web', 'skills', 'todo', 'subagents', 'ask-user', 'present', 'web-fetch', 'fork-subagent']])
   expect(settings.agents.ungroupedTools).toEqual([])
 })

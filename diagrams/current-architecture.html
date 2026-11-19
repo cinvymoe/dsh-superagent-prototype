@@ -334,7 +334,7 @@
         <rect x="672" y="274" width="56" height="12" rx="2" fill="transparent" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
         <text x="700" y="283" class="d-tag" fill="#5a6580" text-anchor="middle">ALIGNER</text>
         <text x="796" y="302" class="d-name" fill="#2d3142" text-anchor="middle">Aligner · align Ticket</text>
-        <text x="796" y="322" class="d-sub" fill="#4f5d75" text-anchor="middle">每需求一个 Session · 不实现</text>
+        <text x="796" y="322" class="d-sub" fill="#4f5d75" text-anchor="middle">aligner 角色 · 只读七件 · 不实现</text>
         <text x="796" y="342" class="d-mono" fill="#5a6580" text-anchor="middle">orchestrator_align</text>
         <text x="796" y="358" class="d-sub" fill="#4f5d75" text-anchor="middle">routing note 引讨论结论 · slices</text>
 
@@ -398,7 +398,8 @@
           <li>调 <code>orchestrator_align</code> 写回 summary + slices + acceptance</li>
           <li>一个 slice = 一个 Worker 的工单，带无环 <code>dependsOn</code></li>
           <li>提案不自动开工；人在 Discuss 确认后才成 Ticket</li>
-          <li>没有 <code>feature_exec_*</code> 工具</li>
+          <li>没有 <code>feature_exec_*</code>、<code>bash</code> 或写工具</li>
+          <li>独立的 aligner 角色与并发池（×2），不占 worker slot</li>
         </ul>
       </article>
 
@@ -471,7 +472,7 @@
             <td><strong>Aligner</strong></td>
             <td><span>align Ticket · 每需求一个 Session</span></td>
             <td><span>读仓库与需求，产出 summary + slices + acceptance + dependsOn</span></td>
-            <td><span>不实现、不开 PR；提案必须由人确认</span></td>
+            <td><span>不实现、不开 PR；提案必须由人确认；占 aligner 槽（×2），不占 worker slot</span></td>
           </tr>
           <tr>
             <td><strong>Worker</strong></td>

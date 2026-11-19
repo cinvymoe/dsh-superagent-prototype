@@ -47,10 +47,18 @@ export function ticketRow(view: Snapshot, ticket: Ticket) {
   const reply = line.stage === 'person' && channel ? channelLink(view, channel) : undefined
   return { ...line, ...reply ? { reply } : {} }
 }
-/** Executor slot utilization: `running` worker Sessions in an active turn (which occupy slots and are interrupted by a restart), and tickets `queued` for a slot. */
+/**
+ * Executor slot utilization: `running` worker Sessions in an active turn (which occupy slots and are interrupted by a
+ * restart), and execution tickets `queued` for a slot. An alignment Ticket holds the aligner pool instead, so it appears in
+ * neither figure.
+ */
 export interface ExecutorLoad { running: number; queued: number }
 export function executorLoad(store: Store, running: number): ExecutorLoad {
-  const queued = (ticket: Ticket) => { const stage = ticketStage(ticket); return stage.stage === 'working' && stage.action === 'queued' }
+  const queued = (ticket: Ticket) => {
+    if (ticket.mode === 'align') return false
+    const stage = ticketStage(ticket)
+    return stage.stage === 'working' && stage.action === 'queued'
+  }
   return { running, queued: store.tickets.open().filter(queued).length }
 }
 export function ticketDetail(host: ViewHost, id: string) {
