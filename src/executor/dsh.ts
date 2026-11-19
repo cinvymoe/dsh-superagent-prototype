@@ -13,6 +13,7 @@ import { runAsWorker, verifyDirectory } from '../infra/environment.ts'
 import { settingsFor, type Settings } from '../policy.ts'
 import type { Store } from '../app/store.ts'
 import { Later, type Effects } from '../app/effects.ts'
+import { workerSlotLimit } from '../app/agent-specs.ts'
 import { resolvedExecutionRoot, type Variable } from '../app/execution-environment.ts'
 import type { Sessions } from '../app/sessions.ts'
 import { WorktreeNameSchema } from '../app/assessment.ts'
@@ -272,8 +273,9 @@ export class DshExecutor implements Executor {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
   /** Registers the `launch` and `delivery` effect handlers; both are held (concurrency limit 0) while processing is paused. */
   constructor(private readonly host: ExecutorHost) {
+    // Every Ticket Session is a worker's, alignment and execution alike, so both hold the worker role's slot pool.
     this.slots = new WorkerSlots(() => host.store.tickets.open().filter(ticket => this.running(ticket)).map(ticket => ticket.id),
-      () => host.store.settings().executor.maxWorkers)
+      () => workerSlotLimit(host.store.settings()))
     // Each launch reserves a worker slot so launches run concurrently while slots are free.
     host.effects.handle('launch', payload => this.launchQueued(payload), { limit: () => host.paused() ? 0 : this.slots.launches(),
       retry: [5000, 300_000] })
