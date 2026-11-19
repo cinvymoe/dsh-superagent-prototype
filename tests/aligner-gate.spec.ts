@@ -63,10 +63,10 @@ it('reads every role as on by default, refuses to turn infrastructure roles off,
   }
 
   // `GET settings` names every role, its switch and whether the panel may offer one; only the Aligner's is switchable.
-  const settingsRoles = h.runtime.settings.catalog().roles
-  expect(settingsRoles.map(entry => ({ role: entry.role, switchable: entry.switchable })))
-    .toEqual([{ role: 'main', switchable: false }, { role: 'worker', switchable: false }, { role: 'aligner', switchable: true },
-      { role: 'answerer', switchable: false }])
+  const settingsRoles = (await h.api('GET', 'settings')).body.agents as { roles: { role: string; enabled: boolean; switchable: boolean }[] }
+  expect(settingsRoles.roles.map(entry => ({ role: entry.role, enabled: entry.enabled, switchable: entry.switchable })))
+    .toEqual([{ role: 'main', enabled: true, switchable: false }, { role: 'worker', enabled: true, switchable: false },
+      { role: 'aligner', enabled: true, switchable: true }, { role: 'answerer', enabled: true, switchable: false }])
   // `GET state` carries the same roles at runtime, with the pool each one holds and how many Sessions run now.
   const state = async () => (await h.api('GET', 'state')).body as { agents: { roles: { role: string; enabled: boolean; switchable: boolean
     running: number; limit: number | null }[] } }
